@@ -12,7 +12,16 @@ if [[ $# -ne 1 || -z "$1" ]]; then
 fi
 
 prefix="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-work_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/lazer-ffmpeg-${FFmpeg_REVISION:0:12}"
+host_os="$(uname -s)"
+windows_msvc=false
+if [[ "$host_os" == MSYS_NT* || "$host_os" == MINGW* ]]; then
+    windows_msvc=true
+fi
+temp_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+if [[ "$windows_msvc" == true ]]; then
+    temp_root="$(cygpath -u "$temp_root")"
+fi
+work_root="$temp_root/lazer-ffmpeg-${FFmpeg_REVISION:0:12}"
 source_dir="$work_root/source"
 
 mkdir -p "$work_root" "$prefix"
@@ -34,11 +43,9 @@ cd "$source_dir"
 configure_args=(
     "--prefix=$prefix"
     "--libdir=$prefix/lib"
-    "--shlibdir=$prefix/lib"
     "--incdir=$prefix/include"
     --enable-shared
     --disable-static
-    --enable-pic
     --disable-programs
     --disable-doc
     --disable-debug
@@ -47,10 +54,17 @@ configure_args=(
     --disable-avfilter
     --disable-swscale
 )
+if [[ "$windows_msvc" == true ]]; then
+    # FFmpeg's MSVC toolchain emits native import libraries for the CMake/MSVC engine build.
+    # Keep DLLs under bin so the existing Windows FFmpeg discovery and runtime staging can find them.
+    configure_args+=("--shlibdir=$prefix/bin" --toolchain=msvc)
+else
+    configure_args+=("--shlibdir=$prefix/lib" --enable-pic)
+fi
 # Give FFmpeg dylibs a location-independent install name. The desktop bundle copies these shared
 # libraries beside liblazer-audio.dylib, whose @loader_path runpath then resolves @rpath entries.
 # Keep Linux's normal SONAME/RPATH behavior unchanged.
-if [[ "$(uname -s)" == Darwin ]]; then
+if [[ "$host_os" == Darwin ]]; then
     configure_args+=("--install-name-dir=@rpath")
 fi
 printf 'FFmpeg revision: %s\nConfigure options: %s\n' \
@@ -61,7 +75,7 @@ make install
 
 # The engine and FFmpeg dylibs ship side by side. Preserve their @rpath install IDs while giving
 # each FFmpeg image a relative runpath for its own transitive @rpath dependencies.
-if [[ "$(uname -s)" == Darwin ]]; then
+if [[ "$host_os" == Darwin ]]; then
     shopt -s nullglob
     runtime_dylibs=("$prefix"/lib/libav*.dylib "$prefix"/lib/libswresample*.dylib)
     if ((${#runtime_dylibs[@]} == 0)); then

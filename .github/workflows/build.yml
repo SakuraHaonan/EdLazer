@@ -235,20 +235,24 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install FFmpeg SDK for the native WASAPI engine
-        shell: pwsh
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: true
+          install: git make nasm
+          path-type: inherit
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build the pinned DSD-capable FFmpeg SDK for Windows
+        shell: msys2 {0}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:VCPKG_INSTALLATION_ROOT)) {
-            throw 'VCPKG_INSTALLATION_ROOT is not set on this Windows runner'
-          }
-          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
-          if (-not (Test-Path -LiteralPath $vcpkg)) { throw "vcpkg was not found at $vcpkg" }
-          & $vcpkg install 'ffmpeg[core,avcodec,avformat,swresample]:x64-windows'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          set -euo pipefail
+          prefix="$(cygpath -u "$RUNNER_TEMP")/lazer-ffmpeg"
+          log="$(cygpath -u "$RUNNER_TEMP")/lazer-ffmpeg-build.log"
+          bash native/lazer-audio/tools/build_dsd_ffmpeg.sh "$prefix" 2>&1 | tee "$log"
       - name: Build and test the native WASAPI engine
         shell: pwsh
         run: |
-          $ffmpegRoot = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed\x64-windows'
+          $ffmpegRoot = Join-Path $env:RUNNER_TEMP 'lazer-ffmpeg'
           $buildDir = 'build/native/lazer-audio/windows-x64'
           $configureLog = Join-Path $env:RUNNER_TEMP 'lazer-audio-cmake-configure.log'
           $buildLog = Join-Path $env:RUNNER_TEMP 'lazer-audio-cmake-build.log'
@@ -280,7 +284,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: windows-native-audio-diagnostics
-          path: ${{ runner.temp }}/lazer-audio-*.log
+          path: |
+            ${{ runner.temp }}/lazer-audio-*.log
+            ${{ runner.temp }}/lazer-ffmpeg-build.log
           if-no-files-found: ignore
 
   # Linux x64 packages plus a real single-file AppImage. Ubuntu 22.04 provides a conservative
