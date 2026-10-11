@@ -1,6 +1,10 @@
 # Lazer HiFi 播放器交接手册
 
-更新时间：2026-10-06（Asia/Shanghai）
+更新时间：2026-10-11（Asia/Shanghai）
+
+## 当前多平台验证状态（2026-10-11）
+
+音频引擎现于 `EngineEnvTest` 分支继续验证。Build #214 在提交 `570c269` 上由分支 push 自动触发，Android、Windows、Linux、macOS、iOS 模拟器和 iOS 设备目标六个 job 全部成功。CI 证明软件构建、离线探针、模拟器路线冒烟和无签名 iOS 打包，不代表实体 DAC 或 iPhone 的硬件兼容认证。本轮完整过程、失败修复和未覆盖硬件项见 [`ENGINE_ENV_TEST_VALIDATION.md`](ENGINE_ENV_TEST_VALIDATION.md)。
 
 本文作为 PR #16 的交接入口，汇总可复现的验证方式，并把已实现、未实现、尚未实机验证的内容分开记录。完整实施历史、格式政策和逐项限制仍以 [`docs/HIFI_PLAYER_DEVELOPMENT.md`](HIFI_PLAYER_DEVELOPMENT.md) 为准。
 
