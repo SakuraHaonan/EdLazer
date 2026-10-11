@@ -250,19 +250,38 @@ jobs:
         run: |
           $ffmpegRoot = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed\x64-windows'
           $buildDir = 'build/native/lazer-audio/windows-x64'
+          $configureLog = Join-Path $env:RUNNER_TEMP 'lazer-audio-cmake-configure.log'
+          $buildLog = Join-Path $env:RUNNER_TEMP 'lazer-audio-cmake-build.log'
+          $testLog = Join-Path $env:RUNNER_TEMP 'lazer-audio-ctest.log'
+          function Stop-WithAudioDiagnostics([string]$stage, [string]$logPath, [int]$exitCode) {
+            $tail = (Get-Content -LiteralPath $logPath -Tail 24) -join "`n"
+            $message = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=$stage (exit $exitCode)::$message"
+            exit $exitCode
+          }
           if (-not (Test-Path -LiteralPath (Join-Path $ffmpegRoot 'include\libavformat\avformat.h'))) {
             throw "The vcpkg FFmpeg headers were not installed under $ffmpegRoot"
           }
           cmake -S native/lazer-audio -B $buildDir `
             -DCMAKE_BUILD_TYPE=Release `
             "-DLAZER_FFMPEG_ROOT=$ffmpegRoot" `
-            -DLAZER_AUDIO_BUILD_PROBE=ON
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build $buildDir --config Release --parallel 2
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            -DLAZER_AUDIO_BUILD_PROBE=ON 2>&1 | Tee-Object -FilePath $configureLog
+          $configureExitCode = $LASTEXITCODE
+          if ($configureExitCode -ne 0) { Stop-WithAudioDiagnostics 'Native audio CMake configure failed' $configureLog $configureExitCode }
+          cmake --build $buildDir --config Release --parallel 2 2>&1 | Tee-Object -FilePath $buildLog
+          $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -ne 0) { Stop-WithAudioDiagnostics 'Native audio build failed' $buildLog $buildExitCode }
           $env:PATH = "$(Join-Path $ffmpegRoot 'bin');$env:PATH"
-          ctest --test-dir $buildDir -C Release --output-on-failure
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir $buildDir -C Release --output-on-failure 2>&1 | Tee-Object -FilePath $testLog
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) { Stop-WithAudioDiagnostics 'Native audio CTest failed' $testLog $testExitCode }
+      - name: Upload Windows native audio diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-native-audio-diagnostics
+          path: ${{ runner.temp }}/lazer-audio-*.log
+          if-no-files-found: ignore
 
   # Linux x64 packages plus a real single-file AppImage. Ubuntu 22.04 provides a conservative
   # glibc baseline for the AppImage while jpackage produces the native deb/rpm packages.
