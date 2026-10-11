@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -366,13 +367,26 @@ struct ProbeEvents {
     bool releaseTerminalCallback = false;
     int32_t terminalDetail = 0;
     int64_t terminalPositionMillis = 0;
+    Engine *engine = nullptr;
+    std::thread::id callerThread;
+    std::thread::id readyCallbackThread;
+    bool stopWhenReady = false;
+    bool readyStopCompleted = false;
+    int32_t readyStopResult = LazerAudioErrorState;
 };
 
 void onEvent(void *context, int32_t event, int32_t detail, int64_t positionMillis) {
     auto *events = static_cast<ProbeEvents *>(context);
     if (events == nullptr) return;
+    bool stopWhenReady = false;
+    Engine *engine = nullptr;
     std::unique_lock guard(events->mutex);
     events->events.push_back(event);
+    if (event == LazerAudioEventReady) {
+        events->readyCallbackThread = std::this_thread::get_id();
+        stopWhenReady = events->stopWhenReady;
+        engine = events->engine;
+    }
     if (event == LazerAudioEventEnded || event == LazerAudioEventFailed ||
         event == LazerAudioEventDeviceLost) {
         events->terminalDetail = detail;
@@ -384,6 +398,14 @@ void onEvent(void *context, int32_t event, int32_t detail, int64_t positionMilli
         }
     }
     guard.unlock();
+    if (stopWhenReady && engine != nullptr) {
+        const int32_t result = engine->stop();
+        {
+            std::lock_guard resultGuard(events->mutex);
+            events->readyStopResult = result;
+            events->readyStopCompleted = true;
+        }
+    }
     events->changed.notify_all();
 }
 
@@ -402,16 +424,18 @@ struct Capture {
     int drainCount = 0;
     int writeCount = 0;
     int failWriteNumber = 0;
+    int32_t requestedBufferMillis = 0;
 };
 
 class CaptureOutput final : public AudioOutput {
 public:
     explicit CaptureOutput(std::shared_ptr<Capture> capture) : capture_(std::move(capture)) {}
 
-    int32_t open(const AudioOutputRequest &, const StreamDescription &source,
+    int32_t open(const AudioOutputRequest &request, const StreamDescription &source,
         AudioOutputSession &session, std::string &, LogProxy *) override {
         std::lock_guard guard(capture_->mutex);
         ++capture_->openCount;
+        capture_->requestedBufferMillis = request.bufferMillis;
         session.target.sampleRate = source.dsd ? kSampleRate : source.sampleRate;
         session.target.channels = source.channels;
         session.target.bitsPerSample = source.dsd ? 16 : source.bitsPerSample;
@@ -1093,7 +1117,105 @@ int runTerminalPublicationCase() {
     return 0;
 }
 
+int runControlBoundaryCase() {
+    MemoryReader source(makePcm16Wave(2'205, 2'000));
+    const LazerAudioReader reader = asReader(source);
+    ProbeEvents events;
+    events.callerThread = std::this_thread::get_id();
+    events.stopWhenReady = true;
+    auto capture = std::make_shared<Capture>();
+
+    LazerAudioEngineConfig config{};
+    config.abi_version = LAZER_AUDIO_ABI_VERSION;
+    config.struct_size = sizeof(config);
+    config.device.buffer_millis = std::numeric_limits<int32_t>::max();
+    config.events.on_event = onEvent;
+    config.events.context = &events;
+    Engine *engine = Engine::create(config, std::make_unique<CaptureOutput>(capture));
+    if (engine == nullptr) return fail("control-boundary probe engine creation failed");
+    events.engine = engine;
+
+    if (engine->setVolume(std::numeric_limits<double>::quiet_NaN()) !=
+        LazerAudioErrorInvalidArgument) {
+        engine->destroy();
+        return fail("volume API accepted NaN");
+    }
+    LazerAudioDspConfig invalidDsp{};
+    invalidDsp.preamp_db = std::numeric_limits<double>::quiet_NaN();
+    if (engine->setDsp(invalidDsp) != LazerAudioErrorInvalidArgument) {
+        engine->destroy();
+        return fail("DSP API accepted a non-finite preamp");
+    }
+    if (engine->setDsp(LazerAudioDspConfig{}) != LazerAudioOk) {
+        engine->destroy();
+        return fail("DSP API rejected clearing the band list");
+    }
+
+    const LazerAudioOpenParams params{sizeof(LazerAudioOpenParams), 0, 0};
+    if (engine->open(nullptr, &reader, params) != LazerAudioOk) {
+        engine->destroy();
+        return fail("control-boundary source did not open");
+    }
+    bool callbackStopped = false;
+    std::thread::id callbackThread;
+    int32_t stopResult = LazerAudioErrorState;
+    {
+        std::unique_lock guard(events.mutex);
+        callbackStopped = events.changed.wait_for(guard, std::chrono::seconds(5), [&] {
+            return events.readyStopCompleted;
+        });
+        callbackThread = events.readyCallbackThread;
+        stopResult = events.readyStopResult;
+    }
+    int32_t requestedBufferMillis = 0;
+    {
+        std::lock_guard guard(capture->mutex);
+        requestedBufferMillis = capture->requestedBufferMillis;
+    }
+    const bool callbackContractHeld = callbackStopped && callbackThread != events.callerThread &&
+        stopResult == LazerAudioOk;
+    const bool bufferWasBounded = requestedBufferMillis == 2'000;
+    const int32_t seekAfterStop = engine->seek(100);
+    if (!callbackContractHeld) {
+        engine->destroy();
+        return fail("Ready callback did not run on its dispatcher thread or reentrant stop failed");
+    }
+    if (!bufferWasBounded) {
+        engine->destroy();
+        return fail("oversized device buffer duration was not normalized");
+    }
+    if (seekAfterStop != LazerAudioErrorState) {
+        engine->destroy();
+        return fail("seek succeeded after stop");
+    }
+
+    {
+        std::lock_guard guard(events.mutex);
+        events.stopWhenReady = false;
+    }
+    LazerAudioDeviceConfig lowLatencyDevice = config.device;
+    lowLatencyDevice.buffer_millis = 30;
+    MemoryReader lowLatencySource(makePcm16Wave(2'205, 3'000));
+    const LazerAudioReader lowLatencyReader = asReader(lowLatencySource);
+    if (engine->setDevice(lowLatencyDevice) != LazerAudioOk ||
+        engine->open(nullptr, &lowLatencyReader, params) != LazerAudioOk) {
+        engine->destroy();
+        return fail("the supported low-latency buffer request could not be reopened");
+    }
+    {
+        std::lock_guard guard(capture->mutex);
+        requestedBufferMillis = capture->requestedBufferMillis;
+    }
+    engine->destroy();
+    if (requestedBufferMillis != 30) {
+        return fail("buffer normalization changed the 30 ms low-latency request");
+    }
+    std::cout << "PASS: event callback reentrancy, invalid numeric input, buffer bounds, and stopped seek\n";
+    return 0;
+}
+
 int main() {
+    if (runControlBoundaryCase() != 0) return 1;
     if (runExistingFastGaplessCase() != 0) return 1;
     if (runUnderrunRecoveryCase() != 0) return 1;
     if (runTerminalPublicationCase() != 0) return 1;

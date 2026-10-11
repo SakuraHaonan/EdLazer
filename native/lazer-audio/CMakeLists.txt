@@ -149,6 +149,8 @@ if(ANDROID)
     return()
 endif()
 
+find_package(Threads REQUIRED)
+
 # FFmpeg stays outside the repository. Windows consumes the supplied import-library bundle;
 # Linux/macOS use pkg-config unless -DLAZER_FFMPEG_ROOT=<dir> or FFMPEG_ROOT points to a shared
 # development package with lib/pkgconfig metadata. All desktop builds require DSD-capable FFmpeg.
@@ -211,10 +213,18 @@ else()
     message(FATAL_ERROR "No local audio output backend is implemented for ${CMAKE_SYSTEM_NAME}")
 endif()
 
+set(LAZER_AUDIO_ENGINE_SOURCES
+    src/engine.cpp
+    src/engine_queue.cpp
+    src/engine_control.cpp
+    src/engine_producer.cpp
+    src/engine_source_slot.cpp
+    src/engine_renderer.cpp)
+
 add_library(lazer-audio SHARED
     src/common.cpp
     src/dff_dsf_reader.cpp
-    src/engine.cpp
+    ${LAZER_AUDIO_ENGINE_SOURCES}
     src/source.cpp
     src/dop_packer.cpp
     src/native_dsd_packer.cpp
@@ -228,7 +238,7 @@ add_library(lazer-audio SHARED
 target_include_directories(lazer-audio PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/include"
     "${LAZER_FFMPEG_INCLUDE_DIR}")
-target_link_libraries(lazer-audio PRIVATE ${LAZER_FFMPEG_LIBRARIES}
+target_link_libraries(lazer-audio PRIVATE ${LAZER_FFMPEG_LIBRARIES} Threads::Threads
     ${LAZER_AUDIO_PLATFORM_LIBRARIES})
 target_compile_features(lazer-audio PRIVATE cxx_std_20)
 target_compile_definitions(lazer-audio PRIVATE LAZER_AUDIO_EXPORTS)
@@ -269,7 +279,7 @@ if(LAZER_AUDIO_BUILD_PROBE)
         tools/lazer_audio_engine_gapless_probe.cpp
         src/common.cpp
         src/dff_dsf_reader.cpp
-        src/engine.cpp
+        ${LAZER_AUDIO_ENGINE_SOURCES}
         src/source.cpp
         src/dop_packer.cpp
         src/native_dsd_packer.cpp
@@ -280,7 +290,8 @@ if(LAZER_AUDIO_BUILD_PROBE)
         "${CMAKE_CURRENT_LIST_DIR}/include"
         "${CMAKE_CURRENT_LIST_DIR}/src"
         "${LAZER_FFMPEG_INCLUDE_DIR}")
-    target_link_libraries(lazer-audio-engine-gapless-probe PRIVATE ${LAZER_FFMPEG_LIBRARIES})
+    target_link_libraries(lazer-audio-engine-gapless-probe PRIVATE
+        ${LAZER_FFMPEG_LIBRARIES} Threads::Threads)
     target_compile_features(lazer-audio-engine-gapless-probe PRIVATE cxx_std_20)
     if(WIN32)
         target_compile_definitions(lazer-audio-engine-gapless-probe PRIVATE
@@ -300,6 +311,22 @@ if(LAZER_AUDIO_BUILD_PROBE)
     enable_testing()
     add_test(NAME lazer-audio-engine-gapless
         COMMAND $<TARGET_FILE:lazer-audio-engine-gapless-probe>)
+    set_tests_properties(lazer-audio-engine-gapless PROPERTIES TIMEOUT 40)
+
+    add_executable(lazer-audio-event-dispatcher-probe
+        tools/lazer_audio_event_dispatcher_probe.cpp)
+    target_include_directories(lazer-audio-event-dispatcher-probe PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/include"
+        "${CMAKE_CURRENT_LIST_DIR}/src")
+    target_link_libraries(lazer-audio-event-dispatcher-probe PRIVATE Threads::Threads)
+    target_compile_features(lazer-audio-event-dispatcher-probe PRIVATE cxx_std_20)
+    if(MSVC)
+        target_compile_options(lazer-audio-event-dispatcher-probe PRIVATE
+            /W4 /WX /permissive- /EHsc)
+    endif()
+    add_test(NAME lazer-audio-event-dispatcher
+        COMMAND $<TARGET_FILE:lazer-audio-event-dispatcher-probe>)
+    set_tests_properties(lazer-audio-event-dispatcher PROPERTIES TIMEOUT 15)
 
     # Validate the Engine's global RequireDoP policy against PCM and raw stereo DSD using a
     # variable-write fake endpoint; no physical audio device is opened.
@@ -307,7 +334,7 @@ if(LAZER_AUDIO_BUILD_PROBE)
         tools/lazer_audio_engine_dop_probe.cpp
         src/common.cpp
         src/dff_dsf_reader.cpp
-        src/engine.cpp
+        ${LAZER_AUDIO_ENGINE_SOURCES}
         src/source.cpp
         src/dop_packer.cpp
         src/native_dsd_packer.cpp
@@ -318,7 +345,8 @@ if(LAZER_AUDIO_BUILD_PROBE)
         "${CMAKE_CURRENT_LIST_DIR}/include"
         "${CMAKE_CURRENT_LIST_DIR}/src"
         "${LAZER_FFMPEG_INCLUDE_DIR}")
-    target_link_libraries(lazer-audio-engine-dop-probe PRIVATE ${LAZER_FFMPEG_LIBRARIES})
+    target_link_libraries(lazer-audio-engine-dop-probe PRIVATE
+        ${LAZER_FFMPEG_LIBRARIES} Threads::Threads)
     target_compile_features(lazer-audio-engine-dop-probe PRIVATE cxx_std_20)
     if(WIN32)
         target_compile_definitions(lazer-audio-engine-dop-probe PRIVATE
@@ -344,7 +372,7 @@ if(LAZER_AUDIO_BUILD_PROBE)
         tools/lazer_audio_engine_native_dsd_probe.cpp
         src/common.cpp
         src/dff_dsf_reader.cpp
-        src/engine.cpp
+        ${LAZER_AUDIO_ENGINE_SOURCES}
         src/source.cpp
         src/dop_packer.cpp
         src/native_dsd_packer.cpp
@@ -355,7 +383,8 @@ if(LAZER_AUDIO_BUILD_PROBE)
         "${CMAKE_CURRENT_LIST_DIR}/include"
         "${CMAKE_CURRENT_LIST_DIR}/src"
         "${LAZER_FFMPEG_INCLUDE_DIR}")
-    target_link_libraries(lazer-audio-engine-native-dsd-probe PRIVATE ${LAZER_FFMPEG_LIBRARIES})
+    target_link_libraries(lazer-audio-engine-native-dsd-probe PRIVATE
+        ${LAZER_FFMPEG_LIBRARIES} Threads::Threads)
     target_compile_features(lazer-audio-engine-native-dsd-probe PRIVATE cxx_std_20)
     if(WIN32)
         target_compile_definitions(lazer-audio-engine-native-dsd-probe PRIVATE
@@ -492,7 +521,7 @@ if(LAZER_AUDIO_BUILD_PROBE)
         tools/lazer_audio_engine_pcm_matrix_probe.cpp
         src/common.cpp
         src/dff_dsf_reader.cpp
-        src/engine.cpp
+        ${LAZER_AUDIO_ENGINE_SOURCES}
         src/source.cpp
         src/dop_packer.cpp
         src/native_dsd_packer.cpp
@@ -503,7 +532,8 @@ if(LAZER_AUDIO_BUILD_PROBE)
         "${CMAKE_CURRENT_LIST_DIR}/include"
         "${CMAKE_CURRENT_LIST_DIR}/src"
         "${LAZER_FFMPEG_INCLUDE_DIR}")
-    target_link_libraries(lazer-audio-engine-pcm-matrix-probe PRIVATE ${LAZER_FFMPEG_LIBRARIES})
+    target_link_libraries(lazer-audio-engine-pcm-matrix-probe PRIVATE
+        ${LAZER_FFMPEG_LIBRARIES} Threads::Threads)
     target_compile_features(lazer-audio-engine-pcm-matrix-probe PRIVATE cxx_std_20)
     if(WIN32)
         target_compile_definitions(lazer-audio-engine-pcm-matrix-probe PRIVATE
@@ -531,6 +561,20 @@ if(LAZER_AUDIO_BUILD_PROBE)
     set_tests_properties(lazer-audio-engine-cue-gapless PROPERTIES TIMEOUT 40)
     set_tests_properties(lazer-audio-engine-replaygain-gapless PROPERTIES TIMEOUT 15)
     set_tests_properties(lazer-audio-engine-pcm-reopen PROPERTIES TIMEOUT 15)
+
+    # Device-free regression for queued-output position accounting across silence and seeks.
+    add_executable(lazer-audio-output-frame-ledger-probe
+        tools/lazer_audio_output_frame_ledger_probe.cpp)
+    target_include_directories(lazer-audio-output-frame-ledger-probe PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/src")
+    target_compile_features(lazer-audio-output-frame-ledger-probe PRIVATE cxx_std_20)
+    if(MSVC)
+        target_compile_options(lazer-audio-output-frame-ledger-probe PRIVATE
+            /W4 /WX /permissive- /EHsc)
+    endif()
+    add_test(NAME lazer-audio-output-frame-ledger
+        COMMAND $<TARGET_FILE:lazer-audio-output-frame-ledger-probe>)
+    set_tests_properties(lazer-audio-output-frame-ledger PROPERTIES TIMEOUT 15)
 
     if(WIN32)
         add_executable(lazer-audio-probe tools/lazer_audio_probe.cpp)

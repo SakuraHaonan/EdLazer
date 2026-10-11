@@ -18,6 +18,7 @@ double nextDitherValue(uint64_t &state) {
 }  // namespace
 
 int64_t quantizeWithTpdf(float value, int32_t bits, uint64_t &state) {
+    if (bits <= 0 || bits > 32 || !std::isfinite(value)) return 0;
     const int64_t scale = int64_t{1} << (bits - 1);
     const double dither = nextDitherValue(state) - nextDitherValue(state);
     const double scaled = static_cast<double>(value) * static_cast<double>(scale) + dither;
@@ -34,8 +35,9 @@ uint64_t convertIntegerPcm(const float *source, size_t sampleCount, int32_t vali
     uint64_t clippedSamples = 0;
 
     for (size_t index = 0; index < sampleCount; ++index) {
-        if (source[index] > 1.0f || source[index] < -1.0f) ++clippedSamples;
-        const int64_t signedSample = quantizeWithTpdf(source[index], validBits, ditherState);
+        const float sample = std::isfinite(source[index]) ? source[index] : 0.0f;
+        if (!std::isfinite(source[index]) || sample > 1.0f || sample < -1.0f) ++clippedSamples;
+        const int64_t signedSample = quantizeWithTpdf(sample, validBits, ditherState);
         const uint64_t packedSample = validBits == 8
             ? static_cast<uint64_t>(signedSample + 128) << paddingBits
             : static_cast<uint64_t>(signedSample) << paddingBits;

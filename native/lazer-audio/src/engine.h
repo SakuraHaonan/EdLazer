@@ -1,7 +1,6 @@
-/* The engine: two threads and one ring. The pump thread turns the container into PCM blocks and runs
- * them through the DSP chain; the render thread owns the audio endpoint and drains the ring one
- * device period at a time. Control calls are answered from the caller's thread and only ever set
- * flags, so no JNA call can block on the device. */
+/* The engine owns a decoder pump, an endpoint render worker, and a serialized event dispatcher.
+ * The pump writes decoded/DSP output to one ring; the render worker alone owns the output endpoint.
+ * Control calls stay on the caller's thread, while event callbacks never run on the render worker. */
 #ifndef LAZER_AUDIO_ENGINE_H
 #define LAZER_AUDIO_ENGINE_H
 
@@ -16,6 +15,7 @@
 #include "dsp_chain.h"
 #include "internal.h"
 #include "audio_output.h"
+#include "engine_event_dispatcher.h"
 #include "ring_buffer.h"
 #include "source.h"
 
@@ -43,7 +43,10 @@ public:
     int32_t setDevice(const LazerAudioDeviceConfig &device);
     void snapshot(LazerAudioSnapshot &out);
     void streamInfo(LazerAudioStreamInfo &out);
-    [[nodiscard]] const std::string &lastError() const { return lastError_; }
+    [[nodiscard]] std::string lastError() const {
+        std::lock_guard guard(apiMutex_);
+        return lastError_;
+    }
 
     static std::string buildInformation();
 
@@ -65,6 +68,7 @@ private:
     int32_t configurePipeline();
     void raise(int32_t event, int32_t detail, int64_t positionMillis);
     void publishTerminal(int32_t event, int32_t detail, int64_t positionMillis);
+    void handleWorkerFailure(int32_t code) noexcept;
     void setError(const std::string &text, int32_t code);
     void setErrorLocked(const std::string &text, int32_t code);
     void joinThreads();
@@ -83,6 +87,7 @@ private:
 
     LazerAudioEngineConfig config_{};
     LogProxy log_;
+    EngineEventDispatcher eventDispatcher_;
 
     /* Guards the control-facing fields: state, error text and the descriptors published to the UI. */
     mutable std::mutex apiMutex_;
@@ -93,8 +98,9 @@ private:
     std::atomic<int32_t> state_{LazerAudioStateIdle};
     std::atomic<bool> paused_{true};
     std::atomic<bool> cancelled_{false};
-    std::atomic<bool> stopping_{false};
     std::atomic<uint64_t> sessionGeneration_{0};
+    /* Event delivery switches generations only after old workers have been joined. */
+    std::atomic<uint64_t> eventGeneration_{0};
     std::atomic<uint64_t> queueGeneration_{0};
     std::string lastError_;
     std::atomic<int32_t> lastErrorCode_{LazerAudioOk};
@@ -126,6 +132,7 @@ private:
     std::wstring deviceId_;
     LazerAudioDeviceConfig device_{};
     AudioOutputSession outputSession_{};
+    std::atomic<int32_t> outputSampleRateSnapshot_{0};
     TargetFormat floatTarget_{};
     /* One packer spans a complete Native DSD output session, including queued source boundaries. */
     NativeDsdPacker nativeDsdPacker_{};

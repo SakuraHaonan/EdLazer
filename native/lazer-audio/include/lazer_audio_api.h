@@ -81,8 +81,8 @@ typedef enum LazerAudioLogLevel {
     LazerAudioLogError = 3,
 } LazerAudioLogLevel;
 
-/* Events are raised on engine threads, never on the caller's thread, so the Kotlin listener must
- * not block. */
+/* Events are delivered serially on an engine-owned dispatcher thread, never on the caller's or
+ * real-time render thread. Keep callbacks brief; callback context must remain valid until destroy. */
 typedef enum LazerAudioEvent {
     LazerAudioEventReady = 0,
     LazerAudioEventEnded = 1,

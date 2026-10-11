@@ -86,6 +86,16 @@ public:
         changed_.notify_all();
     }
 
+    void finishWithoutMessage(int32_t result) noexcept {
+        std::lock_guard guard(mutex_);
+        if (finished_) return;
+        result_ = result;
+        error_.clear();
+        reachedEof_ = false;
+        finished_ = true;
+        changed_.notify_all();
+    }
+
     void cancel() {
         std::lock_guard guard(mutex_);
         cancelled_ = true;

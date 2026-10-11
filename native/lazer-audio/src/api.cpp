@@ -174,7 +174,13 @@ int32_t lazer_audio_stream_info(LazerAudioEngine engine, LazerAudioStreamInfo *o
 
 const char *lazer_audio_last_error(LazerAudioEngine engine) {
     if (engine == nullptr) return "";
-    return handle(engine)->lastError().c_str();
+    try {
+        thread_local std::string copy;
+        copy = handle(engine)->lastError();
+        return copy.c_str();
+    } catch (...) {
+        return "";
+    }
 }
 
 const char *lazer_audio_build_information(void) {

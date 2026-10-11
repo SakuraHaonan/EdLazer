@@ -223,8 +223,10 @@ void DspChain::requestConfig(const LazerAudioDspConfig &config) {
     std::lock_guard guard(pendingMutex_);
     /* The bands pointer belongs to the caller's stack, so the specifications are copied here rather
      * than read on the audio thread. */
-    pendingBands_.assign(config.bands, config.bands + std::min<uint32_t>(
-        config.band_count, LAZER_AUDIO_MAX_EQ_BANDS));
+    const uint32_t bandCount = std::min<uint32_t>(
+        config.band_count, LAZER_AUDIO_MAX_EQ_BANDS);
+    if (bandCount == 0) pendingBands_.clear();
+    else pendingBands_.assign(config.bands, config.bands + bandCount);
     pendingPreampDb_ = config.preamp_db;
     pendingLimiterEnabled_ = config.limiter_enabled != 0;
     pendingLimiterThresholdDb_ = config.limiter_threshold_db;
@@ -307,7 +309,10 @@ double DspChain::process(float *interleaved, size_t frameCount) {
     for (size_t frame = 0; frame < frameCount; ++frame) {
         float *samples = interleaved + frame * channels;
         for (size_t channel = 0; channel < channels; ++channel) {
-            double value = samples[channel] * preampLinear_;
+            /* Float decoders can surface NaN/Inf for damaged samples. Keep them out of the
+             * integer PCM quantizer, where llround on a non-finite value is undefined. */
+            double value = std::isfinite(samples[channel]) ? samples[channel] : 0.0;
+            value *= preampLinear_;
             for (auto &section : sections_) {
                 if (section.active()) value = section.process(static_cast<float>(value), channel);
             }

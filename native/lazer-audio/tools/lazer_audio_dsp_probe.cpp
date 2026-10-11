@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <vector>
 
 #include "dsp_chain.h"
@@ -129,6 +130,23 @@ bool testTpdfQuantizer() {
     return passed;
 }
 
+bool testNonFiniteInput() {
+    lazer::audio::DspChain chain;
+    chain.configureFormat({44'100, 1});
+    chain.requestConfig(LazerAudioDspConfig{});
+    float samples[3]{std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(), 0.25f};
+    chain.process(samples, 3);
+    uint64_t ditherState = 1;
+    const bool passed = expect(samples[0] == 0.0f && samples[1] == 0.0f && samples[2] == 0.25f,
+            "non-finite decoder samples must become silence before output conversion") &&
+        expect(lazer::audio::quantizeWithTpdf(
+            std::numeric_limits<float>::quiet_NaN(), 16, ditherState) == 0,
+            "the integer quantizer must reject non-finite samples safely");
+    if (passed) std::printf("non-finite float samples are sanitized before PCM conversion\n");
+    return passed;
+}
+
 bool testIntegerPcmPacking() {
     constexpr uint64_t kInitialDitherState = 0x9e3779b97f4a7c15ULL;
     const float endpoints[2]{-2.0f, 2.0f};
@@ -195,6 +213,7 @@ int main() {
     const bool at44100 = testSamplePeakCeiling(44'100);
     const bool at96000 = testSamplePeakCeiling(96'000);
     const bool dither = testTpdfQuantizer();
+    const bool nonFinite = testNonFiniteInput();
     const bool packing = testIntegerPcmPacking();
-    return at44100 && at96000 && dither && packing ? 0 : 1;
+    return at44100 && at96000 && dither && nonFinite && packing ? 0 : 1;
 }
