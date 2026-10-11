@@ -826,7 +826,7 @@ jobs:
             # Wait for the page to announce itself rather than holding a fixed window: the marker
             # normally lands within a couple of seconds, while a slow route still gets its full
             # grace and one that dies early is noticed immediately instead of after a long sleep.
-            for attempt in $(seq 1 20); do
+            for attempt in $(seq 1 60); do
               if grep -q "LAZER_IOS_ROUTE_APPLIED $route" "ios-simulator-$route-console.log"; then
                 break
               fi
@@ -840,6 +840,15 @@ jobs:
             if ! grep -q "LAZER_IOS_ROUTE_APPLIED $route" "ios-simulator-$route-console.log"; then
               echo "Console output for the $route screen:"
               cat "ios-simulator-$route-console.log"
+              echo "Simulator device status:"
+              xcrun simctl list devices available || true
+              echo "Launch command status:"
+              ps -p "$route_pid" -o pid=,stat=,etime=,command= || true
+              xcrun simctl spawn "$simulator_udid" log show \
+                --last 2m --style compact --predicate "process == 'Lazer'" \
+                > "ios-simulator-$route-runtime.log" || true
+              echo "Recent simulator runtime output:"
+              tail -n 80 "ios-simulator-$route-runtime.log" || true
               echo "::error::The iOS $route launch never applied its route, so its screenshot proves nothing."
               exit 1
             fi
@@ -861,6 +870,7 @@ jobs:
             ios-simulator-xcodebuild.log
             ios-simulator-console.log
             ios-simulator-runtime.log
+            ios-simulator-*-runtime.log
             ios-simulator-sample.txt
             ios-simulator*.png
             ios-simulator-*-console.log
