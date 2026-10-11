@@ -232,6 +232,14 @@ public:
         session.writeMode = OutputWriteMode::FixedPeriod;
         session.queueDepthAvailable = true;
         bytesPerFrame_ = session.target.frameBytes();
+        if (session.target.sampleRate > 0) {
+            const int64_t periodNanos =
+                (1'000'000'000LL * kPeriodFrames + session.target.sampleRate - 1) /
+                session.target.sampleRate;
+            periodDuration_ = std::max(std::chrono::nanoseconds(periodNanos),
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::milliseconds(1)));
+        }
         Capture::OutputSession openedSession;
         openedSession.request = request;
         openedSession.target = session.target;
@@ -264,7 +272,10 @@ public:
                 capture_->changed.wait(guard, [this] { return capture_->gateReleased; });
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        /* Consume one fixed packet per device period. Running a 48 kHz endpoint at one packet
+         * per millisecond makes the fixture over ten times faster than a real output device and
+         * can insert underrun silence before the decoder fills the first CUE period. */
+        std::this_thread::sleep_for(periodDuration_);
         return OutputWaitResult::Ready;
     }
     int32_t writableFrames(std::string &) override { return kPeriodFrames; }
@@ -293,6 +304,7 @@ private:
     int32_t bytesPerFrame_ = 0;
     bool open_ = false;
     int32_t currentSessionIndex_ = -1;
+    std::chrono::nanoseconds periodDuration_{std::chrono::milliseconds(1)};
 };
 
 void onLog(void *, int32_t level, const char *message) {
