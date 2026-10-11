@@ -162,34 +162,6 @@ jobs:
         run: |
           choco install wixtoolset --no-progress -y
           "C:\Program Files (x86)\WiX Toolset v3.14\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
-      - name: Install FFmpeg SDK for the native WASAPI engine
-        shell: pwsh
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:VCPKG_INSTALLATION_ROOT)) {
-            throw 'VCPKG_INSTALLATION_ROOT is not set on this Windows runner'
-          }
-          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
-          if (-not (Test-Path -LiteralPath $vcpkg)) { throw "vcpkg was not found at $vcpkg" }
-          & $vcpkg install 'ffmpeg[core,avcodec,avformat,swresample]:x64-windows'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build and test the native WASAPI engine
-        shell: pwsh
-        run: |
-          $ffmpegRoot = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed\x64-windows'
-          $buildDir = 'desktopApp/build/native/lazer-audio/windows-x64'
-          if (-not (Test-Path -LiteralPath (Join-Path $ffmpegRoot 'include\libavformat\avformat.h'))) {
-            throw "The vcpkg FFmpeg headers were not installed under $ffmpegRoot"
-          }
-          cmake -S native/lazer-audio -B $buildDir `
-            -DCMAKE_BUILD_TYPE=Release `
-            "-DLAZER_FFMPEG_ROOT=$ffmpegRoot" `
-            -DLAZER_AUDIO_BUILD_PROBE=ON
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build $buildDir --config Release --parallel 2
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $env:PATH = "$(Join-Path $ffmpegRoot 'bin');$env:PATH"
-          ctest --test-dir $buildDir -C Release --output-on-failure
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test desktop media integration
         shell: pwsh
         run: .\gradlew.bat :desktopApp:test -PwindowsArch=x64 --stacktrace
@@ -256,6 +228,41 @@ jobs:
           name: lazer-msi
           path: desktopApp/build/compose/binaries/**/*.msi
           if-no-files-found: error
+
+  # Keep the FFmpeg/native CMake build isolated from Gradle packaging and integration tests.
+  windows-native-audio:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install FFmpeg SDK for the native WASAPI engine
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:VCPKG_INSTALLATION_ROOT)) {
+            throw 'VCPKG_INSTALLATION_ROOT is not set on this Windows runner'
+          }
+          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
+          if (-not (Test-Path -LiteralPath $vcpkg)) { throw "vcpkg was not found at $vcpkg" }
+          & $vcpkg install 'ffmpeg[core,avcodec,avformat,swresample]:x64-windows'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and test the native WASAPI engine
+        shell: pwsh
+        run: |
+          $ffmpegRoot = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed\x64-windows'
+          $buildDir = 'build/native/lazer-audio/windows-x64'
+          if (-not (Test-Path -LiteralPath (Join-Path $ffmpegRoot 'include\libavformat\avformat.h'))) {
+            throw "The vcpkg FFmpeg headers were not installed under $ffmpegRoot"
+          }
+          cmake -S native/lazer-audio -B $buildDir `
+            -DCMAKE_BUILD_TYPE=Release `
+            "-DLAZER_FFMPEG_ROOT=$ffmpegRoot" `
+            -DLAZER_AUDIO_BUILD_PROBE=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build $buildDir --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:PATH = "$(Join-Path $ffmpegRoot 'bin');$env:PATH"
+          ctest --test-dir $buildDir -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   # Linux x64 packages plus a real single-file AppImage. Ubuntu 22.04 provides a conservative
   # glibc baseline for the AppImage while jpackage produces the native deb/rpm packages.
@@ -965,7 +972,7 @@ jobs:
   # the corresponding Actions artifacts for platform testing.
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [android, desktop, linux-desktop, ios, ios-device]
+    needs: [android, desktop, windows-native-audio, linux-desktop, ios, ios-device]
     runs-on: ubuntu-latest
     permissions:
       contents: write
