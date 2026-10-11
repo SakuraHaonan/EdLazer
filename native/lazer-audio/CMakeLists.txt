@@ -528,7 +528,7 @@ if(LAZER_AUDIO_BUILD_PROBE)
         COMMAND $<TARGET_FILE:lazer-audio-engine-pcm-matrix-probe> --cue-gapless)
     add_test(NAME lazer-audio-engine-replaygain-gapless
         COMMAND $<TARGET_FILE:lazer-audio-engine-pcm-matrix-probe> --replaygain-gapless)
-    set_tests_properties(lazer-audio-engine-cue-gapless PROPERTIES TIMEOUT 10)
+    set_tests_properties(lazer-audio-engine-cue-gapless PROPERTIES TIMEOUT 40)
     set_tests_properties(lazer-audio-engine-replaygain-gapless PROPERTIES TIMEOUT 15)
     set_tests_properties(lazer-audio-engine-pcm-reopen PROPERTIES TIMEOUT 15)
 

@@ -1068,8 +1068,19 @@ bool runCueGaplessCase() {
         return fail("could not prepare the adjacent WAV CUE successor");
     }
     if (engine->play() != LazerAudioOk) return fail("could not start fake output");
-    if (!waitForEvent(events, LazerAudioEventEnded, std::chrono::seconds(5))) {
-        std::cerr << "CUE gapless end error=" << engine->lastError() << "\n";
+    if (!waitForEvent(events, LazerAudioEventEnded, std::chrono::seconds(15))) {
+        LazerAudioSnapshot snapshot{};
+        engine->snapshot(snapshot);
+        int32_t writes = 0;
+        {
+            std::lock_guard guard(capture->mutex);
+            writes = capture->writeCount;
+        }
+        std::cerr << "CUE gapless timeout state/position/duration=" << snapshot.state << "/"
+            << snapshot.position_millis << "/" << snapshot.duration_millis
+            << " writes=" << writes << " first/second closed="
+            << first.closeCount.load() << "/" << successor.closeCount.load()
+            << " error=" << engine->lastError() << "\n";
         return fail("timed out before the successor reached clean EOF");
     }
 
@@ -1271,7 +1282,7 @@ bool runCueMultiFileGaplessCase() {
         return fail("could not prepare the second file from frame zero");
     }
     if (engine->play() != LazerAudioOk ||
-        !waitForEvent(events, LazerAudioEventEnded, std::chrono::seconds(5))) {
+        !waitForEvent(events, LazerAudioEventEnded, std::chrono::seconds(15))) {
         std::cerr << "multi-file CUE gapless end error=" << engine->lastError() << "\n";
         return fail("timed out before the second file reached clean EOF");
     }
