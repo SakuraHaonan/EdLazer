@@ -733,12 +733,14 @@ jobs:
           xcrun simctl boot "$simulator_udid" 2>/dev/null || true
           xcrun simctl bootstatus "$simulator_udid" -b
           set -o pipefail
+          # Xcode can briefly lose the booted UDID during CoreSimulator migration. Build for the
+          # simulator platform, then validate that exact device with simctl install and launch.
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -configuration Debug \
             -sdk iphonesimulator \
-            -destination "platform=iOS Simulator,id=$simulator_udid" \
+            -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath iosApp/build/SimulatorDerivedData \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
