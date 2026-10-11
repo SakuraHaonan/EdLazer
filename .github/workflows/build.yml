@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [master, main, "feat/**", "fix/**", "ci/**", "codex/**"]
+    branches: [master, main, EngineEnvTest, "feat/**", "fix/**", "ci/**", "codex/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
