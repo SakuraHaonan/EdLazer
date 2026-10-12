@@ -930,6 +930,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
           path: artifacts
@@ -974,10 +975,16 @@ jobs:
       - name: Record the commit every package carries
         run: |
           short_sha="${GITHUB_SHA::7}"
+          version="${GITHUB_REF_NAME#v}"
+          base_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
           echo "- Built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA (\`$short_sha\`), the commit each package names on its About page." > release-note.md
           if [ -f .github/release-template.md ]; then
             echo "" >> release-note.md
-            cat .github/release-template.md >> release-note.md
+            sed -e "s|__BASE_URL__|$base_url|g" \
+                -e "s|__REPO__|$GITHUB_REPOSITORY|g" \
+                -e "s|__TAG__|$GITHUB_REF_NAME|g" \
+                -e "s|__VERSION__|$version|g" \
+                .github/release-template.md >> release-note.md
           fi
           cat release-note.md >> "$GITHUB_STEP_SUMMARY"
       # Release titles use "Release X.Y", dropping the leading "v" from the tag.
