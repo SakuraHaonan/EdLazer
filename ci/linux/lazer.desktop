@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Lazer
+Comment=Music player
+Exec=lazer_nextgen
+Icon=app_icon_256
+Categories=AudioVideo;Audio;Music;
+Terminal=false
+StartupWMClass=com.example.lazer_nextgen

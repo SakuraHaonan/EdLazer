@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+set -eu
+APPDIR=${APPDIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+export APPDIR
+export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export LD_LIBRARY_PATH="$APPDIR/usr/bin/lib:$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+for hook in "$APPDIR"/apprun-hooks/*.sh; do
+  if [ -f "$hook" ]; then
+    . "$hook"
+  fi
+done
+exec "$APPDIR/usr/bin/lazer_nextgen" "$@"

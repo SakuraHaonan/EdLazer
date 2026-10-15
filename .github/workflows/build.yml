@@ -1,0 +1,262 @@
+name: Build nextgen
+
+on:
+  push:
+    branches: [nextgen]
+  pull_request:
+    branches: [nextgen]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.47.0'
+  FLUTTER_REVISION: '4cf24164269a5ebf0c16a028a00727d0e77bbb05'
+
+jobs:
+  check:
+    name: Analyze and test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze --no-pub
+      - run: flutter test --no-pub --reporter expanded
+
+  windows:
+    name: Windows EXE (x86_64)
+    needs: check
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build windows --release --no-pub
+      - name: Package EXE, DLLs, resources and Visual C++ runtime
+        shell: pwsh
+        run: ./ci/package-windows.ps1
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Lazer-Windows-x86_64
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  macos:
+    name: macOS App (${{ matrix.arch }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: universal
+            runner: macos-15
+            flutter_arch: arm64
+            xcode_archs: 'arm64 x86_64'
+          - arch: x86_64
+            runner: macos-15-intel
+            flutter_arch: x64
+            xcode_archs: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      # Ad-hoc signing needs no Apple account, certificate or provisioning profile.
+      FLUTTER_XCODE_CODE_SIGN_IDENTITY: '-'
+      FLUTTER_XCODE_CODE_SIGN_STYLE: Manual
+      FLUTTER_XCODE_DEVELOPMENT_TEAM: ''
+      FLUTTER_XCODE_ARCHS: ${{ matrix.xcode_archs }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+          architecture: ${{ matrix.flutter_arch }}
+      - run: xcodebuild -version
+      - run: flutter config --enable-macos-desktop
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build macos --release --no-pub
+      - name: Package App with executable permissions and framework symlinks
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=build/macos/Build/Products/Release/lazer_nextgen.app
+          test -d "$app"
+          read -r -a required_archs <<< "$FLUTTER_XCODE_ARCHS"
+          lipo "$app/Contents/MacOS/lazer_nextgen" -verify_arch "${required_archs[@]}"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$app" dist/Lazer-macOS-${{ matrix.arch }}.zip
+          (cd dist && shasum -a 256 Lazer-macOS-${{ matrix.arch }}.zip > Lazer-macOS-${{ matrix.arch }}.zip.sha256)
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Lazer-macOS-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  linux:
+    name: Linux AppImage (${{ matrix.arch }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            flutter_target: linux-x64
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+            flutter_target: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install Linux build, GTK, audio and packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+            libmpv-dev libayatana-appindicator3-dev libgdk-pixbuf2.0-dev \
+            librsvg2-dev patchelf file desktop-file-utils fuse libfuse2 \
+            xvfb dbus-x11
+      - if: matrix.arch == 'x86_64'
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Bootstrap official Flutter SDK on native Linux ARM64
+        if: matrix.arch == 'aarch64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/flutter-arm64"
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$sdk"
+          test "$(git -C "$sdk" rev-parse HEAD)" = "$FLUTTER_REVISION"
+          echo "$sdk/bin" >> "$GITHUB_PATH"
+          "$sdk/bin/flutter" --version
+          "$sdk/bin/flutter" precache --linux
+      - run: flutter config --enable-linux-desktop
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build linux --release --no-pub --target-platform ${{ matrix.flutter_target }}
+      - name: Bundle GTK, libmpv and Flutter into AppImage
+        run: bash ci/package-appimage.sh ${{ matrix.arch }}
+      - name: Check AppImage starts with a display and session bus
+        shell: bash
+        run: |
+          set +e
+          timeout --signal=TERM 15s dbus-run-session -- xvfb-run -a \
+            dist/Lazer-Linux-${{ matrix.arch }}.AppImage --appimage-extract-and-run > build/appimage-smoke.log 2>&1
+          result=$?
+          set -e
+          cat build/appimage-smoke.log
+          test "$result" -eq 124
+          if grep -Eq 'Unhandled exception|error while loading shared libraries|Cannot find libmpv' build/appimage-smoke.log; then
+            exit 1
+          fi
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Lazer-Linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  android:
+    name: Android APK
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build apk --release --no-pub
+      - name: Package universal APK
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/Lazer-Android-universal.apk
+          (cd dist && sha256sum Lazer-Android-universal.apk > Lazer-Android-universal.apk.sha256)
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Lazer-Android-universal
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  ios:
+    name: iOS unsigned IPA (arm64)
+    needs: check
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: xcodebuild -version
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build ios --release --no-codesign --no-pub
+      - name: Create unsigned IPA with the required Payload directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d build/ios/iphoneos/Runner.app
+          mkdir -p dist/ios/Payload
+          ditto build/ios/iphoneos/Runner.app dist/ios/Payload/Runner.app
+          (cd dist/ios && zip -qry ../Lazer-iOS-aarch64.ipa Payload)
+          unzip -l dist/Lazer-iOS-aarch64.ipa | grep 'Payload/Runner.app/Info.plist'
+          (cd dist && shasum -a 256 Lazer-iOS-aarch64.ipa > Lazer-iOS-aarch64.ipa.sha256)
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Lazer-iOS-aarch64
+          path: |
+            dist/*.ipa
+            dist/*.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

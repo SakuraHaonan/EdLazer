@@ -1,0 +1,4 @@
+# Packaging entry points must remain executable POSIX scripts on Linux runners.
+*.sh text eol=lf
+ci/linux/AppRun text eol=lf
+*.yml text eol=lf
