@@ -1,4 +1,4 @@
-package com.example.lazer_nextgen
+package dev.naominet.lazer
 
 import com.ryanheise.audioservice.AudioServiceActivity
 
