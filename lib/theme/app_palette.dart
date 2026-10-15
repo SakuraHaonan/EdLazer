@@ -24,6 +24,9 @@ class AppPalette {
   Color get clayDeep => dark ? const Color(0xFFF0A084) : AppColors.clayDeep;
   Color get onDark => AppColors.onDark;
   Color get onDarkMuted => AppColors.onDarkMuted;
+
+  /// Content sitting on a [slateDark] fill, which flips to paper in dark mode.
+  Color get onInk => dark ? AppColors.slateDark : AppColors.onDark;
   Color get playerSurface => const Color(0xFF141413);
   Color get onPlayer => AppColors.onDark;
 }

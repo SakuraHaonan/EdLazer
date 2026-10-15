@@ -1208,7 +1208,7 @@ class _AlbumCard extends StatelessWidget {
                         ),
                         child: Icon(
                           Icons.play_arrow_rounded,
-                          color: context.colors.onDark,
+                          color: context.colors.onInk,
                           size: 24,
                         ),
                       ),

@@ -439,7 +439,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                       highlightElevation: 0,
                       shape: const CircleBorder(),
                       backgroundColor: context.colors.slateDark,
-                      foregroundColor: context.colors.onDark,
+                      foregroundColor: context.colors.onInk,
                       onPressed: () => _locateCurrent(tracks),
                       child: const Icon(Icons.my_location_rounded),
                     ),

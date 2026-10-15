@@ -47,7 +47,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       decoration: BoxDecoration(color: palette.slateDark),
       textStyle: TextStyle(
         fontFamily: AppFonts.sans,
-        color: palette.onDark,
+        color: palette.onInk,
         fontSize: 12,
       ),
     ),

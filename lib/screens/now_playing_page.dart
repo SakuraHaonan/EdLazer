@@ -865,6 +865,7 @@ class _BigPlayPauseState extends State<_BigPlayPause> {
           duration: const Duration(milliseconds: 130),
           width: 68,
           height: 68,
+          // Ink disc with the paper knocked out of it; hover trades the two.
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: _hovering
@@ -874,7 +875,9 @@ class _BigPlayPauseState extends State<_BigPlayPause> {
           child: Icon(
             widget.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
             size: 38,
-            color: context.colors.onDark,
+            color: _hovering
+                ? context.colors.slateDark
+                : context.colors.onInk,
           ),
         ),
       ),
