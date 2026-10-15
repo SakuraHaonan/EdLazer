@@ -1717,6 +1717,38 @@ class _SettingsView extends StatelessWidget {
           onTap: () => unawaited(state.refreshHome(force: true)),
         ),
         const SizedBox(height: 24),
+        const SectionHeading('外观'),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<ThemeMode>(
+          key: ValueKey(state.themeMode),
+          initialValue: state.themeMode,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: context.tr('主题'),
+            filled: true,
+            fillColor: context.colors.ivoryLight,
+            border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: context.borders.hairline,
+            ),
+          ),
+          items: [
+            for (final mode in ThemeMode.values)
+              DropdownMenuItem(
+                value: mode,
+                child: Text(
+                  mode == ThemeMode.system
+                      ? context.tr('跟随系统')
+                      : context.tr(mode == ThemeMode.light ? '浅色' : '深色'),
+                ),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null) unawaited(state.setThemeMode(value));
+          },
+        ),
+        const SizedBox(height: 24),
         const SectionHeading('语言'),
         const SizedBox(height: 12),
         DropdownButtonFormField<AppLanguage>(
