@@ -3,6 +3,8 @@ import '../l10n/app_localizations.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/haptic_seek_slider.dart';
+import '../widgets/animated_track_cover.dart';
+import '../widgets/volume_control.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -314,15 +316,17 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     label: context.tr('歌曲封面，长按保存'),
     child: GestureDetector(
       onTap: () {
-        if (MediaQuery.sizeOf(context).width < 720) _toggleLyrics();
+        if (MediaQuery.sizeOf(context).width < 720) {
+          unawaited(widget.state.feedback());
+          _toggleLyrics();
+        }
       },
       onLongPress: () => unawaited(_saveArtwork(track)),
       child: AspectRatio(
         aspectRatio: 1,
-        child: PlateArt(
-          seed: track.coverSeed,
-          coverUrl: track.coverUrl,
-          radius: BorderRadius.zero,
+        child: AnimatedTrackCover(
+          track: track,
+          direction: widget.state.trackChangeDirection,
         ),
       ),
     ),
@@ -408,46 +412,8 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       children: [
         SizedBox(
           width: (box.maxWidth * 0.28).clamp(260, 360),
-          child: Column(
-            children: [
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, available) {
-                    if (available.maxHeight < 240) {
-                      return Row(
-                        children: [
-                          SizedBox.square(dimension: 64, child: _cover(track)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              child: _TrackDetails(
-                                track: track,
-                                state: widget.state,
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-                    return CustomMultiChildLayout(
-                      delegate: _ArtworkDetailsLayout(),
-                      children: [
-                        LayoutId(id: 'art', child: _cover(track)),
-                        LayoutId(
-                          id: 'details',
-                          child: _TrackDetails(
-                            track: track,
-                            state: widget.state,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              _PlaybackTransport(track: track, state: widget.state),
-            ],
+          child: LayoutBuilder(
+            builder: (context, rail) => _desktopRail(track, rail),
           ),
         ),
         SizedBox(width: box.maxWidth > 1100 ? 80 : 40),
@@ -463,6 +429,58 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       ],
     ),
   );
+
+  Widget _desktopRail(Track track, BoxConstraints rail) {
+    final controls = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _PlaybackTransport(track: track, state: widget.state),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: VolumeControl(state: widget.state),
+        ),
+      ],
+    );
+    if (rail.maxHeight < 500 * MediaQuery.textScalerOf(context).scale(1)) {
+      return SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                SizedBox.square(dimension: 64, child: _cover(track)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _TrackDetails(track: track, state: widget.state),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            controls,
+          ],
+        ),
+      );
+    }
+    return Column(
+      children: [
+        Expanded(
+          child: CustomMultiChildLayout(
+            delegate: _ArtworkDetailsLayout(),
+            children: [
+              LayoutId(id: 'art', child: _cover(track)),
+              LayoutId(
+                id: 'details',
+                child: _TrackDetails(track: track, state: widget.state),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        controls,
+      ],
+    );
+  }
 
   Widget _readingPane(Track track) => AnimatedSwitcher(
     duration: const Duration(milliseconds: 280),
@@ -875,9 +893,7 @@ class _BigPlayPauseState extends State<_BigPlayPause> {
           child: Icon(
             widget.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
             size: 38,
-            color: _hovering
-                ? context.colors.slateDark
-                : context.colors.onInk,
+            color: _hovering ? context.colors.slateDark : context.colors.onInk,
           ),
         ),
       ),

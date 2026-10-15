@@ -65,6 +65,8 @@ class _WordCatalog extends _Catalog {
 
 class _Engine implements AudioEngine {
   @override
+  Future<void> setVolume(double volume) async {}
+  @override
   bool active = false;
   @override
   Duration position = Duration.zero;

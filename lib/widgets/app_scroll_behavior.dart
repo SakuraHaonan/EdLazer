@@ -37,6 +37,9 @@ class InertiaScrollPhysics extends ClampingScrollPhysics {
   InertiaScrollPhysics applyTo(ScrollPhysics? ancestor) =>
       InertiaScrollPhysics(retention: retention, parent: buildParent(ancestor));
   @override
+  double carriedMomentum(double existingVelocity) =>
+      ScrollMotion.carriedVelocity(existingVelocity);
+  @override
   Simulation? createBallisticSimulation(
     ScrollMetrics position,
     double velocity,
@@ -141,8 +144,7 @@ class _WheelMomentumState extends State<_WheelMomentum>
       }
       final consumed = position.pixels - before;
       position.jumpTo(before);
-      if (_velocity.sign != delta.sign) _velocity = 0;
-      _velocity += ScrollMotion.wheelVelocity(consumed);
+      _velocity = ScrollMotion.addWheelImpulse(_velocity, consumed);
       if (!_ticker.isActive) {
         _last = Duration.zero;
         _ticker.start();

@@ -193,5 +193,16 @@
   "关闭窗口": "Close window",
   "网络请求失败（HTTP {code}）。": "Network request failed (HTTP {code}).",
   "服务暂时拒绝了请求（{code}）。": "The server rejected the request ({code}).",
-  "推荐歌单": "Recommended playlists"
+  "推荐歌单": "Recommended playlists",
+  "点击可操作的元素和拖动进度条时反馈": "Feedback on controls and seek bar detents",
+  "震动强度": "Haptic intensity",
+  "震动强度 · {value}%": "Haptic intensity · {value}%",
+  "音量": "Volume",
+  "静音": "Mute",
+  "取消静音": "Unmute",
+  "音量调节失败，请重试。": "Could not change the volume. Please try again.",
+  "生成歌词图片": "Create lyric image",
+  "保存图片": "Save image",
+  "正在保存…": "Saving…",
+  "歌词图片已保存": "Lyric image saved"
 }

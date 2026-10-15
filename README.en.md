@@ -11,10 +11,12 @@ playlists come from the service.
 ## Features
 
 - Live catalogue, search, recommended playlists, accounts and favorites.
-- Synchronized lyrics, translations, word timing and multi-line lyric copying.
+- Synchronized lyrics, translations, word timing, multi-line copying and lyric image export.
+- Desktop volume controls, mute and saved volume levels.
 - System media controls on Android, iOS, Windows, macOS and Linux.
 - Simplified Chinese, Traditional Chinese, Japanese and English interfaces.
-- Adjustable scroll inertia, lyric blur, automatic following and haptic feedback.
+- Accumulating scroll momentum, lyric blur, 5ms follow checks and smooth line transitions.
+- Haptics on controls and seek detents, with adjustable intensity on iOS.
 - A mobile Favorites shortcut, with automatic caching of audio, artwork, lyrics and playlists.
 
 Completed audio downloads play locally; the first play streams while caching in the background.

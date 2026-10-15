@@ -8,4 +8,11 @@ abstract final class ScrollMotion {
   // Keep the input impulse independent of friction. Otherwise increasing
   // retention reduces the initial velocity and cancels the extra distance.
   static double wheelVelocity(double delta) => delta * -math.log(0.95) * 60;
+
+  /// Opposite impulses brake existing motion before accelerating in reverse.
+  static double addWheelImpulse(double velocity, double delta) =>
+      (velocity + wheelVelocity(delta)).clamp(-12000.0, 12000.0);
+
+  static double carriedVelocity(double velocity) =>
+      (velocity * .65).clamp(-8000.0, 8000.0);
 }

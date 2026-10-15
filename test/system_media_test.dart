@@ -54,6 +54,8 @@ class _Catalog extends Catalog {
 }
 
 class _Engine implements AudioEngine {
+  @override
+  Future<void> setVolume(double volume) async {}
   final completion = StreamController<void>.broadcast();
   final plays = <Completer<void>>[];
   bool holdPlay = false;

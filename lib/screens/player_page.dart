@@ -5,9 +5,12 @@ import '../widgets/accessible_controls.dart';
 import '../widgets/scroll_inertia_setting.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/haptic_seek_slider.dart';
+import '../widgets/volume_control.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 
 import '../data/catalog.dart';
 import '../data/models.dart';
@@ -1782,13 +1785,29 @@ class _SettingsView extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         const SectionHeading('交互'),
-        SwitchListTile.adaptive(
+        SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const TrText('震动反馈'),
-          subtitle: const TrText('触摸界面时提供轻微反馈'),
+          subtitle: const TrText('点击可操作的元素和拖动进度条时反馈'),
           value: state.hapticsEnabled,
           onChanged: (value) => unawaited(state.setHapticsEnabled(value)),
         ),
+        if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+          TrText(
+            '震动强度 · ${(state.hapticIntensity * 100).round()}%',
+            style: context.type.bodySm,
+          ),
+          AccessibleSlider(
+            semanticLabel: '震动强度',
+            semanticFormatterCallback: (value) => '${(value * 100).round()}%',
+            value: state.hapticIntensity,
+            divisions: 20,
+            onChanged: state.hapticsEnabled
+                ? (value) => unawaited(state.setHapticIntensity(value))
+                : null,
+            onChangeEnd: (_) => unawaited(state.feedback(boundary: true)),
+          ),
+        ],
         TrText(
           '歌词控件自动隐藏 · ${state.lyricControlsSeconds.toStringAsFixed(1)} 秒',
           style: context.type.bodySm,
@@ -1805,7 +1824,7 @@ class _SettingsView extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const SectionHeading('歌词与滚动'),
-        SwitchListTile.adaptive(
+        SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const TrText('歌词模糊'),
           subtitle: const TrText('距离当前歌词越远，模糊越强；手动浏览时渐隐'),
@@ -2749,13 +2768,14 @@ class _PlayerBar extends StatelessWidget {
                     ),
                   ),
 
-                  // Right: queue length + time.
+                  // Right: volume, queue and time.
                   Expanded(
                     flex: 3,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        if (track != null)
+                        if (track != null &&
+                            MediaQuery.sizeOf(context).width >= 1100)
                           Text(
                             '${fmt(state.position)} / ${fmt(track.duration)}',
                             style: context.type.monoSm.copyWith(
@@ -2763,6 +2783,9 @@ class _PlayerBar extends StatelessWidget {
                             ),
                           ),
                         const SizedBox(width: AppSpacing.md),
+                        Flexible(
+                          child: VolumeControl(state: state, onDark: true),
+                        ),
                         _DarkIconButton(
                           icon: Icons.queue_music_rounded,
                           tooltip: '播放队列 · ${state.queue.length} 首',

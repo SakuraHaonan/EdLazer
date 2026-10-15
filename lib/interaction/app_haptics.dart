@@ -20,7 +20,8 @@ class AppHaptics {
       return;
     }
     final now = _now();
-    if (_last != null &&
+    if (!boundary &&
+        _last != null &&
         now.difference(_last!) < Duration(milliseconds: detent ? 35 : 60)) {
       return;
     }
@@ -43,7 +44,13 @@ class AppHaptics {
       }
     } on MissingPluginException {
       // Also supports hosts where the native haptics channel is unavailable.
-      await HapticFeedback.lightImpact();
+      try {
+        await HapticFeedback.lightImpact();
+      } on MissingPluginException {
+        // Haptics are optional on hosts without a platform implementation.
+      } on PlatformException {
+        // A device-level failure must never prevent the recognized action.
+      }
     } on PlatformException {
       // Device haptics are optional and must never prevent an action.
     }

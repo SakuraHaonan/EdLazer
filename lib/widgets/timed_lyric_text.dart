@@ -14,12 +14,14 @@ class TimedLyricText extends StatefulWidget {
     required this.active,
     required this.position,
     required this.repaint,
+    this.emphasis,
   });
   final LyricLine line;
   final TextStyle style;
   final bool active;
   final Duration Function() position;
   final Listenable repaint;
+  final double Function()? emphasis;
   @override
   State<TimedLyricText> createState() => _TimedLyricTextState();
 }
@@ -35,14 +37,6 @@ class _TimedLyricTextState extends State<TimedLyricText> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.active) {
-      return Text(
-        widget.line.text,
-        style: widget.style,
-        textAlign: TextAlign.left,
-        textDirection: TextDirection.ltr,
-      );
-    }
     return LayoutBuilder(
       builder: (context, box) {
         final scaler = MediaQuery.textScalerOf(context);
@@ -67,6 +61,7 @@ class _TimedLyricTextState extends State<TimedLyricText> {
               painter: _WordPainter(
                 layout: _layout!,
                 position: widget.position,
+                emphasis: widget.emphasis ?? () => widget.active ? 1.0 : 0.0,
                 repaint: widget.repaint,
               ),
             ),
@@ -160,13 +155,31 @@ class _WordPainter extends CustomPainter {
   _WordPainter({
     required this.layout,
     required this.position,
+    required this.emphasis,
     required Listenable repaint,
   }) : super(repaint: repaint);
   final _WordLayout layout;
   final Duration Function() position;
+  final double Function() emphasis;
   static final _cjk = RegExp(r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]');
   @override
   void paint(Canvas canvas, Size size) {
+    final focus = emphasis().clamp(0.0, 1.0);
+    if (focus < 1) {
+      canvas.saveLayer(
+        null,
+        Paint()..color = Colors.white.withValues(alpha: 1 - focus),
+      );
+      layout.bright.paint(canvas, Offset.zero);
+      canvas.restore();
+    }
+    if (focus <= 0) return;
+    // Retain the word painter while the row exits; fade its emphasis using
+    // the same spring as the row's scale and color instead of swapping to Text.
+    canvas.saveLayer(
+      null,
+      Paint()..color = Colors.white.withValues(alpha: focus),
+    );
     final now = position().inMicroseconds / 1000;
     for (final segment in layout.segments) {
       final word = segment.word;
@@ -206,11 +219,11 @@ class _WordPainter extends CustomPainter {
       final fade = math.max(1.0, rect.height * .5);
       canvas.save();
       canvas.translate(
-        motion.xEm * layout.fontSize,
-        motion.yEm * layout.fontSize,
+        motion.xEm * layout.fontSize * focus,
+        motion.yEm * layout.fontSize * focus,
       );
       canvas.translate(rect.center.dx, rect.center.dy);
-      canvas.scale(motion.scale);
+      canvas.scale(1 + (motion.scale - 1) * focus);
       canvas.translate(-rect.center.dx, -rect.center.dy);
       final clip = Rect.fromLTRB(
         rect.left,
@@ -253,9 +266,12 @@ class _WordPainter extends CustomPainter {
       }
       canvas.restore();
     }
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _WordPainter oldDelegate) =>
-      oldDelegate.layout != layout || oldDelegate.position != position;
+      oldDelegate.layout != layout ||
+      oldDelegate.position != position ||
+      oldDelegate.emphasis != emphasis;
 }

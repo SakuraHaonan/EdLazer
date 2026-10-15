@@ -119,6 +119,7 @@ class AppState extends ChangeNotifier {
   final Catalog catalog;
   StreamSubscription<void>? _completionSubscription;
   static const playbackInterval = Duration(milliseconds: 100);
+  static const lyricFollowInterval = Duration(milliseconds: 5);
   bool hapticsEnabled = true;
   final AppHaptics haptics = AppHaptics();
   Future<void> feedback({bool detent = false, bool boundary = false}) =>
@@ -130,6 +131,23 @@ class AppState extends ChangeNotifier {
       );
   double hapticIntensity = 0.5;
   ThemeMode themeMode = ThemeMode.system;
+  double _volume = 1;
+  double _unmutedVolume = 1;
+  double get volume => _volume;
+
+  Future<void> setVolume(double value) async {
+    if (!value.isFinite) return;
+    _volume = value.clamp(0, 1);
+    if (_volume > 0) _unmutedVolume = _volume;
+    notifyListeners();
+    await audioEngine?.setVolume(_volume);
+    // Persist the latest value even when several drag updates are in flight.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('lazer_volume', _volume);
+    await prefs.setDouble('lazer_unmuted_volume', _unmutedVolume);
+  }
+
+  Future<void> toggleMute() => setVolume(_volume > 0 ? 0 : _unmutedVolume);
 
   Future<void> setHapticIntensity(double value) async {
     hapticIntensity = value.clamp(0, 1);
@@ -296,6 +314,11 @@ class AppState extends ChangeNotifier {
         orElse: () => ThemeMode.system,
       );
       language = AppLanguage.parse(prefs.getString('lazer_language'));
+      _volume = (prefs.getDouble('lazer_volume') ?? 1).clamp(0, 1);
+      _unmutedVolume =
+          (prefs.getDouble('lazer_unmuted_volume') ??
+                  (_volume > 0 ? _volume : 1))
+              .clamp(0.01, 1);
       lyricControlsSeconds =
           (prefs.getDouble('lazer_lyric_controls_seconds') ?? 2.5).clamp(1, 10);
       lyricBlurEnabled = prefs.getBool('lazer_lyric_blur') ?? true;
@@ -308,6 +331,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
     // Apply interaction preferences before session and catalogue requests.
     notifyListeners();
+    await audioEngine?.setVolume(_volume);
     await _restoreQueue();
     unawaited(_loadCurrentArtwork());
     unawaited(ensureCurrentLyrics());
@@ -566,6 +590,7 @@ class AppState extends ChangeNotifier {
   LoopMode _repeat = LoopMode.off;
   bool _realActive = false;
   int _generation = 0;
+  int trackChangeDirection = 1;
 
   List<Track> get queue => List<Track>.unmodifiable(_queue);
   Track? get current =>
@@ -588,6 +613,7 @@ class AppState extends ChangeNotifier {
 
   void playQueue(List<Track> tracks, {int startIndex = 0}) {
     if (tracks.isEmpty) return;
+    trackChangeDirection = 1;
     _queue = List<Track>.of(tracks);
     _queueIndex = startIndex.clamp(0, tracks.length - 1);
     unawaited(_saveQueue());
@@ -652,6 +678,7 @@ class AppState extends ChangeNotifier {
 
   void next() {
     if (_queue.isEmpty) return;
+    trackChangeDirection = 1;
     playbackError = null;
     _queueIndex = _shuffle
         ? (_queue.length == 1
@@ -676,6 +703,7 @@ class AppState extends ChangeNotifier {
       _position = Duration.zero;
       if (_realActive) unawaited(audioEngine!.seek(Duration.zero));
     } else {
+      trackChangeDirection = -1;
       _queueIndex = (_queueIndex - 1 + _queue.length) % _queue.length;
       unawaited(_saveQueue());
       _position = Duration.zero;
@@ -712,6 +740,7 @@ class AppState extends ChangeNotifier {
 
   void playTrackAt(int index) {
     if (index < 0 || index >= _queue.length) return;
+    trackChangeDirection = index < _queueIndex ? -1 : 1;
     playbackError = null;
     _queueIndex = index;
     unawaited(_saveQueue());
@@ -750,6 +779,8 @@ class AppState extends ChangeNotifier {
     }
     try {
       await engine.setUrl(url);
+      if (generation != _generation) return;
+      await engine.setVolume(_volume);
     } catch (error) {
       if (generation == _generation) _failPlayback('音频加载失败，请重试。');
       return;

@@ -14,6 +14,7 @@ abstract class AudioEngine {
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);
+  Future<void> setVolume(double volume);
   Future<void> stop();
 
   /// Fires once each time the current source finishes playing.
@@ -79,6 +80,10 @@ class JustAudioEngine implements AudioEngine {
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
+
+  @override
+  Future<void> setVolume(double volume) =>
+      _player.setVolume(volume.clamp(0, 1));
 
   @override
   Future<void> stop() async {

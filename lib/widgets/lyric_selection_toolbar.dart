@@ -11,12 +11,14 @@ class LyricSelectionToolbar extends StatelessWidget {
     required this.copied,
     required this.onSelectAll,
     required this.onCopy,
+    required this.onCreateImage,
     required this.onClose,
   });
   final int count;
   final bool copied;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
+  final VoidCallback onCreateImage;
   final VoidCallback onClose;
 
   @override
@@ -43,6 +45,11 @@ class LyricSelectionToolbar extends StatelessWidget {
             tooltip: '全选',
             onPressed: onSelectAll,
             icon: const Icon(Icons.select_all_rounded, size: 21),
+          ),
+          AccessibleIconButton(
+            tooltip: '生成歌词图片',
+            onPressed: onCreateImage,
+            icon: const Icon(Icons.image_outlined, size: 21),
           ),
           AccessibleIconButton(
             tooltip: '复制所选歌词',
