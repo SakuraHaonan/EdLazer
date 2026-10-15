@@ -51,3 +51,6 @@ app.*.map.json
 # Local captures and diagnostics are not application sources.
 /diag/
 /test/failures/
+
+# Kotlin Gradle caches
+**/.kotlin/

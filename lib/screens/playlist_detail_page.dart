@@ -437,7 +437,9 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                       hoverElevation: 0,
                       focusElevation: 0,
                       highlightElevation: 0,
-                      shape: const CircleBorder(),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
                       backgroundColor: context.colors.slateDark,
                       foregroundColor: context.colors.onInk,
                       onPressed: () => _locateCurrent(tracks),

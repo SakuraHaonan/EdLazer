@@ -386,12 +386,17 @@ void main() {
       addTearDown(tester.view.reset);
       final state = AppState(catalog: _Catalog());
       addTearDown(state.dispose);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildAppTheme(),
-          home: PlayerPage(state: state),
+      final screenshot = GlobalKey();
+      Future<void> render(Brightness brightness) => tester.pumpWidget(
+        RepaintBoundary(
+          key: screenshot,
+          child: MaterialApp(
+            theme: buildAppTheme(brightness: brightness),
+            home: PlayerPage(state: state),
+          ),
         ),
       );
+      await render(Brightness.light);
       await tester.tap(find.text('设置'));
       await tester.pump();
       final marker = find.byKey(const ValueKey('settings-selection-marker'));
@@ -404,6 +409,15 @@ void main() {
       expect(midway, inExclusiveRange(0, 1));
       await tester.pumpAndSettle();
       expect(tester.widget<SlideTransition>(slide).position.value.dy, 0);
+      expect(tester.getSize(marker).width, greaterThan(0));
+      expect(tester.getSize(marker).height, greaterThan(0));
+      await render(Brightness.dark);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<ColoredBox>(marker).color.computeLuminance(),
+        greaterThan(.8),
+      );
+      await _snapshot(tester, screenshot, 'settings_marker_dark');
       final nav = find
           .ancestor(of: find.text('设置').first, matching: find.byType(InkWell))
           .first;

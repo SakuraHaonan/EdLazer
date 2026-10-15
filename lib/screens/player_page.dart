@@ -514,28 +514,31 @@ class _Sidebar extends StatelessWidget {
                 width: 2,
                 height: 18,
                 child: ExcludeSemantics(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
-                    transitionBuilder: (child, animation) => FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween(
-                          begin: const Offset(0, 1),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
+                  child: IgnorePointer(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween(
+                            begin: const Offset(0, 1),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
                       ),
+                      child: section == NavSection.settings
+                          ? ColoredBox(
+                              key: const ValueKey('settings-selection-marker'),
+                              color: context.colors.slateDark,
+                              child: const SizedBox.expand(),
+                            )
+                          : const SizedBox.shrink(
+                              key: ValueKey('settings-marker-hidden'),
+                            ),
                     ),
-                    child: section == NavSection.settings
-                        ? ColoredBox(
-                            key: const ValueKey('settings-selection-marker'),
-                            color: context.colors.slateDark,
-                          )
-                        : const SizedBox.shrink(
-                            key: ValueKey('settings-marker-hidden'),
-                          ),
                   ),
                 ),
               ),
