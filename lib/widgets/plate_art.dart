@@ -1,6 +1,6 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
-import '../theme/design_tokens.dart';
 import '../utils/artwork.dart';
 import 'artwork_image.dart';
 
@@ -22,10 +22,10 @@ class PlateArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = enlargedArtworkUrl(coverUrl);
-    const fallback = ColoredBox(
-      color: AppColors.manilla,
+    final fallback = ColoredBox(
+      color: context.colors.manilla,
       child: Center(
-        child: Icon(Icons.music_note_rounded, color: AppColors.cloudDark),
+        child: Icon(Icons.music_note_rounded, color: context.colors.cloudDark),
       ),
     );
     return ClipRRect(

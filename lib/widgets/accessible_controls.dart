@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
+import 'interaction_feedback.dart';
 
 /// Keep a control's OverlayPortal and its anchor in the same semantics island.
 /// Flutter 3.47 can otherwise serialize orphan nodes during route transitions
@@ -85,7 +86,11 @@ class AccessibleTooltip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     container: true,
-    child: Tooltip(message: context.tr(message), child: child),
+    child: Tooltip(
+      message: context.tr(message),
+      enableFeedback: false,
+      child: child,
+    ),
   );
 }
 
@@ -109,13 +114,12 @@ class AccessibleIconButton extends IconButton {
   });
   @override
   Widget build(BuildContext context) {
-    if (tooltip == null) return super.build(context);
     return Semantics(
       container: true,
       child: IconButton(
         icon: icon,
-        onPressed: onPressed,
-        tooltip: context.tr(tooltip!),
+        onPressed: feedbackAction(context, onPressed),
+        tooltip: tooltip == null ? null : context.tr(tooltip!),
         isSelected: isSelected,
         iconSize: iconSize,
         padding: padding,
@@ -126,7 +130,7 @@ class AccessibleIconButton extends IconButton {
         alignment: alignment,
         focusNode: focusNode,
         autofocus: autofocus,
-        enableFeedback: enableFeedback,
+        enableFeedback: false,
       ),
     );
   }

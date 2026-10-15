@@ -1,7 +1,7 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
-import '../theme/design_tokens.dart';
 import 'accessible_controls.dart';
 
 class LyricSelectionToolbar extends StatelessWidget {
@@ -21,8 +21,8 @@ class LyricSelectionToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: AppColors.ivoryLight,
-    shape: const Border.fromBorderSide(AppBorders.hairline),
+    color: context.colors.ivoryLight,
+    shape: Border.fromBorderSide(context.borders.hairline),
     child: Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
       child: Row(
@@ -35,7 +35,7 @@ class LyricSelectionToolbar extends StatelessWidget {
                 key: ValueKey(copied),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppText.captionStrong,
+                style: context.type.captionStrong,
               ),
             ),
           ),

@@ -1,3 +1,4 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import 'dart:async';
 
@@ -28,16 +29,16 @@ Future<void> showLoginDialog(BuildContext context, AppState state) {
     context: context,
     barrierDismissible: true,
     builder: (BuildContext context) => Dialog(
-      backgroundColor: AppColors.ivoryLight,
+      backgroundColor: context.colors.ivoryLight,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
       elevation: 0,
       insetPadding: const EdgeInsets.all(AppSpacing.lg),
       clipBehavior: Clip.antiAlias,
       // Paper frame: square, hairline, flat — elevation by tone + border.
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.zero,
-        side: AppBorders.hairline,
+        side: context.borders.hairline,
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
@@ -77,11 +78,14 @@ class _LoginPageState extends State<LoginPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Text('LAZER', style: AppText.wordmark),
-                    SizedBox(width: 10),
-                    InlineLabel('FIELD PLAYER', color: AppColors.cloudDark),
+                    Text('LAZER', style: context.type.wordmark),
+                    const SizedBox(width: 10),
+                    InlineLabel(
+                      'FIELD PLAYER',
+                      color: context.colors.cloudDark,
+                    ),
                   ],
                 ),
                 TextLinkButton(label: '取消', onPressed: _close),
@@ -93,16 +97,16 @@ class _LoginPageState extends State<LoginPage> {
             TrText(
               '登录你的曲库',
               textAlign: TextAlign.center,
-              style: AppText.subheading.copyWith(fontSize: 26),
+              style: context.type.subheading.copyWith(fontSize: 26),
             ),
             const SizedBox(height: AppSpacing.sm),
             TrText(
               '登录后同步你的歌单和每日推荐。',
               textAlign: TextAlign.center,
-              style: AppText.body.copyWith(
+              style: context.type.body.copyWith(
                 fontSize: 15,
                 height: 1.55,
-                color: AppColors.cloudDark,
+                color: context.colors.cloudDark,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -154,7 +158,7 @@ class _LoginPageState extends State<LoginPage> {
             TrText(
               '使用网易云音乐账户登录',
               textAlign: TextAlign.center,
-              style: AppText.captionMuted.copyWith(fontSize: 11),
+              style: context.type.captionMuted.copyWith(fontSize: 11),
             ),
           ],
         ),
@@ -188,18 +192,20 @@ class _ModeTabs extends StatelessWidget {
                 children: [
                   TrText(
                     m.label,
-                    style: AppText.bodySm.copyWith(
+                    style: context.type.bodySm.copyWith(
                       fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                       color: active
-                          ? AppColors.slateDark
-                          : AppColors.cloudMedium,
+                          ? context.colors.slateDark
+                          : context.colors.cloudMedium,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Container(
                     height: 1,
                     width: 44,
-                    color: active ? AppColors.slateDark : Colors.transparent,
+                    color: active
+                        ? context.colors.slateDark
+                        : Colors.transparent,
                   ),
                 ],
               ),
@@ -268,14 +274,14 @@ class _PaperFieldState extends State<PaperField> {
               minHeight: widget.maxLines == 1 ? 52 : 120,
             ),
             decoration: BoxDecoration(
-              color: AppColors.ivoryLight,
+              color: context.colors.ivoryLight,
               borderRadius: BorderRadius.zero,
               border: Border.all(
                 color: hasError
-                    ? AppColors.clayDeep
+                    ? context.colors.clayDeep
                     : _focused
-                    ? AppColors.slateDark
-                    : AppColors.stone,
+                    ? context.colors.slateDark
+                    : context.colors.stone,
                 width: 1,
               ),
             ),
@@ -302,8 +308,8 @@ class _PaperFieldState extends State<PaperField> {
                     inputFormatters: widget.inputFormatters,
                     onSubmitted: widget.onSubmitted,
                     style: widget.mono
-                        ? AppText.mono.copyWith(fontSize: 13, height: 1.5)
-                        : AppText.bodySm.copyWith(fontSize: 15),
+                        ? context.type.mono.copyWith(fontSize: 13, height: 1.5)
+                        : context.type.bodySm.copyWith(fontSize: 15),
                     decoration: InputDecoration(
                       isDense: false,
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -312,9 +318,9 @@ class _PaperFieldState extends State<PaperField> {
                       hintText: widget.hint == null
                           ? null
                           : context.tr(widget.hint!),
-                      hintStyle: AppText.bodySm.copyWith(
+                      hintStyle: context.type.bodySm.copyWith(
                         fontSize: 15,
-                        color: AppColors.cloudMedium,
+                        color: context.colors.cloudMedium,
                       ),
                     ),
                   ),
@@ -327,8 +333,8 @@ class _PaperFieldState extends State<PaperField> {
           const SizedBox(height: 6),
           TrText(
             widget.errorText!,
-            style: AppText.caption.copyWith(
-              color: AppColors.clayDeep,
+            style: context.type.caption.copyWith(
+              color: context.colors.clayDeep,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -370,9 +376,9 @@ class PhoneField extends StatelessWidget {
         children: [
           Text(
             '+86',
-            style: AppText.bodySm.copyWith(
+            style: context.type.bodySm.copyWith(
               fontSize: 15,
-              color: AppColors.cloudDark,
+              color: context.colors.cloudDark,
             ),
           ),
           const SizedBox(width: 8),
@@ -445,16 +451,16 @@ class BusyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!busy) return child;
-    return const Row(
+    return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        SizedBox(
+        const SizedBox(
           width: 16,
           height: 16,
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
-        SizedBox(width: 12),
-        TrText('正在登录…', style: AppText.bodySmMuted),
+        const SizedBox(width: 12),
+        TrText('正在登录…', style: context.type.bodySmMuted),
       ],
     );
   }
@@ -580,19 +586,19 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
               children: [
                 PaperCard(
                   padding: const EdgeInsets.all(14),
-                  background: AppColors.ivoryLight,
+                  background: context.colors.ivoryLight,
                   child: url != null
                       ? QrImageView(
                           data: url,
                           size: 178,
-                          backgroundColor: AppColors.ivoryLight,
-                          eyeStyle: const QrEyeStyle(
+                          backgroundColor: context.colors.ivoryLight,
+                          eyeStyle: QrEyeStyle(
                             eyeShape: QrEyeShape.square,
-                            color: AppColors.slateDark,
+                            color: context.colors.slateDark,
                           ),
-                          dataModuleStyle: const QrDataModuleStyle(
+                          dataModuleStyle: QrDataModuleStyle(
                             dataModuleShape: QrDataModuleShape.square,
-                            color: AppColors.slateDark,
+                            color: context.colors.slateDark,
                           ),
                         )
                       : Center(
@@ -601,7 +607,7 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
                               : TrText(
                                   _qrError!,
                                   textAlign: TextAlign.center,
-                                  style: AppText.captionMuted,
+                                  style: context.type.captionMuted,
                                 ),
                         ),
                 ),
@@ -609,7 +615,9 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: AppColors.ivoryLight.withValues(alpha: 0.92),
+                        color: context.colors.ivoryLight.withValues(
+                          alpha: 0.92,
+                        ),
                         borderRadius: AppRadius.cardBorder,
                       ),
                       alignment: Alignment.center,
@@ -617,35 +625,38 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
                           ? Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.phone_android_rounded,
                                   size: 30,
-                                  color: AppColors.slateDark,
+                                  color: context.colors.slateDark,
                                 ),
                                 const SizedBox(height: 10),
                                 TrText(
                                   '已扫描',
-                                  style: AppText.subheading.copyWith(
+                                  style: context.type.subheading.copyWith(
                                     fontSize: 18,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                TrText('请在手机上确认', style: AppText.captionMuted),
+                                TrText(
+                                  '请在手机上确认',
+                                  style: context.type.captionMuted,
+                                ),
                               ],
                             )
                           : Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.hourglass_empty_rounded,
                                   size: 26,
-                                  color: AppColors.cloudDark,
+                                  color: context.colors.cloudDark,
                                 ),
                                 const SizedBox(height: 10),
                                 TrText(
                                   '二维码已过期',
-                                  style: AppText.bodySm.copyWith(
-                                    color: AppColors.cloudDark,
+                                  style: context.type.bodySm.copyWith(
+                                    color: context.colors.cloudDark,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -665,7 +676,7 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
         Center(
           child: TrText(
             _phase == _QrPhase.fresh ? '打开手机 App 扫描 · $_secondsLeft 秒后过期' : ' ',
-            style: AppText.captionMuted,
+            style: context.type.captionMuted,
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -681,7 +692,9 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
                 TrText(
                   '扫码成功 · 等待手机确认',
                   textAlign: TextAlign.center,
-                  style: AppText.bodySm.copyWith(color: AppColors.cloudDark),
+                  style: context.type.bodySm.copyWith(
+                    color: context.colors.cloudDark,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Center(
@@ -768,8 +781,8 @@ class _SmsPanelState extends State<SmsPanel> with SignInFlow<SmsPanel> {
     if (_secondsLeft <= 0) {
       _codeError = '请先获取验证码';
       ok = false;
-    } else if (digitsOf(_code.text).length != 6) {
-      _codeError = '验证码为 6 位数字';
+    } else if (digitsOf(_code.text).length != 4) {
+      _codeError = '验证码为 4 位数字';
       ok = false;
     } else {
       _codeError = null;
@@ -805,10 +818,10 @@ class _SmsPanelState extends State<SmsPanel> with SignInFlow<SmsPanel> {
               child: PaperField(
                 controller: _code,
                 label: '验证码',
-                hint: counting ? '查收短信验证码' : '6 位数字',
+                hint: counting ? '查收短信验证码' : '4 位数字',
                 errorText: _codeError,
                 keyboardType: TextInputType.number,
-                maxLength: 6,
+                maxLength: 4,
                 inputFormatters: <TextInputFormatter>[
                   FilteringTextInputFormatter.digitsOnly,
                 ],
@@ -916,7 +929,7 @@ class _PasswordPanelState extends State<PasswordPanel>
                     ? Icons.visibility_off_outlined
                     : Icons.visibility_outlined,
                 size: 17,
-                color: AppColors.cloudDark,
+                color: context.colors.cloudDark,
               ),
             ),
           ),
@@ -1001,7 +1014,7 @@ class _CookiePanelState extends State<CookiePanel>
         const SizedBox(height: AppSpacing.md),
         TrText(
           '从浏览器中复制网易云音乐的登录 Cookie，粘贴后会验证账户。',
-          style: AppText.captionMuted.copyWith(height: 1.5),
+          style: context.type.captionMuted.copyWith(height: 1.5),
         ),
       ],
     );

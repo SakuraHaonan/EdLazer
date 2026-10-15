@@ -135,6 +135,8 @@ class _LazerAppState extends State<LazerApp> {
         title: 'Lazer · Field Player',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
+        darkTheme: buildAppTheme(brightness: Brightness.dark),
+        themeMode: _state.themeMode,
         locale: _state.language.locale,
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [

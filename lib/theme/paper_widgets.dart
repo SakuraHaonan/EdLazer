@@ -1,5 +1,7 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import '../widgets/interaction_feedback.dart';
 
 import 'design_tokens.dart';
 
@@ -48,7 +50,7 @@ class _ClayButtonState extends State<ClayButton> {
     return SizedBox(
       width: widget.expand ? double.infinity : null,
       child: TextButton(
-        onPressed: widget.onPressed,
+        onPressed: feedbackAction(context, widget.onPressed),
         style: ButtonStyle(
           minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
           padding: WidgetStatePropertyAll(
@@ -57,15 +59,15 @@ class _ClayButtonState extends State<ClayButton> {
                 : _ButtonSpec.filledPadding,
           ),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (!enabled) return AppColors.stone;
+            if (!enabled) return context.colors.stone;
             if (states.contains(WidgetState.pressed) ||
                 states.contains(WidgetState.hovered)) {
-              return AppColors.clayDeep;
+              return context.colors.clayDeep;
             }
-            return AppColors.clay;
+            return context.colors.clay;
           }),
           foregroundColor: WidgetStatePropertyAll(
-            enabled ? Colors.white : AppColors.cloudDark,
+            enabled ? Colors.white : context.colors.cloudDark,
           ),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -75,8 +77,8 @@ class _ClayButtonState extends State<ClayButton> {
         child: TrText(
           widget.label,
           textAlign: TextAlign.center,
-          style: AppText.bodySm.copyWith(
-            color: enabled ? Colors.white : AppColors.cloudDark,
+          style: context.type.bodySm.copyWith(
+            color: enabled ? Colors.white : context.colors.cloudDark,
             fontWeight: FontWeight.w500,
             letterSpacing: 0,
           ),
@@ -117,17 +119,17 @@ class _IvoryButtonState extends State<IvoryButton> {
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: widget.onPressed,
+        onTap: feedbackAction(context, widget.onPressed),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           padding: _ButtonSpec.filledPadding,
           width: widget.expand ? double.infinity : null,
           decoration: BoxDecoration(
             color: !enabled
-                ? AppColors.ivoryMedium
+                ? context.colors.ivoryMedium
                 : _hovering
-                ? AppColors.manilla
-                : AppColors.ivoryLight,
+                ? context.colors.manilla
+                : context.colors.ivoryLight,
             borderRadius: AppRadius.filledButton,
           ),
           alignment: Alignment.center,
@@ -138,15 +140,19 @@ class _IvoryButtonState extends State<IvoryButton> {
                 Icon(
                   widget.icon,
                   size: 16,
-                  color: enabled ? AppColors.slateDark : AppColors.cloudMedium,
+                  color: enabled
+                      ? context.colors.slateDark
+                      : context.colors.cloudMedium,
                 ),
                 const SizedBox(width: AppSpacing.sm),
               ],
               TrText(
                 widget.label,
-                style: AppText.bodySm.copyWith(
+                style: context.type.bodySm.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: enabled ? AppColors.slateDark : AppColors.cloudMedium,
+                  color: enabled
+                      ? context.colors.slateDark
+                      : context.colors.cloudMedium,
                 ),
               ),
             ],
@@ -185,26 +191,26 @@ class _OutlinedButton2State extends State<OutlinedButton2> {
   Widget build(BuildContext context) {
     final bool enabled = widget.onPressed != null;
     final Color fg = widget.invert
-        ? AppColors.onDark
-        : (enabled ? AppColors.slateDark : AppColors.cloudMedium);
+        ? context.colors.onDark
+        : (enabled ? context.colors.slateDark : context.colors.cloudMedium);
 
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: widget.onPressed,
+        onTap: feedbackAction(context, widget.onPressed),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           padding: _ButtonSpec.compactPadding,
           decoration: BoxDecoration(
             color: _hovering && enabled
                 ? (widget.invert
-                      ? AppColors.slateMedium
-                      : AppColors.oatWarm.withValues(alpha: 0.45))
+                      ? context.colors.slateMedium
+                      : context.colors.oatWarm.withValues(alpha: 0.45))
                 : Colors.transparent,
             border: Border.all(
-              color: enabled ? AppColors.cloudDark : AppColors.stone,
+              color: enabled ? context.colors.cloudDark : context.colors.stone,
               width: 1,
             ),
             borderRadius: AppRadius.outlinedBorder,
@@ -218,7 +224,7 @@ class _OutlinedButton2State extends State<OutlinedButton2> {
               ],
               TrText(
                 widget.label,
-                style: AppText.caption.copyWith(
+                style: context.type.caption.copyWith(
                   color: fg,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -261,8 +267,8 @@ class _TextLinkButtonState extends State<TextLinkButton> {
   Widget build(BuildContext context) {
     final bool enabled = widget.onPressed != null;
     final Color fg = widget.invert
-        ? AppColors.onDark
-        : (enabled ? AppColors.slateDark : AppColors.cloudMedium);
+        ? context.colors.onDark
+        : (enabled ? context.colors.slateDark : context.colors.cloudMedium);
     final bool showUnderline = widget.underlined || _hovering;
 
     return MouseRegion(
@@ -270,12 +276,12 @@ class _TextLinkButtonState extends State<TextLinkButton> {
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: widget.onPressed,
+        onTap: feedbackAction(context, widget.onPressed),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: TrText(
             widget.label,
-            style: AppText.bodySm.copyWith(
+            style: context.type.bodySm.copyWith(
               color: fg,
               decoration: showUnderline
                   ? TextDecoration.underline
@@ -302,7 +308,7 @@ class PaperCard extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(AppSpacing.lg),
     this.bordered = true,
-    this.background = AppColors.ivoryLight,
+    this.background,
     this.onTap,
     this.radius = AppRadius.card,
   });
@@ -310,7 +316,7 @@ class PaperCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final bool bordered;
-  final Color background;
+  final Color? background;
   final VoidCallback? onTap;
   final double radius;
 
@@ -322,16 +328,21 @@ class PaperCard extends StatelessWidget {
       duration: const Duration(milliseconds: 140),
       padding: padding,
       decoration: BoxDecoration(
-        color: background,
+        color: background ?? context.colors.ivoryLight,
         borderRadius: br,
-        border: bordered ? Border.all(color: AppColors.stone, width: 1) : null,
+        border: bordered
+            ? Border.all(color: context.colors.stone, width: 1)
+            : null,
       ),
       child: child,
     );
     if (onTap != null) {
       box = MouseRegion(
         cursor: SystemMouseCursors.click,
-        child: GestureDetector(onTap: onTap, child: box),
+        child: GestureDetector(
+          onTap: feedbackAction(context, onTap),
+          child: box,
+        ),
       );
     }
     return box;
@@ -348,7 +359,7 @@ class Hairline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color c = color ?? AppColors.stone;
+    final Color c = color ?? context.colors.stone;
     if (vertical) {
       return Container(width: 1, height: length, color: c);
     }
@@ -359,23 +370,18 @@ class Hairline extends StatelessWidget {
 /// Badge / inline label — not a container, just weighted text in flow.
 /// Used sparingly for categories and metadata.
 class InlineLabel extends StatelessWidget {
-  const InlineLabel(
-    this.text, {
-    super.key,
-    this.color = AppColors.cloudDark,
-    this.strong = false,
-  });
+  const InlineLabel(this.text, {super.key, this.color, this.strong = false});
 
   final String text;
-  final Color color;
+  final Color? color;
   final bool strong;
 
   @override
   Widget build(BuildContext context) {
     return TrText(
       text.toUpperCase(),
-      style: AppText.caption.copyWith(
-        color: color,
+      style: context.type.caption.copyWith(
+        color: color ?? context.colors.cloudDark,
         fontWeight: strong ? FontWeight.w600 : FontWeight.w500,
         letterSpacing: 1.6,
       ),
@@ -395,7 +401,7 @@ class SectionHeading extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        InlineLabel(label, strong: true, color: AppColors.slateDark),
+        InlineLabel(label, strong: true, color: context.colors.slateDark),
         const SizedBox(width: AppSpacing.md),
         const Expanded(child: Hairline()),
         if (trailing != null) ...[

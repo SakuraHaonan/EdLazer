@@ -1,7 +1,10 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_language.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/scroll_inertia_setting.dart';
+import '../widgets/interaction_feedback.dart';
+import '../widgets/haptic_seek_slider.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,6 +23,7 @@ import 'playlist_detail_page.dart';
 enum NavSection { home, search, likes, settings, user }
 
 void _openPlaylist(BuildContext context, AppState state, Playlist playlist) {
+  unawaited(state.feedback());
   final shell = context.findAncestorStateOfType<_PlayerPageState>();
   if (MediaQuery.sizeOf(context).width >= _compactBreakpoint && shell != null) {
     shell.openPlaylist(playlist);
@@ -142,6 +146,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   void _selectSection(NavSection s) {
     if (s == _section && _playlist == null) return;
+    unawaited(widget.state.feedback());
     setState(() {
       _section = s;
       _playlist = null;
@@ -154,7 +159,7 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.ivoryMedium,
+      backgroundColor: context.colors.ivoryMedium,
       // One shell, two layouts: the width decides whether the rail lives on
       // the left or along the bottom.
       body: LayoutBuilder(
@@ -190,8 +195,11 @@ class _PlayerPageState extends State<PlayerPage> {
                           padding: const EdgeInsets.fromLTRB(24, 8, 12, 0),
                           child: Row(
                             children: [
-                              const Expanded(
-                                child: Text('Lazer', style: AppText.bodySm),
+                              Expanded(
+                                child: Text(
+                                  'Lazer',
+                                  style: context.type.bodySm,
+                                ),
                               ),
                               AccessibleIconButton(
                                 tooltip: '设置',
@@ -272,7 +280,7 @@ class _Sidebar extends StatelessWidget {
   final ValueChanged<Playlist> onPlaylist;
   final VoidCallback onSettings;
   final String? selectedPlaylistId;
-  static const sections = [
+  static final sections = [
     NavSection.home,
     NavSection.search,
     NavSection.likes,
@@ -307,12 +315,15 @@ class _Sidebar extends StatelessWidget {
                   SizedBox.square(
                     dimension: 36,
                     child: state.user.avatarUrl == null
-                        ? const DecoratedBox(
+                        ? DecoratedBox(
                             decoration: BoxDecoration(
-                              color: AppColors.oatWarm,
+                              color: context.colors.oatWarm,
                               shape: BoxShape.rectangle,
                             ),
-                            child: Icon(Icons.person_outline_rounded, size: 22),
+                            child: const Icon(
+                              Icons.person_outline_rounded,
+                              size: 22,
+                            ),
                           )
                         : PlateArt(
                             seed: state.user.userId,
@@ -331,13 +342,13 @@ class _Sidebar extends StatelessWidget {
                               : state.user.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppText.bodySm.copyWith(
+                          style: context.type.bodySm.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         TrText(
                           state.isGuest ? '点此登录' : '我的音乐',
-                          style: AppText.captionMuted,
+                          style: context.type.captionMuted,
                         ),
                       ],
                     ),
@@ -374,7 +385,7 @@ class _Sidebar extends StatelessWidget {
                   child: AnimatedOpacity(
                     opacity: selected < 0 || !navigationActive ? 0 : 1,
                     duration: const Duration(milliseconds: 160),
-                    child: const ColoredBox(color: AppColors.slateDark),
+                    child: ColoredBox(color: context.colors.slateDark),
                   ),
                 ),
               ),
@@ -389,8 +400,8 @@ class _Sidebar extends StatelessWidget {
           padding: const EdgeInsets.only(left: 24, right: 12),
           child: Row(
             children: [
-              const Expanded(
-                child: TrText('我的歌单', style: AppText.captionStrong),
+              Expanded(
+                child: TrText('我的歌单', style: context.type.captionStrong),
               ),
               if (state.signedIn)
                 AccessibleIconButton(
@@ -404,9 +415,9 @@ class _Sidebar extends StatelessWidget {
         ),
         Expanded(
           child: state.isGuest
-              ? const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: TrText('登录后同步你的歌单', style: AppText.captionMuted),
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: TrText('登录后同步你的歌单', style: context.type.captionMuted),
                 )
               : playlists.isEmpty
               ? Padding(
@@ -418,7 +429,7 @@ class _Sidebar extends StatelessWidget {
                         state.collectionsLoading
                             ? '正在同步歌单…'
                             : state.collectionsError ?? '暂无歌单',
-                        style: AppText.captionMuted,
+                        style: context.type.captionMuted,
                       ),
                       if (state.collectionsError != null)
                         TextButton(
@@ -438,13 +449,15 @@ class _Sidebar extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Material(
                         color: selectedPlaylistId == playlist.id
-                            ? AppColors.oatWarm
+                            ? context.colors.oatWarm
                             : Colors.transparent,
                         borderRadius: BorderRadius.zero,
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           borderRadius: BorderRadius.zero,
-                          hoverColor: AppColors.oatWarm.withValues(alpha: 0.5),
+                          hoverColor: context.colors.oatWarm.withValues(
+                            alpha: 0.5,
+                          ),
                           onTap: () => onPlaylist(playlist),
                           child: Padding(
                             padding: const EdgeInsets.all(10),
@@ -464,7 +477,7 @@ class _Sidebar extends StatelessWidget {
                                     playlist.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: AppText.caption.copyWith(
+                                    style: context.type.caption.copyWith(
                                       fontSize: 13,
                                     ),
                                   ),
@@ -513,9 +526,9 @@ class _Sidebar extends StatelessWidget {
                       ),
                     ),
                     child: section == NavSection.settings
-                        ? const ColoredBox(
-                            key: ValueKey('settings-selection-marker'),
-                            color: AppColors.slateDark,
+                        ? ColoredBox(
+                            key: const ValueKey('settings-selection-marker'),
+                            color: context.colors.slateDark,
                           )
                         : const SizedBox.shrink(
                             key: ValueKey('settings-marker-hidden'),
@@ -559,14 +572,14 @@ class _NavItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Material(
         color: active
-            ? AppColors.oatWarm.withValues(alpha: 0.55)
+            ? context.colors.oatWarm.withValues(alpha: 0.55)
             : Colors.transparent,
         borderRadius: BorderRadius.zero,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           borderRadius: BorderRadius.zero,
-          hoverColor: AppColors.ivoryLight,
-          onTap: onTap,
+          hoverColor: context.colors.ivoryLight,
+          onTap: feedbackAction(context, onTap),
           child: Padding(
             padding: const EdgeInsets.only(left: 28, right: 16),
             child: Row(
@@ -574,16 +587,20 @@ class _NavItem extends StatelessWidget {
                 Icon(
                   icon,
                   size: 18,
-                  color: active ? AppColors.slateDark : AppColors.cloudDark,
+                  color: active
+                      ? context.colors.slateDark
+                      : context.colors.cloudDark,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TrText(
                     label,
-                    style: AppText.bodySm.copyWith(
+                    style: context.type.bodySm.copyWith(
                       fontSize: 15,
                       fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                      color: active ? AppColors.slateDark : AppColors.cloudDark,
+                      color: active
+                          ? context.colors.slateDark
+                          : context.colors.cloudDark,
                     ),
                   ),
                 ),
@@ -605,13 +622,13 @@ class _ViewEntry extends StatelessWidget {
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     key: ValueKey(id),
     tween: Tween(begin: 0, end: 1),
-    duration: const Duration(milliseconds: 240),
-    curve: Curves.easeOutCubic,
+    duration: const Duration(milliseconds: 360),
+    curve: Curves.easeOutQuart,
     builder: (context, value, child) => Opacity(
       opacity: value,
       child: Transform.translate(
-        offset: Offset(0, (1 - value) * 10),
-        child: child,
+        offset: Offset(0, (1 - value) * 32),
+        child: Transform.scale(scale: 0.96 + value * 0.04, child: child),
       ),
     ),
     child: child,
@@ -627,9 +644,9 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.ivoryLight,
-        border: Border(top: AppBorders.hairline),
+      decoration: BoxDecoration(
+        color: context.colors.ivoryLight,
+        border: Border(top: context.borders.hairline),
       ),
       child: SafeArea(
         top: false,
@@ -638,7 +655,7 @@ class _BottomNav extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final NavSection s in const [
+              for (final NavSection s in [
                 NavSection.home,
                 NavSection.search,
                 NavSection.user,
@@ -671,17 +688,19 @@ class _BottomNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color fg = active ? AppColors.slateDark : AppColors.cloudDark;
+    final Color fg = active
+        ? context.colors.slateDark
+        : context.colors.cloudDark;
     return Semantics(
       button: true,
       selected: active,
       label: context.tr(section.label),
       child: Material(
         color: active
-            ? AppColors.oatWarm.withValues(alpha: 0.55)
-            : AppColors.ivoryLight,
+            ? context.colors.oatWarm.withValues(alpha: 0.55)
+            : context.colors.ivoryLight,
         child: InkWell(
-          onTap: onTap,
+          onTap: feedbackAction(context, onTap),
           child: Ink(
             child: Stack(
               children: [
@@ -695,7 +714,7 @@ class _BottomNavItem extends StatelessWidget {
                       child: Container(
                         width: 28,
                         height: 2,
-                        color: AppColors.slateDark,
+                        color: context.colors.slateDark,
                       ),
                     ),
                   ),
@@ -709,11 +728,11 @@ class _BottomNavItem extends StatelessWidget {
                         fit: BoxFit.scaleDown,
                         child: TrText(
                           section.label,
-                          style: AppText.caption.copyWith(
+                          style: context.type.caption.copyWith(
                             fontSize: 11,
                             color: active
-                                ? AppColors.slateDark
-                                : AppColors.cloudMedium,
+                                ? context.colors.slateDark
+                                : context.colors.cloudMedium,
                             fontWeight: active
                                 ? FontWeight.w600
                                 : FontWeight.w400,
@@ -829,7 +848,7 @@ class _HeroHeading extends StatelessWidget {
         final bool wide = c.maxWidth > 720;
         final Widget left = TrText(
           title,
-          style: AppText.heading.copyWith(
+          style: context.type.heading.copyWith(
             fontSize: wide
                 ? 56
                 : c.maxWidth < 560
@@ -839,7 +858,10 @@ class _HeroHeading extends StatelessWidget {
         );
         final Widget right = TrText(
           body,
-          style: AppText.body.copyWith(color: AppColors.cloudDark, height: 1.5),
+          style: context.type.body.copyWith(
+            color: context.colors.cloudDark,
+            height: 1.5,
+          ),
         );
         if (!wide) {
           return Column(
@@ -903,7 +925,7 @@ class _HomeView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _HeroHeading(title: '今天想听\n哪一首？', body: ''),
+        const _HeroHeading(title: '今天想听\n哪一首？', body: ''),
         const SizedBox(height: AppSpacing.section * 0.6),
         if (recommended.isNotEmpty) ...[
           const SectionHeading('推荐歌单'),
@@ -912,7 +934,7 @@ class _HomeView extends StatelessWidget {
           const SizedBox(height: AppSpacing.section * 0.6),
         ],
         if (quick.isNotEmpty) ...[
-          SectionHeading('快速开始'),
+          const SectionHeading('快速开始'),
           const SizedBox(height: AppSpacing.md),
           _stackedRows([
             for (int i = 0; i < quick.length; i++)
@@ -926,13 +948,13 @@ class _HomeView extends StatelessWidget {
           const SizedBox(height: AppSpacing.section * 0.6),
         ],
         if (feed.playlists.isNotEmpty) ...[
-          SectionHeading('歌单'),
+          const SectionHeading('歌单'),
           const SizedBox(height: AppSpacing.md),
           _PlaylistGrid(playlists: feed.playlists, state: state),
           const SizedBox(height: AppSpacing.section * 0.6),
         ],
         if (feed.albums.isNotEmpty) ...[
-          SectionHeading('专辑'),
+          const SectionHeading('专辑'),
           const SizedBox(height: AppSpacing.md),
           _AlbumGrid(albums: feed.albums, state: state),
         ],
@@ -978,7 +1000,7 @@ class _RecommendedPlaylists extends StatelessWidget {
                         playlist.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.bodySm.copyWith(
+                        style: context.type.bodySm.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -988,7 +1010,7 @@ class _RecommendedPlaylists extends StatelessWidget {
                           playlist.description,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppText.captionMuted,
+                          style: context.type.captionMuted,
                         ),
                       ],
                     ],
@@ -1043,10 +1065,10 @@ class _PlaylistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: AppColors.ivoryLight,
+    color: context.colors.ivoryLight,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.zero,
-      side: const BorderSide(color: AppColors.stone),
+      side: BorderSide(color: context.colors.stone),
     ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
@@ -1072,21 +1094,23 @@ class _PlaylistCard extends StatelessWidget {
                     playlist.name,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppText.bodySm.copyWith(fontWeight: FontWeight.w600),
+                    style: context.type.bodySm.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     playlist.description,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppText.captionMuted,
+                    style: context.type.captionMuted,
                   ),
                   const Spacer(),
                   Row(
                     children: [
                       TextButton(
                         style: TextButton.styleFrom(
-                          foregroundColor: AppColors.slateDark,
+                          foregroundColor: context.colors.slateDark,
                         ),
                         onPressed: () => unawaited(
                           _playCollection(
@@ -1098,7 +1122,7 @@ class _PlaylistCard extends StatelessWidget {
                       ),
                       TrText(
                         '${playlist.trackCount} 首',
-                        style: AppText.captionMuted,
+                        style: context.type.captionMuted,
                       ),
                     ],
                   ),
@@ -1178,13 +1202,13 @@ class _AlbumCard extends StatelessWidget {
                         width: 40,
                         height: 40,
                         alignment: Alignment.center,
-                        decoration: const BoxDecoration(
-                          color: AppColors.slateDark,
+                        decoration: BoxDecoration(
+                          color: context.colors.slateDark,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.play_arrow_rounded,
-                          color: AppColors.onDark,
+                          color: context.colors.onDark,
                           size: 24,
                         ),
                       ),
@@ -1200,13 +1224,13 @@ class _AlbumCard extends StatelessWidget {
           album.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppText.body.copyWith(fontSize: 16, height: 1.3),
+          style: context.type.body.copyWith(fontSize: 16, height: 1.3),
         ),
         Text(
           album.artist,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppText.captionMuted,
+          style: context.type.captionMuted,
         ),
       ],
     );
@@ -1261,18 +1285,18 @@ class _EmptyHint extends StatelessWidget {
     return PaperCard(
       child: Column(
         children: [
-          Icon(icon, size: 28, color: AppColors.cloudDark),
+          Icon(icon, size: 28, color: context.colors.cloudDark),
           const SizedBox(height: AppSpacing.md),
           TrText(
             title,
             textAlign: TextAlign.center,
-            style: AppText.subheading.copyWith(fontSize: 18),
+            style: context.type.subheading.copyWith(fontSize: 18),
           ),
           const SizedBox(height: AppSpacing.xs),
           TrText(
             body,
             textAlign: TextAlign.center,
-            style: AppText.captionMuted.copyWith(height: 1.5),
+            style: context.type.captionMuted.copyWith(height: 1.5),
           ),
         ],
       ),
@@ -1307,36 +1331,36 @@ class _SearchFieldState extends State<_SearchField> {
         duration: const Duration(milliseconds: 160),
         constraints: const BoxConstraints(minHeight: 52),
         decoration: BoxDecoration(
-          color: AppColors.ivoryLight,
+          color: context.colors.ivoryLight,
           borderRadius: BorderRadius.zero,
           border: Border.all(
-            color: _focused ? AppColors.slateDark : AppColors.stone,
+            color: _focused ? context.colors.slateDark : context.colors.stone,
             width: 1,
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               Icons.search_outlined,
               size: 17,
-              color: AppColors.cloudDark,
+              color: context.colors.cloudDark,
             ),
             const SizedBox(width: 10),
             Expanded(
               child: TextField(
                 controller: widget.controller,
                 onChanged: widget.onChanged,
-                style: AppText.bodySm.copyWith(fontSize: 16),
+                style: context.type.bodySm.copyWith(fontSize: 16),
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   isDense: false,
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   border: InputBorder.none,
                   hintText: context.tr('搜索曲目、专辑或歌单'),
-                  hintStyle: AppText.bodySm.copyWith(
+                  hintStyle: context.type.bodySm.copyWith(
                     fontSize: 16,
-                    color: AppColors.cloudMedium,
+                    color: context.colors.cloudMedium,
                   ),
                 ),
               ),
@@ -1350,12 +1374,12 @@ class _SearchFieldState extends State<_SearchField> {
                     widget.controller.clear();
                     widget.onChanged('');
                   },
-                  child: const Padding(
-                    padding: EdgeInsets.all(6),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
                     child: Icon(
                       Icons.close_rounded,
                       size: 16,
-                      color: AppColors.cloudDark,
+                      color: context.colors.cloudDark,
                     ),
                   ),
                 ),
@@ -1438,23 +1462,23 @@ class _SearchViewState extends State<_SearchView> {
     final String q = _q.trim();
     final bool filtering = q.isNotEmpty;
     final List<Track> tracks = _results.tracks;
-    final List<Album> albums = filtering ? _results.albums : const <Album>[];
+    final List<Album> albums = filtering ? _results.albums : <Album>[];
     final List<Playlist> playlists = filtering
         ? _results.playlists
-        : const <Playlist>[];
+        : <Playlist>[];
     final int hits = tracks.length + albums.length + playlists.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _HeroHeading(title: '搜索', body: '搜索曲名、音乐人、专辑或歌单。'),
+        const _HeroHeading(title: '搜索', body: '搜索曲名、音乐人、专辑或歌单。'),
         const SizedBox(height: AppSpacing.section * 0.5),
         _SearchField(controller: _query, onChanged: _onChanged),
         if (filtering) ...[
           const SizedBox(height: AppSpacing.sm),
           TrText(
             _busy ? '正在检索…' : _error ?? '$hits 条匹配',
-            style: AppText.captionMuted,
+            style: context.type.captionMuted,
           ),
         ],
         const SizedBox(height: AppSpacing.lg),
@@ -1586,19 +1610,22 @@ class _MediaRow extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.body.copyWith(fontSize: 16, height: 1.3),
+                      style: context.type.body.copyWith(
+                        fontSize: 16,
+                        height: 1.3,
+                      ),
                     ),
                     Text(
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.captionMuted,
+                      style: context.type.captionMuted,
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              TrText(trailing, style: AppText.monoSm),
+              TrText(trailing, style: context.type.monoSm),
             ],
           ),
         ),
@@ -1624,11 +1651,11 @@ class _SettingsView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (showHeading) ...[
-          _HeroHeading(title: '设置', body: '管理登录账户和曲库同步。'),
+          const _HeroHeading(title: '设置', body: '管理登录账户和曲库同步。'),
           const SizedBox(height: AppSpacing.section * 0.5),
         ],
 
-        SectionHeading('账户'),
+        const SectionHeading('账户'),
         const SizedBox(height: AppSpacing.md),
         _stackedRows([
           Padding(
@@ -1639,15 +1666,15 @@ class _SettingsView extends StatelessWidget {
                   width: 38,
                   height: 38,
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: AppColors.manilla,
+                  decoration: BoxDecoration(
+                    color: context.colors.manilla,
                     shape: BoxShape.rectangle,
                   ),
                   child: Text(
                     (user.isGuest ? context.tr(user.name) : user.name)
                         .characters
                         .first,
-                    style: AppText.body.copyWith(fontSize: 18, height: 1),
+                    style: context.type.body.copyWith(fontSize: 18, height: 1),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
@@ -1659,7 +1686,7 @@ class _SettingsView extends StatelessWidget {
                         user.isGuest ? context.tr(user.name) : user.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.bodySm.copyWith(
+                        style: context.type.bodySm.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -1667,7 +1694,7 @@ class _SettingsView extends StatelessWidget {
                         '${context.tr(user.methodLabel)} · ${context.tr(user.detail)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.captionMuted,
+                        style: context.type.captionMuted,
                       ),
                     ],
                   ),
@@ -1699,11 +1726,11 @@ class _SettingsView extends StatelessWidget {
           decoration: InputDecoration(
             labelText: context.tr('界面语言'),
             filled: true,
-            fillColor: AppColors.ivoryLight,
+            fillColor: context.colors.ivoryLight,
             border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
-            enabledBorder: const OutlineInputBorder(
+            enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.zero,
-              borderSide: AppBorders.hairline,
+              borderSide: context.borders.hairline,
             ),
           ),
           items: [
@@ -1732,7 +1759,7 @@ class _SettingsView extends StatelessWidget {
         ),
         TrText(
           '歌词控件自动隐藏 · ${state.lyricControlsSeconds.toStringAsFixed(1)} 秒',
-          style: AppText.bodySm,
+          style: context.type.bodySm,
         ),
         AccessibleSlider(
           semanticLabel: '歌词控件自动隐藏时间',
@@ -1756,7 +1783,7 @@ class _SettingsView extends StatelessWidget {
         ScrollInertiaSetting(state: state),
         TrText(
           '手动浏览后恢复跟随 · ${state.lyricResumeSeconds.toStringAsFixed(1)} 秒',
-          style: AppText.bodySm,
+          style: context.type.bodySm,
         ),
         AccessibleSlider(
           semanticLabel: '恢复歌词自动跟随时间',
@@ -1894,31 +1921,28 @@ class _MeViewState extends State<_MeView> {
               Container(
                 width: 48,
                 height: 48,
-                color: AppColors.manilla,
-                child: const Icon(
-                  Icons.favorite_rounded,
-                  color: AppColors.clay,
-                ),
+                color: context.colors.manilla,
+                child: Icon(Icons.favorite_rounded, color: context.colors.clay),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const TrText('我喜欢', style: AppText.subheading),
+                    TrText('我喜欢', style: context.type.subheading),
                     const SizedBox(height: 4),
                     TrText(
                       liked == null
                           ? (_loading ? '正在同步歌单…' : '暂无歌单')
                           : '${liked.trackCount} 首',
-                      style: AppText.captionMuted,
+                      style: context.type.captionMuted,
                     ),
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
-                color: AppColors.cloudDark,
+                color: context.colors.cloudDark,
               ),
             ],
           ),
@@ -1940,12 +1964,15 @@ class _MeViewState extends State<_MeView> {
             children: [
               const InlineLabel('账户'),
               const SizedBox(height: AppSpacing.sm),
-              TrText('还没有登录', style: AppText.subheading.copyWith(fontSize: 22)),
+              TrText(
+                '还没有登录',
+                style: context.type.subheading.copyWith(fontSize: 22),
+              ),
               const SizedBox(height: 6),
               TrText(
                 '支持二维码、短信、密码或 Cookie 登录。',
-                style: AppText.body.copyWith(
-                  color: AppColors.cloudDark,
+                style: context.type.body.copyWith(
+                  color: context.colors.cloudDark,
                   height: 1.5,
                 ),
               ),
@@ -1972,15 +1999,15 @@ class _MeViewState extends State<_MeView> {
       child: (user.avatarUrl ?? '').isEmpty
           ? Container(
               alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: AppColors.manilla,
+              decoration: BoxDecoration(
+                color: context.colors.manilla,
                 shape: BoxShape.rectangle,
               ),
               child: Text(
                 (user.isGuest ? context.tr(user.name) : user.name)
                     .characters
                     .first,
-                style: AppText.heading.copyWith(fontSize: 26, height: 1),
+                style: context.type.heading.copyWith(fontSize: 26, height: 1),
               ),
             )
           : PlateArt(
@@ -1997,7 +2024,7 @@ class _MeViewState extends State<_MeView> {
           icon: const Icon(Icons.logout_rounded, size: 18),
           label: const TrText('退出登录'),
           style: TextButton.styleFrom(
-            foregroundColor: AppColors.slateDark,
+            foregroundColor: context.colors.slateDark,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
         );
@@ -2033,7 +2060,9 @@ class _MeViewState extends State<_MeView> {
                             user.isGuest ? context.tr(user.name) : user.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppText.subheading.copyWith(fontSize: 22),
+                            style: context.type.subheading.copyWith(
+                              fontSize: 22,
+                            ),
                           ),
                         ),
                         if (vip != null) ...[
@@ -2044,13 +2073,13 @@ class _MeViewState extends State<_MeView> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.oatWarm,
+                              color: context.colors.oatWarm,
                               borderRadius: BorderRadius.zero,
                             ),
                             child: TrText(
                               vip,
-                              style: AppText.caption.copyWith(
-                                color: AppColors.clayDeep,
+                              style: context.type.caption.copyWith(
+                                color: context.colors.clayDeep,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -2063,7 +2092,7 @@ class _MeViewState extends State<_MeView> {
                       user.handle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.captionMuted,
+                      style: context.type.captionMuted,
                     ),
                   ],
                 ),
@@ -2112,7 +2141,7 @@ class _MeViewState extends State<_MeView> {
       sections.add(const SizedBox(height: AppSpacing.md));
       sections.add(
         playlists.isEmpty
-            ? TrText('还没有歌单。', style: AppText.captionMuted)
+            ? TrText('还没有歌单。', style: context.type.captionMuted)
             : _PlaylistGrid(playlists: playlists, state: widget.state),
       );
     }
@@ -2154,32 +2183,34 @@ class _ActionRowState extends State<_ActionRow> {
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         child: AnimatedContainer(
           duration: _hovering
               ? const Duration(milliseconds: 120)
               : Duration.zero,
           color: _hovering
-              ? AppColors.oatWarm.withValues(alpha: 0.5)
-              : AppColors.oatWarm.withValues(alpha: 0),
+              ? context.colors.oatWarm.withValues(alpha: 0.5)
+              : context.colors.oatWarm.withValues(alpha: 0),
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg,
             vertical: 14,
           ),
           child: Row(
             children: [
-              Icon(widget.icon, size: 16, color: AppColors.slateDark),
+              Icon(widget.icon, size: 16, color: context.colors.slateDark),
               const SizedBox(width: 10),
               Expanded(
                 child: TrText(
                   widget.label,
-                  style: AppText.bodySm.copyWith(fontWeight: FontWeight.w600),
+                  style: context.type.bodySm.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
-                color: AppColors.cloudMedium,
+                color: context.colors.cloudMedium,
               ),
             ],
           ),
@@ -2245,7 +2276,7 @@ class _TrackRowBodyState extends State<_TrackRowBody> {
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onPlay,
+        onTap: feedbackAction(context, widget.onPlay),
         child: AnimatedContainer(
           duration: _hovering
               ? const Duration(milliseconds: 120)
@@ -2254,10 +2285,10 @@ class _TrackRowBodyState extends State<_TrackRowBody> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.zero,
             color: widget.isCurrent
-                ? AppColors.oatWarm.withValues(alpha: 0.5)
+                ? context.colors.oatWarm.withValues(alpha: 0.5)
                 : _hovering
-                ? AppColors.oatWarm.withValues(alpha: 0.35)
-                : AppColors.oatWarm.withValues(alpha: 0),
+                ? context.colors.oatWarm.withValues(alpha: 0.35)
+                : context.colors.oatWarm.withValues(alpha: 0),
           ),
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg,
@@ -2276,17 +2307,17 @@ class _TrackRowBodyState extends State<_TrackRowBody> {
                                 MediaQuery.textScalerOf(context).scale(7.5))
                             .clamp(24.0, 140.0),
                     child: _hovering
-                        ? const Icon(
+                        ? Icon(
                             Icons.play_arrow_rounded,
                             size: 18,
-                            color: AppColors.slateDark,
+                            color: context.colors.slateDark,
                           )
                         : Text(
                             widget.index.toString().padLeft(2, '0'),
                             maxLines: 1,
                             softWrap: false,
                             overflow: TextOverflow.ellipsis,
-                            style: AppText.monoSm,
+                            style: context.type.monoSm,
                           ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -2310,7 +2341,7 @@ class _TrackRowBodyState extends State<_TrackRowBody> {
                           track.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppText.body.copyWith(
+                          style: context.type.body.copyWith(
                             fontSize: 16,
                             height: 1.3,
                             fontWeight: widget.isCurrent
@@ -2322,14 +2353,14 @@ class _TrackRowBodyState extends State<_TrackRowBody> {
                           track.artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppText.captionMuted,
+                          style: context.type.captionMuted,
                         ),
                         if (track.translatedTitle?.isNotEmpty ?? false)
                           Text(
                             track.translatedTitle!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppText.captionMuted,
+                            style: context.type.captionMuted,
                           ),
                       ],
                     ),
@@ -2342,14 +2373,14 @@ class _TrackRowBodyState extends State<_TrackRowBody> {
                         track.album,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.caption.copyWith(
-                          color: AppColors.cloudDark,
+                        style: context.type.caption.copyWith(
+                          color: context.colors.cloudDark,
                         ),
                       ),
                     ),
                   ],
                   const SizedBox(width: AppSpacing.sm),
-                  Text(fmt(track.duration), style: AppText.monoSm),
+                  Text(fmt(track.duration), style: context.type.monoSm),
                 ],
               );
             },
@@ -2384,17 +2415,17 @@ class _PlayerBar extends StatelessWidget {
   /// Narrow shell: transport controls floating straight on the parchment —
   /// no card, no slab; a clay progress hairline runs along the bottom edge
   /// (tap or drag to seek).
-  Widget _compactTransport(Track? track) {
+  Widget _compactTransport(BuildContext context, Track? track) {
     return Row(
       children: [
         Expanded(
           child: track == null
-              ? TrText('未选择曲目', style: AppText.captionMuted)
+              ? TrText('未选择曲目', style: context.type.captionMuted)
               : MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: onExpand,
+                    onTap: feedbackAction(context, onExpand),
                     child: Row(
                       children: [
                         SizedBox(
@@ -2416,7 +2447,7 @@ class _PlayerBar extends StatelessWidget {
                                 track.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AppText.body.copyWith(
+                                style: context.type.body.copyWith(
                                   fontSize: 15,
                                   height: 1.25,
                                 ),
@@ -2425,7 +2456,7 @@ class _PlayerBar extends StatelessWidget {
                                 track.artist,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AppText.captionMuted,
+                                style: context.type.captionMuted,
                               ),
                             ],
                           ),
@@ -2483,7 +2514,7 @@ class _PlayerBar extends StatelessWidget {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: Container(height: 2, color: AppColors.stone),
+                  child: Container(height: 2, color: context.colors.stone),
                 ),
                 Positioned(
                   left: 0,
@@ -2491,7 +2522,7 @@ class _PlayerBar extends StatelessWidget {
                   child: Container(
                     height: 2,
                     width: box.maxWidth * fraction,
-                    color: AppColors.clay,
+                    color: context.colors.clay,
                   ),
                 ),
               ],
@@ -2506,17 +2537,17 @@ class _PlayerBar extends StatelessWidget {
   /// no card, no fill; the page scrolls underneath.
   Widget _compactSurface(BuildContext context, Track? track) {
     return Material(
-      color: AppColors.ivoryLight,
+      color: context.colors.ivoryLight,
       child: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: AppBorders.hairline),
+        decoration: BoxDecoration(
+          border: Border(top: context.borders.hairline),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 12, 6),
-              child: _compactTransport(track),
+              child: _compactTransport(context, track),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2533,11 +2564,11 @@ class _PlayerBar extends StatelessWidget {
 
   /// Shared dark-surface chrome for the bar (both the full and compact
   /// layouts) so the transport strip only swaps its controls.
-  Widget _surface(Widget child) {
+  Widget _surface(BuildContext context, Widget child) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.slateDark,
-        border: Border(top: BorderSide(color: AppColors.slateMedium)),
+      decoration: BoxDecoration(
+        color: context.colors.playerSurface,
+        border: Border(top: BorderSide(color: context.colors.slateMedium)),
       ),
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
@@ -2562,6 +2593,7 @@ class _PlayerBar extends StatelessWidget {
           return _compactSurface(context, track);
         }
         return _surface(
+          context,
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2575,14 +2607,14 @@ class _PlayerBar extends StatelessWidget {
                     child: track == null
                         ? TrText(
                             '未选择曲目',
-                            style: AppText.bodySm.copyWith(
-                              color: AppColors.onDarkMuted,
+                            style: context.type.bodySm.copyWith(
+                              color: context.colors.onDarkMuted,
                             ),
                           )
                         : MouseRegion(
                             cursor: SystemMouseCursors.click,
                             child: GestureDetector(
-                              onTap: onExpand,
+                              onTap: feedbackAction(context, onExpand),
                               child: Row(
                                 children: [
                                   SizedBox(
@@ -2605,27 +2637,27 @@ class _PlayerBar extends StatelessWidget {
                                           track.title,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: AppText.body.copyWith(
+                                          style: context.type.body.copyWith(
                                             fontSize: 16,
                                             height: 1.25,
-                                            color: AppColors.onDark,
+                                            color: context.colors.onDark,
                                           ),
                                         ),
                                         Text(
                                           track.artist,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: AppText.caption.copyWith(
-                                            color: AppColors.onDarkMuted,
+                                          style: context.type.caption.copyWith(
+                                            color: context.colors.onDarkMuted,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
                                   const SizedBox(width: AppSpacing.sm),
-                                  const Icon(
+                                  Icon(
                                     Icons.expand_less_rounded,
-                                    color: AppColors.onDarkMuted,
+                                    color: context.colors.onDarkMuted,
                                     size: 20,
                                   ),
                                 ],
@@ -2694,8 +2726,8 @@ class _PlayerBar extends StatelessWidget {
                         if (track != null)
                           Text(
                             '${fmt(state.position)} / ${fmt(track.duration)}',
-                            style: AppText.monoSm.copyWith(
-                              color: AppColors.onDarkMuted,
+                            style: context.type.monoSm.copyWith(
+                              color: context.colors.onDarkMuted,
                             ),
                           ),
                         const SizedBox(width: AppSpacing.md),
@@ -2744,10 +2776,10 @@ class _LightIconButtonState extends State<_LightIconButton> {
   @override
   Widget build(BuildContext context) {
     final Color color = !widget.enabled
-        ? AppColors.stone
+        ? context.colors.stone
         : _hovering
-        ? AppColors.clayDeep
-        : AppColors.slateDark;
+        ? context.colors.clayDeep
+        : context.colors.slateDark;
     Widget btn = MouseRegion(
       cursor: widget.enabled
           ? SystemMouseCursors.click
@@ -2755,7 +2787,7 @@ class _LightIconButtonState extends State<_LightIconButton> {
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         behavior: HitTestBehavior.opaque,
         child: SizedBox(
           width: 34,
@@ -2807,13 +2839,15 @@ class _LightPlayButtonState extends State<_LightPlayButton> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: widget.enabled
-                ? (_hovering ? AppColors.clayDeep : AppColors.clay)
-                : AppColors.stone,
+                ? (_hovering ? context.colors.clayDeep : context.colors.clay)
+                : context.colors.stone,
           ),
           child: Icon(
             widget.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
             size: 24,
-            color: widget.enabled ? AppColors.onDark : AppColors.cloudDark,
+            color: widget.enabled
+                ? context.colors.onDark
+                : context.colors.cloudDark,
           ),
         ),
       ),
@@ -2833,19 +2867,14 @@ class _SeekSlider extends StatelessWidget {
       child: SliderTheme(
         data: SliderThemeData(
           trackHeight: 3,
-          activeTrackColor: AppColors.ivoryLight,
-          inactiveTrackColor: AppColors.slateMedium,
-          thumbColor: AppColors.clay,
-          overlayColor: AppColors.clay.withValues(alpha: 0.18),
+          activeTrackColor: context.colors.ivoryLight,
+          inactiveTrackColor: context.colors.slateMedium,
+          thumbColor: context.colors.clay,
+          overlayColor: context.colors.clay.withValues(alpha: 0.18),
           thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
           overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
         ),
-        child: AccessibleSlider(
-          semanticLabel: '播放进度',
-          value: state.progress.toDouble(),
-          onChangeStart: (_) => state.pause(),
-          onChanged: state.current == null ? null : state.seek,
-        ),
+        child: HapticSeekSlider(state: state),
       ),
     );
   }
@@ -2877,17 +2906,17 @@ class _DarkIconButtonState extends State<_DarkIconButton> {
   Widget build(BuildContext context) {
     final bool enabled = widget.onTap != null;
     Color color = !enabled
-        ? AppColors.slateMedium
+        ? context.colors.slateMedium
         : widget.active || _hovering
-        ? AppColors.onDark
-        : AppColors.onDarkMuted;
+        ? context.colors.onDark
+        : context.colors.onDarkMuted;
     final Widget icon = Icon(widget.icon, size: widget.size, color: color);
     final Widget btn = MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         behavior: HitTestBehavior.opaque,
         child: SizedBox(width: 36, height: 36, child: Center(child: icon)),
       ),
@@ -2933,13 +2962,17 @@ class _PlayPauseButtonState extends State<_PlayPauseButton> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: widget.enabled
-                ? (_hovering ? AppColors.manilla : AppColors.ivoryLight)
-                : AppColors.slateMedium,
+                ? (_hovering
+                      ? context.colors.manilla
+                      : context.colors.ivoryLight)
+                : context.colors.slateMedium,
           ),
           child: Icon(
             widget.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
             size: 26,
-            color: widget.enabled ? AppColors.slateDark : AppColors.onDarkMuted,
+            color: widget.enabled
+                ? context.colors.slateDark
+                : context.colors.onDarkMuted,
           ),
         ),
       ),

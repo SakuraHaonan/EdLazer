@@ -262,10 +262,10 @@ void main() {
     expect(controller.offset, greaterThan(first));
     await tester.pumpAndSettle();
     expect(find.byType(Scrollbar), findsNothing);
-    final low = InertiaScrollPhysics(
+    final low = const InertiaScrollPhysics(
       retention: .85,
     ).createBallisticSimulation(controller.position, 1000)!;
-    final high = InertiaScrollPhysics(
+    final high = const InertiaScrollPhysics(
       retention: .98,
     ).createBallisticSimulation(controller.position, 1000)!;
     expect(

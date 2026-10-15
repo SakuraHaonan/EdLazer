@@ -202,9 +202,9 @@ void main() {
                 children: [
                   Row(
                     children: [
-                      AccessibleTooltip(
+                      const AccessibleTooltip(
                         message: 'A',
-                        child: const SizedBox(
+                        child: SizedBox(
                           width: 80,
                           height: 80,
                           child: Text('A'),
@@ -215,9 +215,9 @@ void main() {
                         icon: const Icon(Icons.play_arrow),
                         onPressed: () {},
                       ),
-                      AccessibleTooltip(
+                      const AccessibleTooltip(
                         message: 'C',
-                        child: const SizedBox(
+                        child: SizedBox(
                           width: 80,
                           height: 80,
                           child: Text('C'),

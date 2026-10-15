@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../audio/audio_engine.dart';
+import '../interaction/app_haptics.dart';
 import '../data/catalog.dart';
 import '../data/lyrics.dart';
 import '../scrolling/scroll_motion.dart';
@@ -118,6 +120,35 @@ class AppState extends ChangeNotifier {
   StreamSubscription<void>? _completionSubscription;
   static const playbackInterval = Duration(milliseconds: 100);
   bool hapticsEnabled = true;
+  final AppHaptics haptics = AppHaptics();
+  Future<void> feedback({bool detent = false, bool boundary = false}) =>
+      haptics.pulse(
+        enabled: hapticsEnabled,
+        intensity: hapticIntensity,
+        detent: detent,
+        boundary: boundary,
+      );
+  double hapticIntensity = 0.5;
+  ThemeMode themeMode = ThemeMode.system;
+
+  Future<void> setHapticIntensity(double value) async {
+    hapticIntensity = value.clamp(0, 1);
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setDouble(
+      'lazer_haptic_intensity',
+      hapticIntensity,
+    );
+  }
+
+  Future<void> setThemeMode(ThemeMode value) async {
+    themeMode = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_theme_mode',
+      value.name,
+    );
+  }
+
   AppLanguage language = AppLanguage.system;
   Future<void> setLanguage(AppLanguage value) async {
     language = value;
@@ -258,6 +289,12 @@ class AppState extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       hapticsEnabled = prefs.getBool('lazer_haptics') ?? true;
+      hapticIntensity = (prefs.getDouble('lazer_haptic_intensity') ?? 0.5)
+          .clamp(0, 1);
+      themeMode = ThemeMode.values.firstWhere(
+        (mode) => mode.name == prefs.getString('lazer_theme_mode'),
+        orElse: () => ThemeMode.system,
+      );
       language = AppLanguage.parse(prefs.getString('lazer_language'));
       lyricControlsSeconds =
           (prefs.getDouble('lazer_lyric_controls_seconds') ?? 2.5).clamp(1, 10);

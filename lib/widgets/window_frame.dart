@@ -1,3 +1,4 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import 'dart:io' show Platform;
 
@@ -140,13 +141,13 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
   @override
   Widget build(BuildContext context) {
     return DefaultTextStyle(
-      style: AppText.caption.copyWith(decoration: TextDecoration.none),
+      style: context.type.caption.copyWith(decoration: TextDecoration.none),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             height: _barHeight,
-            color: AppColors.ivoryMedium,
+            color: context.colors.ivoryMedium,
             child: DragToMoveArea(
               child: Row(
                 children: [
@@ -161,8 +162,8 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                       kWindowTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.caption.copyWith(
-                        color: AppColors.cloudDark,
+                      style: context.type.caption.copyWith(
+                        color: context.colors.cloudDark,
                       ),
                     ),
                   ),
@@ -208,7 +209,7 @@ class _WindowButton extends StatefulWidget {
 }
 
 class _WindowButtonState extends State<_WindowButton> {
-  static const Map<_FrameControl, String> _semantics = <_FrameControl, String>{
+  static final Map<_FrameControl, String> _semantics = <_FrameControl, String>{
     _FrameControl.minimize: '最小化',
     _FrameControl.maximize: '最大化',
     _FrameControl.restore: '还原窗口',
@@ -223,13 +224,13 @@ class _WindowButtonState extends State<_WindowButton> {
     final Color background = !_hovering
         ? Colors.transparent
         : isClose
-        ? AppColors.slateDark
-        : AppColors.oatWarm;
+        ? context.colors.slateDark
+        : context.colors.oatWarm;
     final Color glyph = !_hovering
-        ? AppColors.cloudDark
+        ? context.colors.cloudDark
         : isClose
-        ? AppColors.onDark
-        : AppColors.slateDark;
+        ? context.colors.onDark
+        : context.colors.slateDark;
 
     return Semantics(
       button: true,

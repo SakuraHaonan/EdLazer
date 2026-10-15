@@ -590,7 +590,7 @@ void main() {
     },
   );
 
-  testWidgets('global touch feedback respects the persisted off setting', (
+  testWidgets('control feedback respects the persisted off setting', (
     tester,
   ) async {
     final state = AppState(catalog: _Catalog());
@@ -614,7 +614,12 @@ void main() {
         state: state,
         child: MaterialApp(
           home: Scaffold(
-            body: TextButton(onPressed: () {}, child: const Text('触摸反馈')),
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: feedbackAction(context, () {}),
+                child: const Text('触摸反馈'),
+              ),
+            ),
           ),
         ),
       ),

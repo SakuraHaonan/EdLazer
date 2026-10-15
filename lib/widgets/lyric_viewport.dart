@@ -1,3 +1,4 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Adapted lyric animation; reference: README.md. License: licenses/lyric_animation/AGPL-3.0.txt.
 import '../l10n/app_localizations.dart';
@@ -14,7 +15,6 @@ import '../data/lyrics.dart';
 import '../data/lyric_selection.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
-import '../theme/design_tokens.dart';
 import 'lyric_selection_toolbar.dart';
 import 'lyric_edge_fade.dart';
 import 'timed_lyric_text.dart';
@@ -25,9 +25,14 @@ class LyricViewport extends StatefulWidget {
     super.key,
     required this.state,
     this.onSelectionChanged,
+    this.onLineTap,
   });
   final AppState state;
   final ValueChanged<bool>? onSelectionChanged;
+
+  /// Veto over a tap on a line while nothing is selected. Returning true
+  /// swallows the tap; the viewport only seeks when the host declines.
+  final bool Function(int index, bool isCurrentLine)? onLineTap;
   @override
   State<LyricViewport> createState() => _LyricViewportState();
 }
@@ -42,7 +47,7 @@ class _LyricViewportState extends State<LyricViewport>
   );
   final ValueNotifier<int> _frames = ValueNotifier(0);
   final Stopwatch _wall = Stopwatch()..start();
-  List<LyricLine> _lines = const [];
+  List<LyricLine> _lines = [];
   bool _hasWordTimings = false;
   List<LyricSpring> _ys = [];
   List<LyricSpring> _scales = [];
@@ -266,15 +271,15 @@ class _LyricViewportState extends State<LyricViewport>
     _start();
   }
 
-  TextStyle get _originalStyle => AppText.bodySm.copyWith(
+  TextStyle get _originalStyle => context.type.bodySm.copyWith(
     fontSize: 22,
     height: 1.5,
     fontWeight: FontWeight.w600,
   );
-  TextStyle get _translationStyle => AppText.bodySm.copyWith(
+  TextStyle get _translationStyle => context.type.bodySm.copyWith(
     fontSize: 16,
     height: 1.45,
-    color: AppColors.cloudDark,
+    color: context.colors.cloudDark,
   );
   double _measureText(
     String text,
@@ -419,6 +424,11 @@ class _LyricViewportState extends State<LyricViewport>
     _updateBlur();
   }
 
+  void _tapLine(int index) {
+    if (widget.onLineTap?.call(index, index == _active) ?? false) return;
+    _seek(index);
+  }
+
   void _changeSelection(LyricSelection next, {bool resume = true}) {
     final changed = _selection.active != next.active;
     setState(() {
@@ -480,7 +490,7 @@ class _LyricViewportState extends State<LyricViewport>
     behavior: HitTestBehavior.opaque,
     onTap: () => _selection.active
         ? _changeSelection(_selection.toggle(_lines, index))
-        : _seek(index),
+        : _tapLine(index),
     onLongPress: () => _selectLyrics(index),
     onLongPressMoveUpdate: (event) => _extendSelection(event.globalPosition),
     onLongPressEnd: (_) => _dragArmedAt = _wall.elapsedMilliseconds,
@@ -508,8 +518,8 @@ class _LyricViewportState extends State<LyricViewport>
   Widget _rowBody(int index, double selected) {
     final focused = index == _active;
     final color = Color.lerp(
-      focused ? AppColors.slateDark : AppColors.cloudDark,
-      AppColors.clayDeep,
+      focused ? context.colors.slateDark : context.colors.cloudDark,
+      context.colors.clayDeep,
       selected * 0.65,
     );
     final style = _originalStyle.copyWith(
@@ -545,8 +555,8 @@ class _LyricViewportState extends State<LyricViewport>
               textDirection: TextDirection.ltr,
               style: _translationStyle.copyWith(
                 color: Color.lerp(
-                  AppColors.cloudDark,
-                  AppColors.clayDeep,
+                  context.colors.cloudDark,
+                  context.colors.clayDeep,
                   selected * .65,
                 ),
               ),
@@ -571,7 +581,7 @@ class _LyricViewportState extends State<LyricViewport>
             TrText(
               widget.state.lyricsError ??
                   (widget.state.lyricsPureMusic ? '纯音乐' : '这首歌暂未提供歌词'),
-              style: AppText.captionMuted,
+              style: context.type.captionMuted,
             ),
             if (!widget.state.lyricsPureMusic)
               TextButton(

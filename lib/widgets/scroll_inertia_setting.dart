@@ -1,3 +1,4 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import 'dart:async';
 
@@ -6,7 +7,6 @@ import 'package:flutter/services.dart';
 
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
-import '../theme/design_tokens.dart';
 import 'accessible_controls.dart';
 
 class ScrollInertiaSetting extends StatefulWidget {
@@ -69,13 +69,13 @@ class _ScrollInertiaSettingState extends State<ScrollInertiaSetting> {
     children: [
       Row(
         children: [
-          const Expanded(child: TrText('滚动惯性', style: AppText.bodySm)),
+          Expanded(child: TrText('滚动惯性', style: context.type.bodySm)),
           Container(
             width: 80,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.ivoryLight,
-              border: Border.all(color: AppColors.stone),
+              color: context.colors.ivoryLight,
+              border: Border.all(color: context.colors.stone),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Semantics(
@@ -87,7 +87,7 @@ class _ScrollInertiaSettingState extends State<ScrollInertiaSetting> {
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.done,
                 textAlign: TextAlign.right,
-                style: AppText.bodySm,
+                style: context.type.bodySm,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(3),
@@ -123,7 +123,7 @@ class _ScrollInertiaSettingState extends State<ScrollInertiaSetting> {
         ],
       ),
       const SizedBox(height: 6),
-      const TrText('85–98%；数值越高，松手后滑行越久、越远。', style: AppText.captionMuted),
+      TrText('85–98%；数值越高，松手后滑行越久、越远。', style: context.type.captionMuted),
       AccessibleSlider(
         semanticLabel: '滚动惯性',
         semanticFormatterCallback: (value) => '${(value * 100).round()}%',

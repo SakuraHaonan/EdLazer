@@ -1,5 +1,8 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/accessible_controls.dart';
+import '../widgets/interaction_feedback.dart';
+import '../widgets/haptic_seek_slider.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -82,7 +85,7 @@ Future<void> showPlaybackQueue(BuildContext context, AppState state) async {
   if (MediaQuery.sizeOf(context).width >= 720) {
     await showDialog<void>(
       context: context,
-      barrierColor: AppColors.slateDark.withValues(alpha: .2),
+      barrierColor: context.colors.slateDark.withValues(alpha: .2),
       builder: (_) => Dialog(
         insetPadding: const EdgeInsets.all(32),
         child: SizedBox(
@@ -100,7 +103,7 @@ Future<void> showPlaybackQueue(BuildContext context, AppState state) async {
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppColors.ivoryLight,
+    backgroundColor: context.colors.ivoryLight,
     showDragHandle: true,
     builder: (_) => AnimatedBuilder(
       animation: state,
@@ -121,6 +124,9 @@ class NowPlayingPage extends StatefulWidget {
 class _NowPlayingPageState extends State<NowPlayingPage> {
   bool _lyricsMode = false;
   bool _controlsVisible = true;
+  // Defaults to the non-destructive branch: a semantics-driven tap never
+  // passes through onPointerDown, so it must not fold the lyrics away.
+  bool _controlsHiddenAtTouchDown = true;
   bool _saving = false;
   bool _selectionOpen = false;
   Timer? _hideTimer;
@@ -182,6 +188,24 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     if (!_controlsVisible) setState(() => _controlsVisible = true);
   }
 
+  // The page Listener wakes the controls before the row reports its tap, so
+  // the tap has to be judged against the state this touch interrupted.
+  void _onTouchDown() {
+    _controlsHiddenAtTouchDown = !_controlsVisible;
+    _wakeControls();
+  }
+
+  /// Mobile two-step lyric tap: reveal the transport, then fold the lyrics in.
+  bool _onLyricLineTap(int index, bool isCurrentLine) {
+    if (isCurrentLine) return false;
+    if (_controlsHiddenAtTouchDown) {
+      _wakeControls();
+      return true;
+    }
+    _toggleLyrics();
+    return true;
+  }
+
   @override
   void dispose() {
     _hideTimer?.cancel();
@@ -229,6 +253,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
           child: LyricViewport(
             state: widget.state,
             onSelectionChanged: _selectionChanged,
+            onLineTap: _onLyricLineTap,
           ),
         ),
       ],
@@ -245,7 +270,9 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
         content: TrText('将「${track.title}」的封面保存在设备中。'),
         actions: [
           TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppColors.slateDark),
+            style: TextButton.styleFrom(
+              foregroundColor: context.colors.slateDark,
+            ),
             onPressed: () => Navigator.pop(context, false),
             child: const TrText('取消'),
           ),
@@ -341,7 +368,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.ivoryMedium,
+    backgroundColor: context.colors.ivoryMedium,
     body: AnimatedBuilder(
       animation: widget.state,
       builder: (context, _) {
@@ -354,7 +381,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
             final compact = box.maxWidth < 720;
             return Listener(
               behavior: HitTestBehavior.translucent,
-              onPointerDown: (_) => _wakeControls(),
+              onPointerDown: (_) => _onTouchDown(),
               onPointerUp: (_) => _armHide(),
               onPointerCancel: (_) => _armHide(),
               child: SafeArea(
@@ -612,7 +639,7 @@ class _TrackDetails extends StatelessWidget {
               track.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppText.subheading.copyWith(
+              style: context.type.subheading.copyWith(
                 fontSize: MediaQuery.sizeOf(context).width < 720 ? 24 : 28,
               ),
             ),
@@ -627,8 +654,8 @@ class _TrackDetails extends StatelessWidget {
                   ? Icons.favorite_rounded
                   : Icons.favorite_border_rounded,
               color: state.currentLiked
-                  ? AppColors.clayDeep
-                  : AppColors.cloudDark,
+                  ? context.colors.clayDeep
+                  : context.colors.cloudDark,
             ),
           ),
         ],
@@ -639,9 +666,9 @@ class _TrackDetails extends StatelessWidget {
           track.translatedTitle!,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppText.bodySm.copyWith(
+          style: context.type.bodySm.copyWith(
             fontSize: 15,
-            color: AppColors.cloudDark,
+            color: context.colors.cloudDark,
           ),
         ),
       ],
@@ -650,7 +677,10 @@ class _TrackDetails extends StatelessWidget {
         '${track.artist} · ${track.album}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: AppText.body.copyWith(fontSize: 17, color: AppColors.cloudDark),
+        style: context.type.body.copyWith(
+          fontSize: 17,
+          color: context.colors.cloudDark,
+        ),
       ),
       if (state.likeError != null) ...[
         const SizedBox(height: AppSpacing.sm),
@@ -658,7 +688,7 @@ class _TrackDetails extends StatelessWidget {
           state.likeError!,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppText.caption.copyWith(color: AppColors.clayDeep),
+          style: context.type.caption.copyWith(color: context.colors.clayDeep),
         ),
       ],
     ],
@@ -687,8 +717,8 @@ class _PlaybackTransport extends StatelessWidget {
         builder: (BuildContext context, _) => Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(fmt(state.position), style: AppText.monoSm),
-            Text(fmt(track.duration), style: AppText.monoSm),
+            Text(fmt(state.position), style: context.type.monoSm),
+            Text(fmt(track.duration), style: context.type.monoSm),
           ],
         ),
       ),
@@ -745,18 +775,14 @@ class _NowPlayingSeek extends StatelessWidget {
       builder: (BuildContext context, _) => SliderTheme(
         data: SliderThemeData(
           trackHeight: 4,
-          activeTrackColor: AppColors.slateDark,
-          inactiveTrackColor: AppColors.stone,
-          thumbColor: AppColors.clay,
-          overlayColor: AppColors.clay.withValues(alpha: 0.16),
+          activeTrackColor: context.colors.slateDark,
+          inactiveTrackColor: context.colors.stone,
+          thumbColor: context.colors.clay,
+          overlayColor: context.colors.clay.withValues(alpha: 0.16),
           thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
           overlayShape: const RoundSliderOverlayShape(overlayRadius: 15),
         ),
-        child: AccessibleSlider(
-          semanticLabel: '播放进度',
-          value: state.progress.toDouble(),
-          onChanged: state.seek,
-        ),
+        child: HapticSeekSlider(state: state),
       ),
     );
   }
@@ -788,16 +814,16 @@ class _ControlIconState extends State<_ControlIcon> {
   Widget build(BuildContext context) {
     final bool enabled = widget.onTap != null;
     final Color color = !enabled
-        ? AppColors.cloudMedium
+        ? context.colors.cloudMedium
         : widget.active || _hovering
-        ? AppColors.slateDark
-        : AppColors.cloudDark;
+        ? context.colors.slateDark
+        : context.colors.cloudDark;
     final Widget btn = MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         behavior: HitTestBehavior.opaque,
         child: SizedBox(
           width: 48,
@@ -834,19 +860,21 @@ class _BigPlayPauseState extends State<_BigPlayPause> {
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 130),
           width: 68,
           height: 68,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: _hovering ? AppColors.manilla : AppColors.slateDark,
+            color: _hovering
+                ? context.colors.manilla
+                : context.colors.slateDark,
           ),
           child: Icon(
             widget.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
             size: 38,
-            color: AppColors.onDark,
+            color: context.colors.onDark,
           ),
         ),
       ),
@@ -891,7 +919,7 @@ class _QueueAppendixState extends State<_QueueAppendix> {
                 Expanded(
                   child: TrText(
                     '播放队列 · ${state.queue.length} 首',
-                    style: AppText.subheading,
+                    style: context.type.subheading,
                   ),
                 ),
                 AccessibleIconButton(
@@ -947,19 +975,19 @@ class _QueueRow extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: onTap,
+        onTap: feedbackAction(context, onTap),
         behavior: HitTestBehavior.opaque,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
           decoration: BoxDecoration(
             color: isCurrent
-                ? AppColors.oatWarm.withValues(alpha: .6)
-                : AppColors.oatWarm.withValues(alpha: 0),
+                ? context.colors.oatWarm.withValues(alpha: .6)
+                : context.colors.oatWarm.withValues(alpha: 0),
             border: Border(
               left: BorderSide(
                 color: isCurrent
-                    ? AppColors.clay
-                    : AppColors.clay.withValues(alpha: 0),
+                    ? context.colors.clay
+                    : context.colors.clay.withValues(alpha: 0),
                 width: 2,
               ),
             ),
@@ -970,10 +998,10 @@ class _QueueRow extends StatelessWidget {
                 width: 22,
                 child: Text(
                   (index + 1).toString().padLeft(2, '0'),
-                  style: AppText.monoSm.copyWith(
+                  style: context.type.monoSm.copyWith(
                     color: isCurrent
-                        ? AppColors.slateDark
-                        : AppColors.cloudMedium,
+                        ? context.colors.slateDark
+                        : context.colors.cloudMedium,
                   ),
                 ),
               ),
@@ -994,7 +1022,7 @@ class _QueueRow extends StatelessWidget {
                       track.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.body.copyWith(
+                      style: context.type.body.copyWith(
                         fontSize: 15,
                         height: 1.3,
                         fontWeight: isCurrent
@@ -1007,7 +1035,7 @@ class _QueueRow extends StatelessWidget {
                       track.artist,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.captionMuted,
+                      style: context.type.captionMuted,
                     ),
                   ],
                 ),
@@ -1015,7 +1043,7 @@ class _QueueRow extends StatelessWidget {
               if (playing)
                 _PlayingBars(state: state)
               else
-                Text(fmt(track.duration), style: AppText.monoSm),
+                Text(fmt(track.duration), style: context.type.monoSm),
             ],
           ),
         ),
@@ -1071,7 +1099,7 @@ class _PlayingBarsState extends State<_PlayingBars> {
     super.dispose();
   }
 
-  static const List<List<double>> _pattern = <List<double>>[
+  static final List<List<double>> _pattern = <List<double>>[
     <double>[5, 11, 8],
     <double>[9, 6, 12],
     <double>[12, 10, 5],
@@ -1094,7 +1122,7 @@ class _PlayingBarsState extends State<_PlayingBars> {
                 width: 2.5,
                 height: h[i],
                 margin: const EdgeInsets.only(right: 2.5),
-                color: AppColors.slateDark,
+                color: context.colors.slateDark,
               ),
           ],
         ),
@@ -1114,11 +1142,11 @@ class _EmptyNowPlaying extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TrText('没有正在播放的曲目', style: AppText.subheading),
+          TrText('没有正在播放的曲目', style: context.type.subheading),
           const SizedBox(height: AppSpacing.sm),
           TrText(
             '回到曲库，翻开一页吧。',
-            style: AppText.bodyMuted.copyWith(fontSize: 16),
+            style: context.type.bodyMuted.copyWith(fontSize: 16),
           ),
           const SizedBox(height: AppSpacing.lg),
           IvoryButton(label: '返回', onPressed: onBack),

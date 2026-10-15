@@ -1,9 +1,9 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../theme/design_tokens.dart';
 import '../theme/paper_widgets.dart';
 import '../widgets/plate_art.dart';
 import '../widgets/accessible_controls.dart';
@@ -58,7 +58,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
   final GlobalKey _headerKey = GlobalKey();
   final GlobalKey _tableKey = GlobalKey();
   final ValueNotifier<bool> _showLocator = ValueNotifier(false);
-  List<Track> _loadedTracks = const [];
+  List<Track> _loadedTracks = [];
   double _headerExtent = 0;
   double _tableExtent = 0;
   bool _geometryPending = false;
@@ -151,8 +151,10 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
       return height;
     }
 
-    final title = lineHeight(AppText.body.copyWith(fontSize: 16, height: 1.3));
-    final caption = lineHeight(AppText.captionMuted);
+    final title = lineHeight(
+      context.type.body.copyWith(fontSize: 16, height: 1.3),
+    );
+    final caption = lineHeight(context.type.captionMuted);
     _normalRowHeight = ((title + caption) > 40 ? title + caption : 40) + 24;
     _translatedRowHeight =
         ((title + caption * 2) > 40 ? title + caption * 2 : 40) + 24;
@@ -187,7 +189,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
     if (oldWidget.playlist.id != widget.playlist.id) {
       _tracks = widget.state.catalog.playlistTracks(widget.playlist.id);
       _expanded = false;
-      _loadedTracks = const [];
+      _loadedTracks = [];
       _headerExtent = 0;
       _tableExtent = 0;
       _showLocator.value = false;
@@ -203,10 +205,10 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
       return FutureBuilder<List<Track>>(
         future: _tracks,
         builder: (context, snapshot) {
-          final tracks = snapshot.data ?? const <Track>[];
+          final tracks = snapshot.data ?? <Track>[];
           _loadedTracks = snapshot.connectionState == ConnectionState.done
               ? tracks
-              : const [];
+              : [];
           if (!desktop || box.maxWidth <= 600) _tableExtent = 0;
           _measureGeometry();
           final playlist = widget.playlist;
@@ -236,7 +238,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                               ),
                               label: const TrText('返回'),
                               style: TextButton.styleFrom(
-                                foregroundColor: AppColors.slateDark,
+                                foregroundColor: context.colors.slateDark,
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -262,14 +264,14 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                                       playlist.name,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: AppText.subheading.copyWith(
+                                      style: context.type.subheading.copyWith(
                                         fontSize: desktop ? 28 : 23,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
                                     TrText(
                                       '${snapshot.hasData ? tracks.length : playlist.trackCount} 首',
-                                      style: AppText.captionMuted,
+                                      style: context.type.captionMuted,
                                     ),
                                     const SizedBox(height: 16),
                                     Wrap(
@@ -316,7 +318,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                                 overflow: _expanded
                                     ? null
                                     : TextOverflow.ellipsis,
-                                style: AppText.body.copyWith(
+                                style: context.type.body.copyWith(
                                   fontSize: 15,
                                   height: 1.5,
                                 ),
@@ -326,7 +328,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                               onPressed: () =>
                                   setState(() => _expanded = !_expanded),
                               style: TextButton.styleFrom(
-                                foregroundColor: AppColors.cloudDark,
+                                foregroundColor: context.colors.cloudDark,
                               ),
                               child: TrText(_expanded ? '收起简介' : '展开简介'),
                             ),
@@ -354,21 +356,24 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                           horizontal: horizontal + 24,
                           vertical: 12,
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            SizedBox(width: 88),
+                            const SizedBox(width: 88),
                             Expanded(
                               flex: 3,
                               child: TrText(
                                 '歌曲 / 歌手',
-                                style: AppText.captionMuted,
+                                style: context.type.captionMuted,
                               ),
                             ),
                             Expanded(
                               flex: 2,
-                              child: TrText('专辑', style: AppText.captionMuted),
+                              child: TrText(
+                                '专辑',
+                                style: context.type.captionMuted,
+                              ),
                             ),
-                            TrText('时长', style: AppText.captionMuted),
+                            TrText('时长', style: context.type.captionMuted),
                           ],
                         ),
                       ),
@@ -433,8 +438,8 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                       focusElevation: 0,
                       highlightElevation: 0,
                       shape: const CircleBorder(),
-                      backgroundColor: AppColors.slateDark,
-                      foregroundColor: AppColors.onDark,
+                      backgroundColor: context.colors.slateDark,
+                      foregroundColor: context.colors.onDark,
                       onPressed: () => _locateCurrent(tracks),
                       child: const Icon(Icons.my_location_rounded),
                     ),

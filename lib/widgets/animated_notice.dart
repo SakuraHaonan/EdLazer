@@ -1,8 +1,7 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import 'accessible_controls.dart';
 import 'package:flutter/material.dart';
-
-import '../theme/design_tokens.dart';
 
 class AnimatedNotice extends StatelessWidget {
   const AnimatedNotice({super.key, required this.message, this.onDismiss});
@@ -31,8 +30,8 @@ class AnimatedNotice extends StatelessWidget {
                     message!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppText.bodySm.copyWith(
-                      color: AppColors.clayDeep,
+                    style: context.type.bodySm.copyWith(
+                      color: context.colors.clayDeep,
                       fontSize: 14,
                     ),
                   ),

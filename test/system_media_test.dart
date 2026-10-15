@@ -282,8 +282,8 @@ void main() {
         platform.ConfigureRequest(config: platform.AudioServiceConfigMessage()),
       );
       await bridge.setMediaItem(
-        platform.SetMediaItemRequest(
-          mediaItem: const platform.MediaItemMessage(
+        const platform.SetMediaItemRequest(
+          mediaItem: platform.MediaItemMessage(
             id: '1',
             title: 'Title',
             duration: Duration(seconds: 4),
