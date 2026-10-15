@@ -289,7 +289,7 @@ void main() {
         await tester.testTextInput.receiveAction(TextInputAction.done);
         await _frames(tester);
         navigator.currentState!.push(
-          MaterialPageRoute<void>(builder: (_) => NowPlayingPage(state: state)),
+          NowPlayingRoute(state: state),
         );
         await tester.pumpAndSettle();
         for (var i = 1; i < 12; i++) {
@@ -302,7 +302,7 @@ void main() {
         await _frames(tester);
         await tester.longPress(find.text('歌词 11'));
         await _frames(tester);
-        await tester.tap(find.text('全选'));
+        await tester.tap(find.byTooltip('全选'));
         await _frames(tester);
         await tester.tap(find.byTooltip('关闭'));
         await _frames(tester);
@@ -348,7 +348,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        final tooltip = find.byTooltip('定位正在播放的歌曲');
+        final tooltip = find.byTooltip('刷新歌单');
         tester.state<RawTooltipState>(tooltip).ensureTooltipVisible();
         await _frames(tester, 12);
         await tester.tap(tooltip);

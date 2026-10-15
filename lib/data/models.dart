@@ -29,6 +29,32 @@ class Track {
   final String? coverUrl;
   final int albumId;
   final String? translatedTitle;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'artist': artist,
+    'album': album,
+    'durationMs': duration.inMilliseconds,
+    'coverSeed': coverSeed,
+    'accent': accent,
+    'coverUrl': coverUrl,
+    'albumId': albumId,
+    'translatedTitle': translatedTitle,
+  };
+
+  factory Track.fromJson(Map<String, dynamic> json) => Track(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    artist: json['artist'] as String,
+    album: json['album'] as String,
+    duration: Duration(milliseconds: json['durationMs'] as int),
+    coverSeed: json['coverSeed'] as int,
+    accent: json['accent'] as int? ?? 0,
+    coverUrl: json['coverUrl'] as String?,
+    albumId: json['albumId'] as int? ?? 0,
+    translatedTitle: json['translatedTitle'] as String?,
+  );
 }
 
 class Playlist {
@@ -49,6 +75,26 @@ class Playlist {
   final String description;
   final String? coverUrl;
   final int trackCount;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'trackIds': trackIds,
+    'coverSeed': coverSeed,
+    'description': description,
+    'coverUrl': coverUrl,
+    'trackCount': trackCount,
+  };
+
+  factory Playlist.fromJson(Map<String, dynamic> json) => Playlist(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    trackIds: (json['trackIds'] as List).cast<String>(),
+    coverSeed: json['coverSeed'] as int,
+    description: json['description'] as String? ?? '',
+    coverUrl: json['coverUrl'] as String?,
+    trackCount: json['trackCount'] as int? ?? 0,
+  );
 }
 
 class Album {
@@ -74,4 +120,28 @@ class Album {
 
   final int? trackCount;
   final String? coverUrl;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'artist': artist,
+    'year': year,
+    'coverSeed': coverSeed,
+    'note': note,
+    'accent': accent,
+    'trackCount': trackCount,
+    'coverUrl': coverUrl,
+  };
+
+  factory Album.fromJson(Map<String, dynamic> json) => Album(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    artist: json['artist'] as String,
+    year: json['year'] as String,
+    coverSeed: json['coverSeed'] as int,
+    note: json['note'] as String,
+    accent: json['accent'] as int? ?? 0,
+    trackCount: json['trackCount'] as int?,
+    coverUrl: json['coverUrl'] as String?,
+  );
 }

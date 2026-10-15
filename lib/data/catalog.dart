@@ -1,3 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
+import '../cache/disk_cache.dart';
+import '../cache/media_cache.dart';
 import '../gateway/gateway.dart';
 import 'models.dart';
 
@@ -63,9 +70,78 @@ class UserCollections {
 
 /// Gateway-backed catalogue. Failed requests never create fabricated music.
 class Catalog {
-  Catalog({NeteaseGateway? gateway}) : gateway = gateway ?? NeteaseGateway();
+  Catalog({NeteaseGateway? gateway, DiskCache? cache})
+    : gateway = gateway ?? NeteaseGateway(),
+      cache = cache ?? DiskCache.shared,
+      audioCache = AudioCache(disk: cache);
 
   final NeteaseGateway gateway;
+  final DiskCache cache;
+  final AudioCache audioCache;
+  final _requests = <String, Future<Object>>{};
+
+  // Private playlists and recommendations must not cross session boundaries.
+  String get _scope {
+    final cookie = gateway.sessionCookie;
+    return cookie == null
+        ? 'guest'
+        : sha256.convert(utf8.encode(cookie)).toString();
+  }
+
+  Future<T> _cached<T extends Object>(
+    String key,
+    Duration ttl,
+    T Function(Map<String, dynamic>) decode,
+    Map<String, dynamic> Function(T) encode,
+    Future<T> Function() fetch,
+  ) async {
+    final pending = _requests[key];
+    if (pending != null) return await pending as T;
+    final future = () async {
+      final saved = await cache.readJson(key);
+      T? previous;
+      if (saved != null) {
+        try {
+          previous = decode(saved.data);
+        } catch (_) {
+          await cache.remove(CacheBucket.data, key, extension: 'json');
+        }
+        if (previous != null && saved.fresh(ttl)) return previous;
+      }
+      try {
+        final result = await fetch();
+        await cache.writeJson(key, encode(result));
+        return result;
+      } catch (_) {
+        _online = false;
+        if (previous != null) return previous;
+        rethrow;
+      }
+    }();
+    _requests[key] = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_requests[key], future)) _requests.remove(key);
+    }
+  }
+
+  Future<void> invalidatePlaylist(String id) =>
+      cache.expireJson('playlist:$_scope:$id');
+
+  Future<void> invalidateCollections(int uid) =>
+      cache.expireJson('collections:$_scope:$uid');
+
+  Future<List<Track>> refreshPlaylist(String id) async {
+    await invalidatePlaylist(id);
+    return playlistTracks(id);
+  }
+
+  Future<void> invalidateHome({int? userId}) =>
+      cache.expireJson('home:$_scope:${userId ?? 0}');
+
+  Future<void> invalidateLyrics(String trackId) =>
+      cache.expireJson('lyrics:$trackId');
 
   /// Whether the last gateway interaction succeeded.
   bool get online => _online;
@@ -79,6 +155,28 @@ class Catalog {
   HomeFeed? get home => _home;
 
   Future<HomeFeed?> loadHome({int? userId}) async {
+    _homeError = null;
+    try {
+      _home = await _cached(
+        'home:$_scope:${userId ?? 0}',
+        const Duration(minutes: 20),
+        _decodeHome,
+        _encodeHome,
+        () async {
+          final feed = await _loadHome(userId: userId);
+          if (feed == null) throw StateError('Home unavailable');
+          return feed;
+        },
+      );
+      _homeError = null;
+      return _home;
+    } catch (_) {
+      _homeError = '曲库加载失败，请检查网络后重试。';
+      return _home = null;
+    }
+  }
+
+  Future<HomeFeed?> _loadHome({int? userId}) async {
     _homeError = null;
     Object? firstFailure;
     Future<T?> optional<T>(Future<T> request) async {
@@ -222,8 +320,17 @@ class Catalog {
     }
   }
 
+  /// Reuses recent snapshots; expired snapshots remain available offline.
+  Future<List<Track>> playlistTracks(String playlistId) => _cached(
+    'playlist:$_scope:$playlistId',
+    const Duration(minutes: 10),
+    (json) => _decodeTracks(json['tracks']),
+    (tracks) => {'tracks': tracks.map((track) => track.toJson()).toList()},
+    () => _playlistTracks(playlistId),
+  );
+
   /// Fetches the complete playlist in stable 500-song pages.
-  Future<List<Track>> playlistTracks(String playlistId) async {
+  Future<List<Track>> _playlistTracks(String playlistId) async {
     final int id = int.tryParse(playlistId) ?? 0;
     if (id <= 0) throw ArgumentError.value(playlistId, 'playlistId');
     try {
@@ -254,7 +361,17 @@ class Catalog {
 
   /// The signed-in user's own collections: liked songs, created playlists,
   /// subscribed playlists. Errors propagate to the profile view.
-  Future<UserCollections> userCollections(int uid) async {
+  Future<UserCollections> userCollections(int uid) => uid <= 0
+      ? Future.value(UserCollections.empty)
+      : _cached(
+          'collections:$_scope:$uid',
+          const Duration(minutes: 5),
+          _decodeCollections,
+          _encodeCollections,
+          () => _userCollections(uid),
+        );
+
+  Future<UserCollections> _userCollections(int uid) async {
     if (uid <= 0) return UserCollections.empty;
     try {
       final List<GatewayPlaylist> raw = await gateway.userPlaylists(
@@ -314,20 +431,50 @@ class Catalog {
   Future<String?> audioUrlFor(Track track) async {
     final int id = int.tryParse(track.id) ?? 0;
     if (id <= 0) return null;
+    final cached = await audioCache.find(track.id);
+    if (cached != null) return cached.uri.toString();
     try {
       final GatewaySongUrl? url = await gateway.songUrl(id);
       _online = url != null;
       final raw = url?.url;
-      return raw?.startsWith('http://') == true
+      final source = raw?.startsWith('http://') == true
           ? raw!.replaceFirst('http://', 'https://')
           : raw;
+      if (source != null && source.isNotEmpty) {
+        unawaited(audioCache.store(track.id, source, format: url?.type));
+      }
+      return source;
     } catch (_) {
       _online = false;
       rethrow;
     }
   }
 
-  Future<GatewayLyrics?> lyricsFor(Track track) async {
+  Future<GatewayLyrics?> lyricsFor(Track track) => _cached(
+    'lyrics:${track.id}',
+    const Duration(days: 7),
+    (json) => GatewayLyrics(
+      lrc: json['lrc'] as String?,
+      yrc: json['yrc'] as String?,
+      tlyric: json['tlyric'] as String?,
+      ytlrc: json['ytlrc'] as String?,
+      pureMusic: json['pureMusic'] as bool? ?? false,
+    ),
+    (lyrics) => {
+      'lrc': lyrics.lrc,
+      'yrc': lyrics.yrc,
+      'tlyric': lyrics.tlyric,
+      'ytlrc': lyrics.ytlrc,
+      'pureMusic': lyrics.pureMusic,
+    },
+    () async {
+      final lyrics = await _lyricsFor(track);
+      if (lyrics == null) throw StateError('Lyrics unavailable');
+      return lyrics;
+    },
+  );
+
+  Future<GatewayLyrics?> _lyricsFor(Track track) async {
     final int id = int.tryParse(track.id) ?? 0;
     if (id <= 0) return null;
     try {
@@ -341,6 +488,46 @@ class Catalog {
   }
 
   // -- mapping --------------------------------------------------------------
+
+  static List<Track> _decodeTracks(dynamic raw) => (raw as List)
+      .map((item) => Track.fromJson(item as Map<String, dynamic>))
+      .toList();
+  static List<Playlist> _decodePlaylists(dynamic raw) => (raw as List)
+      .map((item) => Playlist.fromJson(item as Map<String, dynamic>))
+      .toList();
+  static UserCollections _decodeCollections(Map<String, dynamic> json) =>
+      UserCollections(
+        liked: json['liked'] == null
+            ? null
+            : Playlist.fromJson(json['liked'] as Map<String, dynamic>),
+        created: _decodePlaylists(json['created']),
+        subscribed: _decodePlaylists(json['subscribed']),
+      );
+  static Map<String, dynamic> _encodeCollections(UserCollections value) => {
+    'liked': value.liked?.toJson(),
+    'created': value.created.map((p) => p.toJson()).toList(),
+    'subscribed': value.subscribed.map((p) => p.toJson()).toList(),
+  };
+  static HomeFeed _decodeHome(Map<String, dynamic> json) => HomeFeed(
+    featured: json['featured'] == null
+        ? null
+        : Album.fromJson(json['featured'] as Map<String, dynamic>),
+    recommended: _decodePlaylists(json['recommended']),
+    featuredTracks: _decodeTracks(json['featuredTracks']),
+    quick: _decodeTracks(json['quick']),
+    playlists: _decodePlaylists(json['playlists']),
+    albums: (json['albums'] as List)
+        .map((a) => Album.fromJson(a as Map<String, dynamic>))
+        .toList(),
+  );
+  static Map<String, dynamic> _encodeHome(HomeFeed value) => {
+    'featured': value.featured?.toJson(),
+    'recommended': value.recommended.map((p) => p.toJson()).toList(),
+    'featuredTracks': value.featuredTracks.map((t) => t.toJson()).toList(),
+    'quick': value.quick.map((t) => t.toJson()).toList(),
+    'playlists': value.playlists.map((p) => p.toJson()).toList(),
+    'albums': value.albums.map((a) => a.toJson()).toList(),
+  };
 
   static int _seedFrom(int id) => id.hashCode & 0x7fffffff;
 

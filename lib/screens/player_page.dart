@@ -37,15 +37,18 @@ class PlayerControlsBar extends StatelessWidget {
     super.key,
     required this.state,
     required this.onExpand,
+    this.includeBottomSafeArea = false,
   });
   final AppState state;
   final VoidCallback onExpand;
+  final bool includeBottomSafeArea;
 
   @override
   Widget build(BuildContext context) => _PlayerBar(
     state: state,
     onExpand: onExpand,
     compact: MediaQuery.sizeOf(context).width < _compactBreakpoint,
+    includeBottomSafeArea: includeBottomSafeArea,
   );
 }
 
@@ -134,11 +137,7 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   void _openNowPlaying() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => NowPlayingPage(state: widget.state),
-      ),
-    );
+    Navigator.of(context).push(NowPlayingRoute(state: widget.state));
   }
 
   void _selectSection(NavSection s) {
@@ -397,7 +396,8 @@ class _Sidebar extends StatelessWidget {
                 AccessibleIconButton(
                   tooltip: '刷新歌单',
                   icon: const Icon(Icons.refresh_rounded, size: 17),
-                  onPressed: () => unawaited(state.refreshCollections()),
+                  onPressed: () =>
+                      unawaited(state.refreshCollections(force: true)),
                 ),
             ],
           ),
@@ -423,7 +423,7 @@ class _Sidebar extends StatelessWidget {
                       if (state.collectionsError != null)
                         TextButton(
                           onPressed: () =>
-                              unawaited(state.refreshCollections()),
+                              unawaited(state.refreshCollections(force: true)),
                           child: const TrText('重试'),
                         ),
                     ],
@@ -892,7 +892,7 @@ class _HomeView extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           IvoryButton(
             label: '重新加载',
-            onPressed: () => unawaited(state.refreshHome()),
+            onPressed: () => unawaited(state.refreshHome(force: true)),
           ),
         ],
       );
@@ -1687,7 +1687,7 @@ class _SettingsView extends StatelessWidget {
         _ActionRow(
           label: '刷新曲库',
           icon: Icons.refresh_rounded,
-          onTap: () => unawaited(state.refreshHome()),
+          onTap: () => unawaited(state.refreshHome(force: true)),
         ),
         const SizedBox(height: 24),
         const SectionHeading('语言'),
@@ -1811,6 +1811,7 @@ class _MeViewState extends State<_MeView> {
     final int uid = widget.state.user.userId;
     if (uid != _uid) {
       _uid = uid;
+      _collections = UserCollections.empty;
       if (uid > 0) {
         unawaited(_load(uid));
       } else {
@@ -1823,12 +1824,13 @@ class _MeViewState extends State<_MeView> {
     }
   }
 
-  Future<void> _load(int uid) async {
+  Future<void> _load(int uid, {bool force = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
+      if (force) await widget.state.catalog.invalidateCollections(uid);
       final UserCollections collections = await widget.state.userCollections();
       if (!mounted || _uid != uid) return;
       setState(() {
@@ -1853,6 +1855,10 @@ class _MeViewState extends State<_MeView> {
       children: [
         const SizedBox(height: AppSpacing.section * 0.5),
         _profileCard(user),
+        if (MediaQuery.sizeOf(context).width < _compactBreakpoint) ...[
+          const SizedBox(height: AppSpacing.md),
+          _likedEntry(),
+        ],
         const SizedBox(height: AppSpacing.section * 0.6),
         _collectionsSection(),
         const SizedBox(height: AppSpacing.xl),
@@ -1860,6 +1866,66 @@ class _MeViewState extends State<_MeView> {
     );
   }
   // -- guest ----------------------------------------------------------------
+
+  Widget _likedEntry() {
+    final liked = _collections.liked ?? widget.state.collections.liked;
+    return PaperCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        key: const ValueKey('mobile-liked-playlist'),
+        onTap: _loading && liked == null
+            ? null
+            : () async {
+                if (liked != null) {
+                  _openPlaylist(context, widget.state, liked);
+                  return;
+                }
+                await _load(_uid, force: true);
+                if (!mounted) return;
+                final loaded = _collections.liked;
+                if (loaded != null) {
+                  _openPlaylist(context, widget.state, loaded);
+                }
+              },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                color: AppColors.manilla,
+                child: const Icon(
+                  Icons.favorite_rounded,
+                  color: AppColors.clay,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const TrText('我喜欢', style: AppText.subheading),
+                    const SizedBox(height: 4),
+                    TrText(
+                      liked == null
+                          ? (_loading ? '正在同步歌单…' : '暂无歌单')
+                          : '${liked.trackCount} 首',
+                      style: AppText.captionMuted,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.cloudDark,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _guest() {
     return Column(
@@ -2021,7 +2087,10 @@ class _MeViewState extends State<_MeView> {
             body: _error!,
           ),
           const SizedBox(height: AppSpacing.md),
-          IvoryButton(label: '重新加载', onPressed: () => unawaited(_load(_uid))),
+          IvoryButton(
+            label: '重新加载',
+            onPressed: () => unawaited(_load(_uid, force: true)),
+          ),
         ],
       );
     }
@@ -2301,6 +2370,7 @@ class _PlayerBar extends StatelessWidget {
     required this.state,
     required this.onExpand,
     this.compact = false,
+    this.includeBottomSafeArea = false,
   });
 
   final AppState state;
@@ -2309,6 +2379,7 @@ class _PlayerBar extends StatelessWidget {
   /// True in the narrow shell: swaps the full transport row for the
   /// compact prev / play / next cluster.
   final bool compact;
+  final bool includeBottomSafeArea;
 
   /// Narrow shell: transport controls floating straight on the parchment —
   /// no card, no slab; a clay progress hairline runs along the bottom edge
@@ -2433,7 +2504,7 @@ class _PlayerBar extends StatelessWidget {
 
   /// Floating compact transport: controls and a progress hairline only —
   /// no card, no fill; the page scrolls underneath.
-  Widget _compactSurface(Track? track) {
+  Widget _compactSurface(BuildContext context, Track? track) {
     return Material(
       color: AppColors.ivoryLight,
       child: Container(
@@ -2447,7 +2518,13 @@ class _PlayerBar extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 10, 12, 6),
               child: _compactTransport(track),
             ),
-            _compactProgress(track),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _compactProgress(track),
+            ),
+            if (includeBottomSafeArea)
+              SizedBox(height: MediaQuery.paddingOf(context).bottom + 4),
+            if (!includeBottomSafeArea) const SizedBox(height: 4),
           ],
         ),
       ),
@@ -2482,7 +2559,7 @@ class _PlayerBar extends StatelessWidget {
       builder: (BuildContext context, _) {
         final Track? track = state.current;
         if (compact) {
-          return _compactSurface(track);
+          return _compactSurface(context, track);
         }
         return _surface(
           Column(

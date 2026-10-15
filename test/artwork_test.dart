@@ -22,35 +22,38 @@ void main() {
     ]);
   });
 
-  testWidgets('403 advances to original image and a new cover resets retries', (
-    tester,
-  ) async {
-    Future<void> render(String url) => tester.pumpWidget(
-      MaterialApp(
-        home: SizedBox(
-          width: 100,
-          height: 100,
-          child: PlateArt(seed: 1, coverUrl: url),
+  testWidgets(
+    'artwork failure keeps one provider and changing cover updates its cache key',
+    (tester) async {
+      Future<void> render(String url) => tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 100,
+            height: 100,
+            child: PlateArt(seed: 1, coverUrl: url),
+          ),
         ),
-      ),
-    );
-    await render(cover);
-    final image = tester.widget<Image>(find.byType(Image));
-    image.errorBuilder!(
-      tester.element(find.byType(Image)),
-      NetworkImageLoadException(statusCode: 403, uri: Uri.parse(cover)),
-      null,
-    );
-    await tester.pump();
-    await tester.pump();
-    final retried =
-        tester.widget<Image>(find.byType(Image)).image as ArtworkImage;
-    expect(retried.url, artworkCandidates(cover)[1]);
-    const next = 'https://p1.music.126.net/another/123.jpg';
-    await render(next);
-    expect(
-      (tester.widget<Image>(find.byType(Image)).image as ArtworkImage).url,
-      enlargedArtworkUrl(next),
-    );
-  });
+      );
+      await render(cover);
+      final image = tester.widget<Image>(find.byType(Image));
+      image.errorBuilder!(
+        tester.element(find.byType(Image)),
+        NetworkImageLoadException(statusCode: 403, uri: Uri.parse(cover)),
+        null,
+      );
+      await tester.pump();
+      await tester.pump();
+      final retried =
+          tester.widget<Image>(find.byType(Image)).image as ArtworkImage;
+      // CDN fallback is now handled once in the shared cache, rather than
+      // restarting the same candidate sequence separately in each widget.
+      expect(retried.url, cover);
+      const next = 'https://p1.music.126.net/another/123.jpg';
+      await render(next);
+      expect(
+        (tester.widget<Image>(find.byType(Image)).image as ArtworkImage).url,
+        enlargedArtworkUrl(next),
+      );
+    },
+  );
 }

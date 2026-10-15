@@ -26,17 +26,11 @@ class PlaylistDetailPage extends StatelessWidget {
         Expanded(
           child: PlaylistDetailView(playlist: playlist, state: state),
         ),
-        SafeArea(
-          top: false,
-          child: PlayerControlsBar(
-            state: state,
-            onExpand: () => unawaited(
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => NowPlayingPage(state: state),
-                ),
-              ),
-            ),
+        PlayerControlsBar(
+          state: state,
+          includeBottomSafeArea: true,
+          onExpand: () => unawaited(
+            Navigator.of(context).push(NowPlayingRoute(state: state)),
           ),
         ),
       ],
@@ -63,16 +57,79 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
   final ScrollController _scroll = ScrollController();
   final GlobalKey _headerKey = GlobalKey();
   final GlobalKey _tableKey = GlobalKey();
+  final ValueNotifier<bool> _showLocator = ValueNotifier(false);
+  List<Track> _loadedTracks = const [];
+  double _headerExtent = 0;
+  double _tableExtent = 0;
+  bool _geometryPending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_scrolled);
+    widget.state.addListener(_updateLocator);
+  }
+
+  void _scrolled() {
+    _updateLocator();
+    _measureGeometry();
+  }
+
+  void _measureGeometry() {
+    if (_geometryPending) return;
+    _geometryPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _geometryPending = false;
+      if (!mounted) return;
+      _headerExtent = _headerKey.currentContext?.size?.height ?? _headerExtent;
+      _tableExtent = _tableKey.currentContext?.size?.height ?? _tableExtent;
+      _updateLocator();
+    });
+  }
+
+  double _trackTop(int index) =>
+      _headerExtent +
+      _tableExtent +
+      _loadedTracks
+          .take(index)
+          .fold(0.0, (height, track) => height + _rowHeight(track));
+
+  void _updateLocator() {
+    if (!mounted || !_scroll.hasClients) return;
+    final index = _loadedTracks.indexWhere(
+      (track) => track.id == widget.state.current?.id,
+    );
+    if (index < 0) {
+      _showLocator.value = false;
+      return;
+    }
+    final top = _trackTop(index);
+    final bottom = top + _rowHeight(_loadedTracks[index]);
+    final position = _scroll.position;
+    final visible =
+        bottom > position.pixels &&
+        top < position.pixels + position.viewportDimension;
+    _showLocator.value = !visible;
+  }
+
   late Future<List<Track>> _tracks = widget.state.catalog.playlistTracks(
     widget.playlist.id,
   );
   bool _expanded = false;
+  void _refresh() {
+    setState(() {
+      _tracks = widget.state.catalog.refreshPlaylist(widget.playlist.id);
+    });
+  }
+
   TextScaler? _rowScaler;
   double _normalRowHeight = 64;
   double _translatedRowHeight = 80;
   @override
   void dispose() {
+    widget.state.removeListener(_updateLocator);
     _scroll.dispose();
+    _showLocator.dispose();
     super.dispose();
   }
 
@@ -108,22 +165,10 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
   void _locateCurrent(List<Track> tracks) {
     final id = widget.state.current?.id;
     final index = tracks.indexWhere((track) => track.id == id);
-    if (index < 0) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => NowPlayingPage(state: widget.state),
-        ),
-      );
-      return;
-    }
+    if (index < 0) return;
     if (!_scroll.hasClients) return;
-    final header = _headerKey.currentContext?.size?.height ?? 0;
-    final table = _tableKey.currentContext?.size?.height ?? 0;
-    final rows = tracks
-        .take(index)
-        .fold(0.0, (height, track) => height + _rowHeight(track));
     _scroll.animateTo(
-      (header + table + rows - _scroll.position.viewportDimension * 0.35).clamp(
+      (_trackTop(index) - _scroll.position.viewportDimension * 0.35).clamp(
         0.0,
         _scroll.position.maxScrollExtent,
       ),
@@ -135,9 +180,17 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
   @override
   void didUpdateWidget(covariant PlaylistDetailView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.removeListener(_updateLocator);
+      widget.state.addListener(_updateLocator);
+    }
     if (oldWidget.playlist.id != widget.playlist.id) {
       _tracks = widget.state.catalog.playlistTracks(widget.playlist.id);
       _expanded = false;
+      _loadedTracks = const [];
+      _headerExtent = 0;
+      _tableExtent = 0;
+      _showLocator.value = false;
       if (_scroll.hasClients) _scroll.jumpTo(0);
     }
   }
@@ -151,6 +204,11 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
         future: _tracks,
         builder: (context, snapshot) {
           final tracks = snapshot.data ?? const <Track>[];
+          _loadedTracks = snapshot.connectionState == ConnectionState.done
+              ? tracks
+              : const [];
+          if (!desktop || box.maxWidth <= 600) _tableExtent = 0;
+          _measureGeometry();
           final playlist = widget.playlist;
           return Stack(
             children: [
@@ -214,13 +272,33 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                                       style: AppText.captionMuted,
                                     ),
                                     const SizedBox(height: 16),
-                                    ClayButton(
-                                      label: '播放全部',
-                                      compact: true,
-                                      onPressed: tracks.isEmpty
-                                          ? null
-                                          : () =>
-                                                widget.state.playQueue(tracks),
+                                    Wrap(
+                                      spacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        ClayButton(
+                                          label: '播放全部',
+                                          compact: true,
+                                          onPressed: tracks.isEmpty
+                                              ? null
+                                              : () => widget.state.playQueue(
+                                                  tracks,
+                                                ),
+                                        ),
+                                        AccessibleIconButton(
+                                          tooltip: '刷新歌单',
+                                          onPressed:
+                                              snapshot.connectionState ==
+                                                  ConnectionState.waiting
+                                              ? null
+                                              : _refresh,
+                                          icon: const Icon(
+                                            Icons.refresh_rounded,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -257,11 +335,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                             const SizedBox(height: 20),
                             const TrText('歌单加载失败，请重试。'),
                             TextButton(
-                              onPressed: () => setState(() {
-                                _tracks = widget.state.catalog.playlistTracks(
-                                  playlist.id,
-                                );
-                              }),
+                              onPressed: _refresh,
                               child: const TrText('重新加载'),
                             ),
                           ] else if (!snapshot.hasData) ...[
@@ -328,10 +402,28 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                   const SliverToBoxAdapter(child: SizedBox(height: 96)),
                 ],
               ),
-              if (widget.state.current != null)
-                Positioned(
-                  right: 24,
-                  bottom: 24,
+              Positioned(
+                right: 24,
+                bottom: 24,
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _showLocator,
+                  builder: (context, visible, child) => IgnorePointer(
+                    ignoring: !visible,
+                    child: AnimatedScale(
+                      scale: visible ? 1 : .7,
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeOutCubic,
+                      child: AnimatedOpacity(
+                        opacity: visible ? 1 : 0,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        child: ExcludeSemantics(
+                          excluding: !visible,
+                          child: child!,
+                        ),
+                      ),
+                    ),
+                  ),
                   child: AccessibleTooltip(
                     message: '定位正在播放的歌曲',
                     child: FloatingActionButton(
@@ -348,6 +440,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                     ),
                   ),
                 ),
+              ),
             ],
           );
         },

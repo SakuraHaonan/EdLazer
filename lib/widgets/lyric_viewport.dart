@@ -7,13 +7,16 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 import '../animation/lyric_spring.dart';
 import '../data/lyrics.dart';
+import '../data/lyric_selection.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
 import '../theme/design_tokens.dart';
-import 'lyric_selection_sheet.dart';
+import 'lyric_selection_toolbar.dart';
+import 'lyric_edge_fade.dart';
 import 'timed_lyric_text.dart';
 
 /// children stay cached while the ticker only updates their transforms.
@@ -45,8 +48,12 @@ class _LyricViewportState extends State<LyricViewport>
   List<LyricSpring> _scales = [];
   List<double> _heights = [];
   List<double> _prefix = [];
+  double _rowUnit = 0;
   List<Widget> _rows = [];
   Size _size = Size.zero;
+  double get _gutter =>
+      math.min(LyricEdgeFade.horizontalExtent, _size.width * 0.1);
+  double get _textWidth => math.max(1.0, _size.width - _gutter * 2);
   TextScaler? _textScaler;
   int _active = -1;
   bool _playing = false;
@@ -59,6 +66,14 @@ class _LyricViewportState extends State<LyricViewport>
   Duration? _lastMedia;
   int _lastWall = 0;
   Timer? _resume;
+  LyricSelection _selection = const LyricSelection();
+  bool _copied = false;
+  Timer? _copiedTimer;
+  int _selectionRevision = 0;
+  String? _trackId;
+  int _dragArmedAt = -1000;
+  bool _extendingSelection = false;
+  final GlobalKey _viewportKey = GlobalKey();
   late double _blurTarget = widget.state.lyricBlurEnabled ? 1 : 0;
 
   @override
@@ -105,9 +120,32 @@ class _LyricViewportState extends State<LyricViewport>
     final active = _activeAt(widget.state.precisePosition);
     final seeking = _isSeek();
     final changed = !identical(_lines, widget.state.lyrics);
+    if (_trackId != widget.state.current?.id) {
+      _trackId = widget.state.current?.id;
+      if (_selection.active) {
+        _changeSelection(const LyricSelection(), resume: false);
+      }
+    }
     if (changed) {
       _resume?.cancel();
-      _manual = false;
+      if (_selection.active) {
+        final available = {
+          for (final line in widget.state.lyrics) ?lyricSelectionKey(line),
+        };
+        final retained = _selection.keys.intersection(available);
+        _changeSelection(
+          retained.isEmpty
+              ? const LyricSelection()
+              : LyricSelection(
+                  anchor: retained.contains(_selection.anchor)
+                      ? _selection.anchor
+                      : retained.first,
+                  keys: retained,
+                ),
+          resume: false,
+        );
+      }
+      _manual = _selection.active;
       _velocity = 0;
     }
     if (changed || active != _active || _playing != widget.state.playing) {
@@ -131,6 +169,26 @@ class _LyricViewportState extends State<LyricViewport>
       _blur.animateTo(target, curve: Curves.easeOutCubic);
     }
   }
+
+  /// Blur tracks how far a row sits from the focus band instead of its index
+  /// gap, so it ramps in and out as rows travel rather than snapping to zero
+  /// the instant a line becomes active.
+  double _sigma(int i) {
+    if (_rowUnit <= 0 || _blur.value <= 0) return 0;
+    final centre = _ys[i].value + _heights[i] * 0.5;
+    final distance = (centre - _size.height * 0.35).abs() / _rowUnit;
+    return math.min(5.0, distance * 1.55) * _blur.value;
+  }
+
+  /// Dissolves rows into the viewport edges so the clip never slices a blurred
+  /// line clean in half.
+  Widget _edgeFade(Widget child) => LyricEdgeFade(
+    verticalExtent: math.min(
+      _size.height * 0.22,
+      math.max(28.0, _rowUnit * 1.15),
+    ),
+    child: child,
+  );
 
   void _start() {
     if (!_ticker.isActive) {
@@ -247,14 +305,14 @@ class _LyricViewportState extends State<LyricViewport>
     if (needsMeasure) {
       _heights = [
         for (final line in _lines)
-          _measureText(line.text, _originalStyle, size.width, scaler) +
+          _measureText(line.text, _originalStyle, _textWidth, scaler) +
               (line.translation == null
                   ? 0
                   : 5 +
                         _measureText(
                           line.translation!,
                           _translationStyle,
-                          size.width,
+                          _textWidth,
                           scaler,
                         )) +
               20,
@@ -268,6 +326,7 @@ class _LyricViewportState extends State<LyricViewport>
             return y;
           })(),
       ];
+      _rowUnit = _heights.isEmpty ? 0 : sum / _heights.length;
       _rows = [];
     }
     if (replaced) {
@@ -285,7 +344,7 @@ class _LyricViewportState extends State<LyricViewport>
             ),
           ),
       ];
-      _manual = false;
+      _manual = _selection.active;
     }
     if (_manual) {
       _setOffset(_offset);
@@ -321,11 +380,12 @@ class _LyricViewportState extends State<LyricViewport>
 
   void _scheduleResume() {
     _resume?.cancel();
+    if (_selection.active) return;
     _resume = Timer(
       Duration(milliseconds: (widget.state.lyricResumeSeconds * 1000).round()),
       () {
         if (!mounted || _dragging) return;
-        _manual = false;
+        _manual = _selection.active;
         _velocity = 0;
         _targets(seeking: true);
         _updateBlur();
@@ -359,31 +419,105 @@ class _LyricViewportState extends State<LyricViewport>
     _updateBlur();
   }
 
-  Future<void> _selectLyrics(int index) async {
+  void _changeSelection(LyricSelection next, {bool resume = true}) {
+    final changed = _selection.active != next.active;
+    setState(() {
+      _selection = next;
+      _selectionRevision++;
+      _copied = false;
+      _rows = [];
+    });
+    _copiedTimer?.cancel();
+    if (changed) widget.onSelectionChanged?.call(next.active);
+    if (!next.active && resume) _scheduleResume();
+  }
+
+  void _selectLyrics(int index) {
+    if (lyricSelectionKey(_lines[index]) == null) return;
     _beginManual();
+    // Freeze every row at its painted position, including unfinished springs.
+    for (final spring in _ys) {
+      spring.setPosition(spring.value);
+    }
     _resume?.cancel();
-    widget.onSelectionChanged?.call(true);
-    try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) =>
-            LyricSelectionSheet(lines: List.of(_lines), initialIndex: index),
-      );
-    } finally {
-      if (mounted) {
-        widget.onSelectionChanged?.call(false);
-        _scheduleResume();
+    _dragArmedAt = _wall.elapsedMilliseconds;
+    _changeSelection(
+      _selection.active
+          ? _selection.extend(_lines, index)
+          : _selection.begin(_lines, index),
+    );
+  }
+
+  void _extendSelection(Offset globalPosition) {
+    final box = _viewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || _lines.isEmpty) return;
+    final y = box.globalToLocal(globalPosition).dy;
+    var nearest = -1;
+    var distance = double.infinity;
+    for (var i = 0; i < _lines.length; i++) {
+      if (lyricSelectionKey(_lines[i]) == null) continue;
+      final delta = (_ys[i].value + _heights[i] / 2 - y).abs();
+      if (delta < distance) {
+        distance = delta;
+        nearest = i;
       }
     }
+    if (nearest >= 0) _changeSelection(_selection.extend(_lines, nearest));
+  }
+
+  Future<void> _copyLyrics() async {
+    final revision = _selectionRevision;
+    await Clipboard.setData(ClipboardData(text: _selection.text(_lines)));
+    if (!mounted || revision != _selectionRevision) return;
+    setState(() => _copied = true);
+    _copiedTimer?.cancel();
+    _copiedTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
   }
 
   Widget _row(int index) => GestureDetector(
     behavior: HitTestBehavior.opaque,
-    onTap: () => _seek(index),
+    onTap: () => _selection.active
+        ? _changeSelection(_selection.toggle(_lines, index))
+        : _seek(index),
     onLongPress: () => _selectLyrics(index),
-    child: SizedBox(
-      width: _size.width,
+    onLongPressMoveUpdate: (event) => _extendSelection(event.globalPosition),
+    onLongPressEnd: (_) => _dragArmedAt = _wall.elapsedMilliseconds,
+    child: Semantics(
+      selected: _selection.active
+          ? _selection.keys.contains(lyricSelectionKey(_lines[index]))
+          : null,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(
+          end: _selection.keys.contains(lyricSelectionKey(_lines[index]))
+              ? 1
+              : 0,
+        ),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        builder: (context, selected, _) => AnimatedOpacity(
+          opacity: _selection.active ? 0.54 + selected * 0.46 : 1,
+          duration: const Duration(milliseconds: 180),
+          child: _rowBody(index, selected),
+        ),
+      ),
+    ),
+  );
+
+  Widget _rowBody(int index, double selected) {
+    final focused = index == _active;
+    final color = Color.lerp(
+      focused ? AppColors.slateDark : AppColors.cloudDark,
+      AppColors.clayDeep,
+      selected * 0.65,
+    );
+    final style = _originalStyle.copyWith(
+      color: color,
+      fontWeight: focused || selected > .5 ? FontWeight.w600 : FontWeight.w400,
+    );
+    return SizedBox(
+      width: _textWidth,
       height: _heights[index],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -391,15 +525,8 @@ class _LyricViewportState extends State<LyricViewport>
           if (_lines[index].words.isNotEmpty)
             TimedLyricText(
               line: _lines[index],
-              style: _originalStyle.copyWith(
-                color: index == _active
-                    ? AppColors.slateDark
-                    : AppColors.cloudDark,
-                fontWeight: index == _active
-                    ? FontWeight.w600
-                    : FontWeight.w400,
-              ),
-              active: index == _active,
+              style: style,
+              active: focused,
               position: () => widget.state.precisePosition,
               repaint: _frames,
             )
@@ -408,14 +535,7 @@ class _LyricViewportState extends State<LyricViewport>
               _lines[index].text.isEmpty ? ' ' : _lines[index].text,
               textAlign: TextAlign.left,
               textDirection: TextDirection.ltr,
-              style: _originalStyle.copyWith(
-                fontWeight: index == _active
-                    ? FontWeight.w600
-                    : FontWeight.w400,
-                color: index == _active
-                    ? AppColors.slateDark
-                    : AppColors.cloudDark,
-              ),
+              style: style,
             ),
           if (_lines[index].translation != null) ...[
             const SizedBox(height: 5),
@@ -423,13 +543,20 @@ class _LyricViewportState extends State<LyricViewport>
               _lines[index].translation!,
               textAlign: TextAlign.left,
               textDirection: TextDirection.ltr,
-              style: _translationStyle,
+              style: _translationStyle.copyWith(
+                color: Color.lerp(
+                  AppColors.cloudDark,
+                  AppColors.clayDeep,
+                  selected * .65,
+                ),
+              ),
             ),
           ],
         ],
       ),
-    ),
-  );
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.state.lyricsLoading) {
@@ -471,113 +598,152 @@ class _LyricViewportState extends State<LyricViewport>
         if (_rows.isEmpty) {
           _rows = [for (var i = 0; i < _lines.length; i++) _row(i)];
         }
-        return Listener(
-          onPointerSignal: _wheel,
-          onPointerDown: (event) {
-            if (event.buttons & kMiddleMouseButton != 0) {
-              _middlePointer = event.pointer;
-              _dragging = true;
-              _beginManual();
+        return PopScope<void>(
+          canPop: !_selection.active,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && _selection.active) {
+              _changeSelection(const LyricSelection());
             }
           },
-          onPointerMove: (event) {
-            if (event.pointer == _middlePointer) {
-              _setOffset(_offset - event.delta.dy);
-            }
-          },
-          onPointerUp: (event) {
-            if (event.pointer == _middlePointer) {
-              _middlePointer = null;
-              _dragging = false;
-              _scheduleResume();
-            }
-          },
-          onPointerCancel: (event) {
-            if (event.pointer == _middlePointer) {
-              _middlePointer = null;
-              _dragging = false;
-              _scheduleResume();
-            }
-          },
-          child: GestureDetector(
-            onVerticalDragStart: (_) {
-              _dragging = true;
-              _beginManual();
-            },
-            onVerticalDragUpdate: (event) =>
-                _setOffset(_offset - event.delta.dy),
-            onVerticalDragEnd: (event) {
-              _dragging = false;
-              _velocity = -event.velocity.pixelsPerSecond.dy;
-              _start();
-              _scheduleResume();
-            },
-            onVerticalDragCancel: () {
-              _dragging = false;
-              _scheduleResume();
-            },
-            child: ClipRect(
-              child: AnimatedBuilder(
-                animation: Listenable.merge([_frames, _blur]),
-                builder: (context, _) => Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    for (var i = 0; i < _lines.length; i++)
-                      if (_ys[i].value + _heights[i] >= -80 &&
-                          _ys[i].value <= _size.height + 80)
-                        Positioned(
-                          key: ValueKey(
-                            'lyric-line-${widget.state.current?.id}-$i',
-                          ),
-                          top: 0,
-                          left: 0,
-                          width: _size.width,
-                          height: _heights[i],
-                          child: Transform.translate(
-                            offset: Offset(0, _ys[i].value),
-                            child: Transform.scale(
-                              scale: _scales[i].value / 100,
-                              alignment: Alignment.centerLeft,
-                              child: ImageFiltered(
-                                key: ValueKey('lyric-blur-$i'),
-                                enabled: _blur.value > 0 && i != _active,
-                                imageFilter: ui.ImageFilter.blur(
-                                  sigmaX:
-                                      math.min(
-                                        5.0,
-                                        1 +
-                                            (i -
-                                                        _active.clamp(
-                                                          0,
-                                                          _lines.length - 1,
-                                                        ))
-                                                    .abs() *
-                                                0.8,
-                                      ) *
-                                      _blur.value,
-                                  sigmaY:
-                                      math.min(
-                                        5.0,
-                                        1 +
-                                            (i -
-                                                        _active.clamp(
-                                                          0,
-                                                          _lines.length - 1,
-                                                        ))
-                                                    .abs() *
-                                                0.8,
-                                      ) *
-                                      _blur.value,
+          child: Stack(
+            key: _viewportKey,
+            fit: StackFit.expand,
+            children: [
+              Listener(
+                onPointerSignal: _wheel,
+                onPointerDown: (event) {
+                  if (event.buttons & kMiddleMouseButton != 0) {
+                    _middlePointer = event.pointer;
+                    _dragging = true;
+                    _beginManual();
+                  }
+                },
+                onPointerMove: (event) {
+                  if (event.pointer == _middlePointer) {
+                    _setOffset(_offset - event.delta.dy);
+                  }
+                },
+                onPointerUp: (event) {
+                  if (event.pointer == _middlePointer) {
+                    _middlePointer = null;
+                    _dragging = false;
+                    _scheduleResume();
+                  }
+                },
+                onPointerCancel: (event) {
+                  if (event.pointer == _middlePointer) {
+                    _middlePointer = null;
+                    _dragging = false;
+                    _scheduleResume();
+                  }
+                },
+                child: GestureDetector(
+                  onVerticalDragStart: (_) {
+                    _extendingSelection =
+                        _selection.active &&
+                        _wall.elapsedMilliseconds - _dragArmedAt < 900;
+                    if (_extendingSelection) return;
+                    _dragging = true;
+                    _beginManual();
+                  },
+                  onVerticalDragUpdate: (event) => _extendingSelection
+                      ? _extendSelection(event.globalPosition)
+                      : _setOffset(_offset - event.delta.dy),
+                  onVerticalDragEnd: (event) {
+                    if (_extendingSelection) {
+                      _extendingSelection = false;
+                      return;
+                    }
+                    _dragging = false;
+                    _velocity = -event.velocity.pixelsPerSecond.dy;
+                    _start();
+                    _scheduleResume();
+                  },
+                  onVerticalDragCancel: () {
+                    _extendingSelection = false;
+                    _dragging = false;
+                    _scheduleResume();
+                  },
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_frames, _blur]),
+                    builder: (context, _) => _edgeFade(
+                      Stack(
+                        fit: StackFit.expand,
+                        clipBehavior: Clip.none,
+                        children: [
+                          for (var i = 0; i < _lines.length; i++)
+                            if (_ys[i].value + _heights[i] >= -80 &&
+                                _ys[i].value <= _size.height + 80)
+                              Positioned(
+                                key: ValueKey(
+                                  'lyric-line-${widget.state.current?.id}-$i',
                                 ),
-                                child: _rows[i],
+                                top: 0,
+                                left: _gutter,
+                                width: _textWidth,
+                                height: _heights[i],
+                                child: Transform.translate(
+                                  offset: Offset(0, _ys[i].value),
+                                  child: Transform.scale(
+                                    scale: _scales[i].value / 100,
+                                    alignment: Alignment.centerLeft,
+                                    child: ImageFiltered(
+                                      key: ValueKey('lyric-blur-$i'),
+                                      enabled: _sigma(i) > 0.02,
+                                      imageFilter: ui.ImageFilter.blur(
+                                        sigmaX: _sigma(i),
+                                        sigmaY: _sigma(i),
+                                      ),
+                                      child: _rows[i],
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
-                  ],
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 260),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween(
+                            begin: const Offset(0, .35),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                      child: _selection.active
+                          ? LyricSelectionToolbar(
+                              key: const ValueKey('lyric-selection-toolbar'),
+                              count: _selection.keys.length,
+                              copied: _copied,
+                              onSelectAll: () =>
+                                  _changeSelection(_selection.all(_lines)),
+                              onCopy: () => unawaited(_copyLyrics()),
+                              onClose: () =>
+                                  _changeSelection(const LyricSelection()),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -587,6 +753,7 @@ class _LyricViewportState extends State<LyricViewport>
   @override
   void dispose() {
     _resume?.cancel();
+    _copiedTimer?.cancel();
     widget.state.all.removeListener(_onLane);
     _ticker.dispose();
     _blur.dispose();

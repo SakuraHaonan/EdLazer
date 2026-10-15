@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lazer_nextgen/cache/disk_cache.dart';
+import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 
@@ -8,32 +12,74 @@ class _Gateway extends NeteaseGateway {
       const [];
   final List<List<int>> detailPages = <List<int>>[];
   bool failSearch = false;
+  bool failPlaylist = false;
+  bool failAll = false;
+  int playlistCalls = 0;
+  int collectionCalls = 0;
+  int audioCalls = 0;
+  int lyricCalls = 0;
+
+  @override
+  Future<GatewayLyrics> preferredLyrics(int id) async {
+    lyricCalls++;
+    if (failAll) throw const SocketException('offline');
+    return GatewayLyrics(lrc: '[00:00]Line $lyricCalls', tlyric: '[00:00]翻译');
+  }
 
   @override
   Future<List<GatewayPlaylist>> topPlaylists({
     String category = '全部',
     int limit = 12,
     int offset = 0,
-  }) async => <GatewayPlaylist>[
-    const GatewayPlaylist(id: 12, name: '真实歌单', trackCount: 501),
-  ];
+  }) async {
+    if (failAll) throw const SocketException('offline');
+    return const [GatewayPlaylist(id: 12, name: '真实歌单', trackCount: 501)];
+  }
 
   @override
   Future<Map<String, dynamic>> playlistDetail(
     int id, {
     int subscriberLimit = 8,
-  }) async => <String, dynamic>{
-    'code': 200,
-    'playlist': <String, dynamic>{
-      'id': id,
-      'name': '真实歌单',
-      'trackCount': 501,
-      'trackIds': <Map<String, int>>[
-        for (int songId = 1; songId <= 501; songId++)
-          <String, int>{'id': songId},
-      ],
-    },
-  };
+  }) async {
+    playlistCalls++;
+    if (failPlaylist || failAll) throw const SocketException('offline');
+    return <String, dynamic>{
+      'code': 200,
+      'playlist': <String, dynamic>{
+        'id': id,
+        'name': '真实歌单',
+        'trackCount': 501,
+        'trackIds': <Map<String, int>>[
+          for (int songId = 1; songId <= 501; songId++)
+            <String, int>{'id': songId},
+        ],
+      },
+    };
+  }
+
+  @override
+  Future<List<GatewayPlaylist>> userPlaylists(
+    int uid, {
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    collectionCalls++;
+    if (failAll) throw const SocketException('offline');
+    return [
+      GatewayPlaylist(
+        id: uid * 10,
+        name: '喜欢的音乐',
+        specialType: 5,
+        trackCount: 501,
+      ),
+    ];
+  }
+
+  @override
+  Future<GatewaySongUrl?> songUrl(int id, {String level = 'exhigh'}) async {
+    audioCalls++;
+    throw const SocketException('offline');
+  }
 
   @override
   Future<List<GatewaySong>> songDetails(List<int> ids) async {
@@ -79,6 +125,146 @@ class _Gateway extends NeteaseGateway {
 }
 
 void main() {
+  group('persistent catalogue cache', () {
+    late Directory directory;
+    late DiskCache disk;
+    setUp(() async {
+      directory = await Directory.systemTemp.createTemp('lazer-catalog-test-');
+      disk = DiskCache(directory: () async => directory);
+    });
+    tearDown(() async => directory.delete(recursive: true));
+
+    test(
+      'lyrics refresh bypasses cached data and retains translations offline',
+      () async {
+        final gateway = _Gateway();
+        final catalog = Catalog(gateway: gateway, cache: disk);
+        const track = Track(
+          id: '42',
+          title: '',
+          artist: '',
+          album: '',
+          duration: Duration.zero,
+          coverSeed: 0,
+        );
+        expect((await catalog.lyricsFor(track))?.lrc, '[00:00]Line 1');
+        expect((await catalog.lyricsFor(track))?.lrc, '[00:00]Line 1');
+        expect(gateway.lyricCalls, 1);
+        await catalog.invalidateLyrics(track.id);
+        expect((await catalog.lyricsFor(track))?.lrc, '[00:00]Line 2');
+        gateway.failAll = true;
+        await catalog.invalidateLyrics(track.id);
+        final offline = await catalog.lyricsFor(track);
+        expect(offline?.lrc, '[00:00]Line 2');
+        expect(offline?.tlyric, '[00:00]翻译');
+      },
+    );
+
+    test(
+      'complete playlist is reused after restart, refreshed and available stale offline',
+      () async {
+        final firstGateway = _Gateway();
+        final first = Catalog(gateway: firstGateway, cache: disk);
+        final loaded = await Future.wait([
+          first.playlistTracks('12'),
+          first.playlistTracks('12'),
+        ]);
+        expect(loaded.first.length, 501);
+        expect(firstGateway.playlistCalls, 1);
+        expect(firstGateway.detailPages.map((page) => page.length), [500, 1]);
+        final gateway = _Gateway()..failPlaylist = true;
+        final restarted = Catalog(
+          gateway: gateway,
+          cache: DiskCache(directory: () async => directory),
+        );
+        final cached = await restarted.playlistTracks('12');
+        expect(gateway.playlistCalls, 0);
+        expect(
+          cached.map((track) => track.id),
+          loaded.first.map((track) => track.id),
+        );
+        expect(cached.first.coverUrl, loaded.first.first.coverUrl);
+        final stale = await restarted.refreshPlaylist('12');
+        expect(gateway.playlistCalls, 1);
+        expect(stale.length, 501);
+        gateway.failPlaylist = false;
+        expect((await restarted.playlistTracks('12')).length, 501);
+        expect(gateway.playlistCalls, 2);
+      },
+    );
+
+    test(
+      'personal collections and private playlists are separated by session',
+      () async {
+        final gateway = _Gateway()..sessionCookie = 'MUSIC_U=account-a';
+        final catalog = Catalog(gateway: gateway, cache: disk);
+        expect((await catalog.userCollections(7)).liked?.id, '70');
+        await catalog.playlistTracks('12');
+        gateway.failAll = true;
+        expect((await catalog.userCollections(7)).liked?.trackCount, 501);
+        await catalog.invalidateCollections(7);
+        expect((await catalog.userCollections(7)).liked?.id, '70');
+        gateway.sessionCookie = 'MUSIC_U=account-b';
+        await expectLater(
+          catalog.userCollections(8),
+          throwsA(isA<SocketException>()),
+        );
+        await expectLater(
+          catalog.playlistTracks('12'),
+          throwsA(isA<SocketException>()),
+        );
+        gateway.clearSession();
+        await expectLater(
+          catalog.playlistTracks('12'),
+          throwsA(isA<SocketException>()),
+        );
+      },
+    );
+
+    test(
+      'home feed survives restart with real recommendations and metadata',
+      () async {
+        final catalog = Catalog(gateway: _Gateway(), cache: disk);
+        final feed = (await catalog.loadHome())!;
+        await disk.expireJson('home:guest:0');
+        final gateway = _Gateway()..failAll = true;
+        final restarted = Catalog(
+          gateway: gateway,
+          cache: DiskCache(directory: () async => directory),
+        );
+        final offline = (await restarted.loadHome())!;
+        expect(offline.recommended.single.id, feed.recommended.single.id);
+        expect(offline.quick.length, feed.quick.length);
+        expect(offline.featured?.title, feed.featured?.title);
+        expect(restarted.online, isFalse);
+      },
+    );
+
+    test(
+      'audio playback resolves a cached file before contacting the service',
+      () async {
+        final file = await disk.put(
+          CacheBucket.audio,
+          '42',
+          () => Stream.value([1, 2, 3]),
+          extension: 'mp3',
+        );
+        final gateway = _Gateway();
+        final catalog = Catalog(gateway: gateway, cache: disk);
+        const track = Track(
+          id: '42',
+          title: '',
+          artist: '',
+          album: '',
+          duration: Duration.zero,
+          coverSeed: 0,
+        );
+        expect(await catalog.audioUrlFor(track), file!.uri.toString());
+        expect(gateway.audioCalls, 0);
+      },
+    );
+  });
+
   test('song translations survive gateway parsing and catalogue mapping', () {
     final song = GatewaySong.fromJson(<String, dynamic>{
       'id': 42,

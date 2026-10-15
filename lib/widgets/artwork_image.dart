@@ -1,10 +1,9 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
-import '../utils/artwork.dart';
+import '../cache/media_cache.dart';
 
 /// NetworkImage adds headers to HttpClient's default User-Agent. The NetEase
 /// image CDN rejects that duplicated header, so set each header explicitly.
@@ -22,8 +21,6 @@ class ArtworkImage extends ImageProvider<ArtworkImage> {
   @override
   int get hashCode => url.hashCode;
 
-  static final HttpClient _client = HttpClient()..autoUncompress = false;
-
   @override
   ImageStreamCompleter loadImage(
     ArtworkImage key,
@@ -38,23 +35,13 @@ class ArtworkImage extends ImageProvider<ArtworkImage> {
 
   Future<ui.Codec> _load(ArtworkImage key, ImageDecoderCallback decode) async {
     try {
-      final uri = Uri.parse(key.url);
-      final request = await _client
-          .getUrl(uri)
-          .timeout(const Duration(seconds: 15));
-      artworkHeaders.forEach(request.headers.set);
-      final response = await request.close().timeout(
-        const Duration(seconds: 15),
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        await response.drain<void>();
-        throw NetworkImageLoadException(
-          statusCode: response.statusCode,
-          uri: uri,
-        );
+      final bytes = await ArtworkCache.shared.bytes(key.url);
+      try {
+        return await decode(await ui.ImmutableBuffer.fromUint8List(bytes));
+      } catch (_) {
+        await ArtworkCache.shared.evict(key.url);
+        rethrow;
       }
-      final bytes = await consolidateHttpClientResponseBytes(response);
-      return await decode(await ui.ImmutableBuffer.fromUint8List(bytes));
     } catch (_) {
       PaintingBinding.instance.imageCache.evict(key);
       rethrow;

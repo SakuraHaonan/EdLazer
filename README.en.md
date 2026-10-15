@@ -15,6 +15,15 @@ playlists come from the service.
 - System media controls on Android, iOS, Windows, macOS and Linux.
 - Simplified Chinese, Traditional Chinese, Japanese and English interfaces.
 - Adjustable scroll inertia, lyric blur, automatic following and haptic feedback.
+- A mobile Favorites shortcut, with automatic caching of audio, artwork, lyrics and playlists.
+
+Completed audio downloads play locally; the first play streams while caching in the background.
+The cache keeps up to 1 GiB of audio, 256 MiB of artwork and 64 MiB of catalogue data,
+evicting the least recently used files. Playlist tracks stay fresh for 10 minutes,
+account collections for 5 minutes and the home feed for 20 minutes. Expired data is
+refreshed, with the previous snapshot retained if the network fails. Playlist details
+also offer manual refresh. Account data is separated by session. Files live in the
+system application cache directory and are fetched again if the system removes them.
 
 ## Development
 

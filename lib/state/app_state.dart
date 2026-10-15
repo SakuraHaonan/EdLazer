@@ -189,7 +189,7 @@ class AppState extends ChangeNotifier {
   String? collectionsError;
   int? _collectionsPendingUid;
 
-  Future<void> refreshCollections() async {
+  Future<void> refreshCollections({bool force = false}) async {
     final uid = user.userId;
     if (uid <= 0) {
       collections = UserCollections.empty;
@@ -202,6 +202,7 @@ class AppState extends ChangeNotifier {
     collectionsError = null;
     notifyListeners();
     try {
+      if (force) await catalog.invalidateCollections(uid);
       final loaded = await catalog.userCollections(uid);
       if (user.userId == uid) collections = loaded;
     } catch (_) {
@@ -277,7 +278,10 @@ class AppState extends ChangeNotifier {
     await refreshHome();
   }
 
-  Future<void> refreshHome() async {
+  Future<void> refreshHome({bool force = false}) async {
+    if (force) {
+      await catalog.invalidateHome(userId: signedIn ? _user.userId : null);
+    }
     unawaited(refreshCollections());
     await catalog.loadHome(userId: _user.userId);
     notifyListeners();
@@ -423,6 +427,10 @@ class AppState extends ChangeNotifier {
     AuthMethod method,
     String detail,
   ) {
+    if (_user.userId != profile.userId) {
+      collections = UserCollections.empty;
+      _likedSongIds = <int>{};
+    }
     _user = SessionUser.fromProfile(profile, method: method, detail: detail);
     _persistSession(gateway.sessionCookie);
     unawaited(refreshHome());
@@ -855,16 +863,22 @@ class AppState extends ChangeNotifier {
 
   Future<void> toggleLikeCurrent() async {
     final id = int.tryParse(current?.id ?? '');
-    if (id == null || _user.userId <= 0) return;
+    final uid = _user.userId;
+    if (id == null || uid <= 0) return;
     final liked = !_likedSongIds.contains(id);
     likeError = null;
     try {
-      await gateway.setSongLiked(id, _user.userId, liked);
+      await gateway.setSongLiked(id, uid, liked);
+      if (_user.userId != uid) return;
       if (liked) {
         _likedSongIds.add(id);
       } else {
         _likedSongIds.remove(id);
       }
+      // The next entry into the liked playlist must reflect this mutation.
+      final playlistId = collections.liked?.id;
+      if (playlistId != null) await catalog.invalidatePlaylist(playlistId);
+      await catalog.invalidateCollections(_user.userId);
     } catch (_) {
       likeError = '收藏失败，请稍后重试。';
     }
@@ -874,6 +888,10 @@ class AppState extends ChangeNotifier {
   Future<void> ensureCurrentLyrics({bool force = false}) async {
     final track = current;
     if (track == null) return;
+    if (force) {
+      await catalog.invalidateLyrics(track.id);
+      if (current?.id != track.id) return;
+    }
     if (!force &&
         _lyricsTrackId == track.id &&
         (lyricsLoading || lyrics.isNotEmpty || lyricsPureMusic)) {

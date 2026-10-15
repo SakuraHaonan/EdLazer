@@ -21,7 +21,7 @@ import 'package:lazer_nextgen/screens/player_page.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/theme/app_theme.dart';
 import 'package:lazer_nextgen/widgets/timed_lyric_text.dart';
-import 'package:lazer_nextgen/widgets/lyric_selection_sheet.dart';
+import 'package:lazer_nextgen/widgets/lyric_selection_toolbar.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
 import 'package:lazer_nextgen/widgets/plate_art.dart';
 
@@ -256,8 +256,9 @@ void main() {
       await tester.longPress(find.text('First line'));
       await tester.pumpAndSettle();
       expect(state.position, before, reason: 'long press does not seek');
-      expect(find.byType(LyricSelectionSheet), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('select-lyric-2')));
+      expect(find.byType(LyricSelectionToolbar), findsOneWidget);
+      expect(find.byType(BottomSheet), findsNothing);
+      await tester.tap(find.text('Third line'));
       await tester.pump();
       String? clipboard;
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -275,15 +276,15 @@ void main() {
           null,
         ),
       );
-      await tester.tap(find.text('复制所选歌词'));
+      await tester.tap(find.byTooltip('复制所选歌词'));
       await tester.pump();
-      expect(clipboard, 'First line\n第一行\n\nThird line\n第三行');
+      expect(clipboard, 'First line\n第一行\nThird line\n第三行');
       await tester.pump(const Duration(seconds: 4));
-      expect(find.byType(LyricSelectionSheet), findsOneWidget);
-      await tester.tap(find.text('全选'));
+      expect(find.byType(LyricSelectionToolbar), findsOneWidget);
+      await tester.tap(find.byTooltip('全选'));
       await tester.pump();
       expect(find.text('已选择 3 行'), findsOneWidget);
-      expect(find.text('复制所选歌词'), findsOneWidget);
+      expect(find.byTooltip('复制所选歌词'), findsOneWidget);
       await tester.tap(find.byTooltip('关闭'));
       await tester.pumpAndSettle();
       expect(
@@ -448,6 +449,24 @@ void main() {
       );
       expect(
         tester
+            .widgetList<TimedLyricText>(find.byType(TimedLyricText))
+            .map((line) => line.active),
+        [false, true],
+        reason:
+            'word highlighting changes immediately; spatial blur eases as the row moves',
+      );
+      expect(
+        tester
+            .widget<ImageFiltered>(find.byKey(const ValueKey('lyric-blur-1')))
+            .enabled,
+        true,
+        reason: 'the incoming row must not snap from blurred to clear',
+      );
+      for (var i = 0; i < 90; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(
+        tester
             .widget<ImageFiltered>(find.byKey(const ValueKey('lyric-blur-1')))
             .enabled,
         false,
@@ -462,6 +481,13 @@ void main() {
       state.seek(750 / 120000);
       await tester.pump();
       expect(state.precisePosition, const Duration(milliseconds: 750));
+      expect(
+        tester
+            .widgetList<TimedLyricText>(find.byType(TimedLyricText))
+            .map((line) => line.active),
+        [true, false],
+      );
+      await tester.pumpAndSettle();
       expect(
         tester
             .widget<ImageFiltered>(find.byKey(const ValueKey('lyric-blur-0')))

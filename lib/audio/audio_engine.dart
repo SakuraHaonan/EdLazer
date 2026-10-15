@@ -60,7 +60,12 @@ class JustAudioEngine implements AudioEngine {
     final generation = ++_generation;
     _hadSource = false;
     _completionSent = false;
-    await _player.setUrl(url);
+    final uri = Uri.parse(url);
+    if (uri.scheme == 'file') {
+      await _player.setFilePath(uri.toFilePath());
+    } else {
+      await _player.setUrl(url);
+    }
     if (generation != _generation) return;
     _hadSource = true;
     if (_player.processingState == ProcessingState.completed) _emitCompletion();

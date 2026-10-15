@@ -4,37 +4,11 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gal/gal.dart';
 
-import 'artwork.dart';
+import '../cache/media_cache.dart';
 
 /// Saves the same real artwork as the player, with explicitly set CDN headers.
 Future<bool> saveCover(String url, String title) async {
-  final client = HttpClient();
-  Uint8List? bytes;
-  try {
-    for (final candidate in artworkCandidates(url)) {
-      final request = await client
-          .getUrl(Uri.parse(candidate))
-          .timeout(const Duration(seconds: 15));
-      artworkHeaders.forEach(request.headers.set);
-      final response = await request.close().timeout(
-        const Duration(seconds: 15),
-      );
-      if (response.statusCode == 403) {
-        await response.drain<void>();
-        continue;
-      }
-      if (response.statusCode != 200) {
-        throw HttpException('Cover download failed');
-      }
-      bytes = await consolidateHttpClientResponseBytes(response);
-      break;
-    }
-  } finally {
-    client.close();
-  }
-  if (bytes == null || bytes.isEmpty) {
-    throw const HttpException('Cover unavailable');
-  }
+  final bytes = await ArtworkCache.shared.bytes(url);
   return saveCoverBytes(bytes, title);
 }
 

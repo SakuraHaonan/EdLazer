@@ -136,6 +136,43 @@ void main() {
   });
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  testWidgets('mobile Me favorites entry opens the account liked playlist', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog(gateway: _AuthGateway()));
+    addTearDown(state.dispose);
+    await state.signInWithCookie('MUSIC_U=fixture');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: PlayerPage(state: state),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('我').first);
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const ValueKey('mobile-liked-playlist'));
+    expect(entry, findsOneWidget);
+    expect(
+      find.descendant(of: entry, matching: find.text('我喜欢')),
+      findsOneWidget,
+    );
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<PlaylistDetailPage>(find.byType(PlaylistDetailPage))
+          .playlist
+          .id,
+      '99',
+    );
+    expect(find.text('まにまに'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'mobile account card contains only avatar and sign-out and grows with text size',
     (tester) async {
