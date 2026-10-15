@@ -70,14 +70,8 @@ class _ScrollInertiaSettingState extends State<ScrollInertiaSetting> {
       Row(
         children: [
           Expanded(child: TrText('滚动惯性', style: context.type.bodySm)),
-          Container(
-            width: 80,
-            height: 44,
-            decoration: BoxDecoration(
-              color: context.colors.ivoryLight,
-              border: Border.all(color: context.colors.stone),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+          SizedBox(
+            width: 100,
             child: Semantics(
               label: context.tr('滚动惯性百分比'),
               child: TextField(
@@ -92,11 +86,32 @@ class _ScrollInertiaSettingState extends State<ScrollInertiaSetting> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(3),
                 ],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: context.colors.ivoryLight,
                   isDense: true,
-                  border: InputBorder.none,
                   suffixText: '%',
-                  contentPadding: EdgeInsets.symmetric(vertical: 10),
+                  suffixStyle: context.type.bodySm.copyWith(
+                    color: context.colors.cloudDark,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 13,
+                  ),
+                  border: const OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: context.borders.hairline,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(
+                      color: context.colors.slateDark,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
                 onChanged: (text) {
                   final value = int.tryParse(text);
