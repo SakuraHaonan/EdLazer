@@ -2899,7 +2899,7 @@ class _SeekSlider extends StatelessWidget {
       child: SliderTheme(
         data: SliderThemeData(
           trackHeight: 3,
-          activeTrackColor: context.colors.ivoryLight,
+          activeTrackColor: context.colors.onPlayer,
           inactiveTrackColor: context.colors.slateMedium,
           thumbColor: context.colors.clay,
           overlayColor: context.colors.clay.withValues(alpha: 0.18),
