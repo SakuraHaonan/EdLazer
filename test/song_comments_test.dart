@@ -18,6 +18,7 @@ import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/song_comments_controller.dart';
 import 'package:lazer_nextgen/theme/app_theme.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
+import 'package:lazer_nextgen/widgets/playback_queue_view.dart';
 import 'package:lazer_nextgen/widgets/song_comments_view.dart';
 import 'package:lazer_nextgen/widgets/volume_control.dart';
 
@@ -409,6 +410,12 @@ void main() {
         expect(find.byTooltip('取消点赞'), findsOneWidget);
       }
       await _snapshot(tester, key, 'desktop_comments_${size.width.toInt()}');
+      await tester.tap(find.byTooltip('播放队列'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlaybackQueueView), findsOneWidget);
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(SongCommentsView), findsNothing);
+      await _snapshot(tester, key, 'desktop_queue_${size.width.toInt()}');
       for (var i = 0; i < 10; i++) {
         state.seek(i / 100);
         await tester.pump();

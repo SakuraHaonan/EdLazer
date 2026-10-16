@@ -14,7 +14,7 @@ playlists come from the service.
 - Artist profiles with popular tracks and paged albums, plus album descriptions and full track lists; open them from artist or album names.
 - Synchronized lyrics, translations, word timing, multi-line copying and lyric image export.
 - Adjustable lyric font size and weight, with a live preview and saved preferences.
-- Desktop listening workspace with a full-width playback dock, lyrics/comments switching and saved volume levels.
+- Desktop listening workspace with a full-width playback dock, shared lyrics/comments/queue panes and saved volume levels.
 - Popular and latest comments with pagination, likes and unlikes; guests can read and sign in to react.
 - System media controls on Android, iOS, Windows, macOS and Linux.
 - Simplified Chinese, Traditional Chinese, Japanese and English interfaces.

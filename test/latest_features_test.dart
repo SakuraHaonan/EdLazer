@@ -24,6 +24,7 @@ import 'package:lazer_nextgen/widgets/timed_lyric_text.dart';
 import 'package:lazer_nextgen/widgets/lyric_selection_toolbar.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
 import 'package:lazer_nextgen/widgets/plate_art.dart';
+import 'package:lazer_nextgen/widgets/playback_queue_view.dart';
 
 const _track = Track(
   id: '1',
@@ -348,9 +349,10 @@ void main() {
       expect(tester.getSize(art).aspectRatio, closeTo(1, .01));
       await tester.tap(find.byTooltip('播放队列'));
       await tester.pumpAndSettle();
-      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(PlaybackQueueView), findsOneWidget);
       final list = find.descendant(
-        of: find.byType(Dialog),
+        of: find.byType(PlaybackQueueView),
         matching: find.byType(ListView),
       );
       expect(
@@ -358,12 +360,12 @@ void main() {
         findsWidgets,
       );
       expect(find.text('Artist 8'), findsWidgets);
-      expect(tester.getSize(list).width, lessThanOrEqualTo(580));
+      expect(tester.getRect(list).right, lessThanOrEqualTo(1280));
       await _snapshot(tester, screenshot, 'ui_queue_latest');
       await tester.tap(find.text('Song 9'));
       await tester.pumpAndSettle();
       expect(state.current?.id, '9');
-      await tester.tap(find.byTooltip('关闭'));
+      await tester.tap(find.text('歌词').first);
       await tester.pumpAndSettle();
       await tester.pumpWidget(
         MaterialApp(

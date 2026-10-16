@@ -14,6 +14,8 @@ import '../widgets/player_seek_bar.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/volume_control.dart';
 
+enum DesktopNowPlayingPane { lyrics, comments, queue }
+
 /// Desktop listening workspace. The full-width dock stays outside content
 /// scrolling; the mobile layout and its collapsing controls are independent.
 class DesktopNowPlaying extends StatelessWidget {
@@ -24,18 +26,18 @@ class DesktopNowPlaying extends StatelessWidget {
     required this.artwork,
     required this.lyrics,
     required this.comments,
-    required this.showingComments,
-    required this.onLyrics,
-    required this.onComments,
+    required this.queue,
+    required this.pane,
+    required this.onPaneChanged,
     required this.onBack,
-    required this.onQueue,
     required this.onSaveArtwork,
   });
   final AppState state;
   final Track track;
-  final Widget artwork, lyrics, comments;
-  final bool showingComments;
-  final VoidCallback onLyrics, onComments, onBack, onQueue, onSaveArtwork;
+  final Widget artwork, lyrics, comments, queue;
+  final DesktopNowPlayingPane pane;
+  final ValueChanged<DesktopNowPlayingPane> onPaneChanged;
+  final VoidCallback onBack, onSaveArtwork;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -54,8 +56,8 @@ class DesktopNowPlaying extends StatelessWidget {
             _PaneTab(
               label: '歌词',
               icon: Icons.lyrics_outlined,
-              active: !showingComments,
-              onPressed: onLyrics,
+              active: pane == DesktopNowPlayingPane.lyrics,
+              onPressed: () => onPaneChanged(DesktopNowPlayingPane.lyrics),
             ),
             const SizedBox(width: 8),
             AccessibleTooltip(
@@ -63,8 +65,18 @@ class DesktopNowPlaying extends StatelessWidget {
               child: _PaneTab(
                 label: '评论',
                 icon: Icons.chat_bubble_outline_rounded,
-                active: showingComments,
-                onPressed: onComments,
+                active: pane == DesktopNowPlayingPane.comments,
+                onPressed: () => onPaneChanged(DesktopNowPlayingPane.comments),
+              ),
+            ),
+            const SizedBox(width: 8),
+            AccessibleTooltip(
+              message: '播放队列',
+              child: _PaneTab(
+                label: '播放队列',
+                icon: Icons.queue_music_rounded,
+                active: pane == DesktopNowPlayingPane.queue,
+                onPressed: () => onPaneChanged(DesktopNowPlayingPane.queue),
               ),
             ),
             const SizedBox(width: 16),
@@ -72,11 +84,6 @@ class DesktopNowPlaying extends StatelessWidget {
               tooltip: '保存封面',
               onPressed: track.coverUrl == null ? null : onSaveArtwork,
               icon: const Icon(Icons.save_alt_rounded, size: 21),
-            ),
-            AccessibleIconButton(
-              tooltip: '播放队列',
-              onPressed: onQueue,
-              icon: const Icon(Icons.queue_music_rounded),
             ),
           ],
         ),
@@ -127,8 +134,12 @@ class DesktopNowPlaying extends StatelessWidget {
                         ],
                       ),
                       child: KeyedSubtree(
-                        key: ValueKey(showingComments),
-                        child: showingComments ? comments : lyrics,
+                        key: ValueKey(pane),
+                        child: switch (pane) {
+                          DesktopNowPlayingPane.lyrics => lyrics,
+                          DesktopNowPlayingPane.comments => comments,
+                          DesktopNowPlayingPane.queue => queue,
+                        },
                       ),
                     ),
                   ),

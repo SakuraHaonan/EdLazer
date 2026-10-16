@@ -5,6 +5,7 @@ import '../widgets/accessible_controls.dart';
 import '../widgets/scroll_inertia_setting.dart';
 import '../widgets/lyric_typography_setting.dart';
 import '../widgets/catalog_links.dart';
+import '../widgets/square_switch_list_tile.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/haptic_seek_slider.dart';
 import '../widgets/volume_control.dart';
@@ -1788,8 +1789,7 @@ class _SettingsView extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         const SectionHeading('交互'),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
+        SquareSwitchListTile(
           title: const TrText('震动反馈'),
           subtitle: const TrText('点击可操作的元素和拖动进度条时反馈'),
           value: state.hapticsEnabled,
@@ -1829,8 +1829,7 @@ class _SettingsView extends StatelessWidget {
         const SectionHeading('歌词与滚动'),
         const SizedBox(height: 16),
         LyricTypographySetting(state: state),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
+        SquareSwitchListTile(
           title: const TrText('歌词模糊'),
           subtitle: const TrText('距离当前歌词越远，模糊越强；手动浏览时渐隐'),
           value: state.lyricBlurEnabled,
@@ -2882,7 +2881,7 @@ class _LightIconButtonState extends State<_LightIconButton> {
   }
 }
 
-/// Clay disc play/pause — the compact card's single accent.
+/// Clay play/pause button — the compact card's single accent.
 class _LightPlayButton extends StatefulWidget {
   const _LightPlayButton({
     required this.playing,
@@ -2916,7 +2915,7 @@ class _LightPlayButtonState extends State<_LightPlayButton> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape: BoxShape.rectangle,
             color: widget.enabled
                 ? (_hovering ? context.colors.clayDeep : context.colors.clay)
                 : context.colors.stone,
@@ -3039,7 +3038,7 @@ class _PlayPauseButtonState extends State<_PlayPauseButton> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape: BoxShape.rectangle,
             color: widget.enabled
                 ? (_hovering
                       ? context.colors.manilla

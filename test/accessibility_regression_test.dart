@@ -288,9 +288,7 @@ void main() {
         );
         await tester.testTextInput.receiveAction(TextInputAction.done);
         await _frames(tester);
-        navigator.currentState!.push(
-          NowPlayingRoute(state: state),
-        );
+        navigator.currentState!.push(NowPlayingRoute(state: state));
         await tester.pumpAndSettle();
         for (var i = 1; i < 12; i++) {
           state.seek(i * 2 / 120);
@@ -298,7 +296,7 @@ void main() {
         }
         await tester.tap(find.byTooltip('播放队列'));
         await _frames(tester);
-        await tester.tap(find.byTooltip('关闭'));
+        await tester.tap(find.text('歌词').first);
         await _frames(tester);
         await tester.longPress(find.text('歌词 11'));
         await _frames(tester);
