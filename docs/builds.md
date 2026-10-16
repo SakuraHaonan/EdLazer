@@ -1,8 +1,12 @@
 # Automated builds
 
 [Build nextgen](https://github.com/chuxuehaocai/Lazer/actions/workflows/build.yml)
-runs for pushes and pull requests targeting `nextgen` and declares a manual
-`workflow_dispatch` trigger. Flutter is pinned to **3.47.0 stable**.
+runs for pushes and pull requests targeting `nextgen`, manual
+`workflow_dispatch` runs, and `v*` version tags. Flutter is pinned to
+**3.47.0 stable**. A successful run for a `v*` tag creates a GitHub Release
+with all platform binaries and SHA-256 files. A tag containing a hyphen, such
+as `v2.0.0-beta.1`, is published as a pre-release. Set the matching app version
+in `pubspec.yaml` before pushing the tag so the binaries report the same version.
 
 Analysis and tests run first. Seven independent platform/architecture builds then
 upload the following **Artifacts**. Each binary/archive has its own SHA-256 file.
@@ -37,9 +41,10 @@ AppImage must start under Xvfb and a session D-Bus before it is uploaded.
 
 ## Downloading
 
-Open a completed run and download from **Artifacts** while signed in to GitHub.
-Artifacts are retained for 30 days. The workflow does not publish a GitHub Release
-or a public download page. Repository permissions are read-only.
+Open a completed branch run and download from **Artifacts** while signed in to
+GitHub. These artifacts are retained for 30 days. Version-tag runs also attach
+the artifacts to their GitHub Release; the release job has write access only to
+download its workflow artifacts and publish that release.
 
 Extract the whole Windows ZIP before launching the EXE. Downloaded AppImages need
 `chmod +x`. macOS Apps are ad-hoc signed, not Developer ID signed/notarized. The

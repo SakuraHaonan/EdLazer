@@ -44,7 +44,9 @@ flutter run
 ## Automated builds
 
 Pushes to `nextgen` trigger [GitHub Actions](https://github.com/chuxuehaocai/Lazer/actions/workflows/build.yml).
-Checks run before platform builds. Output filenames follow `Lazer-<OS>-<Arch>`.
+Checks run before platform builds. Pushing a `v*` version tag creates a GitHub
+Release after every build succeeds; tags with a suffix such as `-beta.1` are
+marked as pre-releases. Output filenames follow `Lazer-<OS>-<Arch>`.
 
 | Output | Contents |
 | --- | --- |

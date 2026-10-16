@@ -40,7 +40,8 @@ flutter run
 ## 自动构建
 
 向 `nextgen` 推送代码后，[GitHub Actions](https://github.com/chuxuehaocai/Lazer/actions/workflows/build.yml)
-会先检查代码，再构建以下产物。文件名统一为 `Lazer-<系统>-<架构>`。
+会先检查代码，再构建以下产物。推送 `v*` 版本标签会在所有构建成功后自动创建 GitHub Release；
+带 `-beta.1` 等后缀的版本会标为预发布版。文件名统一为 `Lazer-<系统>-<架构>`。
 
 | 产物 | 说明 |
 | --- | --- |
