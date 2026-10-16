@@ -22,14 +22,23 @@ class AppLocalizations {
   static final fallback = AppLocalizations(supportedLocales.first, {});
   static Locale resolve(Locale? locale) {
     if (locale?.languageCode == 'zh') {
-      final traditional =
-          locale?.scriptCode == 'Hant' ||
-          ['TW', 'HK', 'MO'].contains(locale?.countryCode);
+      if (locale?.scriptCode == 'Hans') return supportedLocales[0];
+      if (locale?.scriptCode == 'Hant') return supportedLocales[1];
+      final traditional = ['TW', 'HK', 'MO'].contains(locale?.countryCode);
       return supportedLocales[traditional ? 1 : 0];
     }
     return locale?.languageCode == 'ja'
         ? supportedLocales[2]
         : supportedLocales[3];
+  }
+
+  static Locale resolveLocales(Iterable<Locale>? locales) {
+    for (final locale in locales ?? const <Locale>[]) {
+      if (['zh', 'ja', 'en'].contains(locale.languageCode)) {
+        return resolve(locale);
+      }
+    }
+    return resolve(null);
   }
 
   static (RegExp, String, List<String>) _pattern(String source, String target) {

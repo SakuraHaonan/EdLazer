@@ -20,10 +20,17 @@ double _bezier(double x, double x1, double y1, double x2, double y2) {
 double _emp(double x) => x < .5
     ? _bezier(x * 2, .2, .4, .58, 1)
     : 1 - _bezier((x - .5) * 2, .3, 0, .58, 1);
-double _sample32(double x, double Function(double) f) {
+final List<double> _emphasisSamples = List<double>.unmodifiable([
+  for (var i = 0; i <= 32; i++) _emp(i / 32),
+]);
+final List<double> _floatSamples = List<double>.unmodifiable([
+  for (var i = 0; i <= 32; i++) math.sin(i / 32 * math.pi),
+]);
+
+double _sample32(double x, List<double> samples) {
   final frame = x.clamp(0.0, 1.0) * 32;
   final lower = frame.floor().clamp(0, 32), upper = (lower + 1).clamp(0, 32);
-  return f(lower / 32) + (f(upper / 32) - f(lower / 32)) * (frame - lower);
+  return samples[lower] + (samples[upper] - samples[lower]) * (frame - lower);
 }
 
 class LyricWordMotion {
@@ -74,10 +81,10 @@ class LyricWordMotion {
     amount = math.min(1.2, amount);
     blur = math.min(.8, blur);
     final delay = du / 2.5 / math.max(1, count) * index;
-    final emp = _sample32((elapsedMs - delay) / du, _emp);
+    final emp = _sample32((elapsedMs - delay) / du, _emphasisSamples);
     final float = _sample32(
       (elapsedMs - delay + 400) / (du * 1.4),
-      (x) => math.sin(x * math.pi),
+      _floatSamples,
     );
     return LyricWordMotion(
       scale: 1 + emp * .1 * amount,

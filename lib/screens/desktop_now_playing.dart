@@ -383,15 +383,7 @@ class _DesktopDock extends StatelessWidget {
             ),
             Row(
               children: [
-                Expanded(
-                  flex: 2,
-                  child: TrText(
-                    '播放队列 · ${state.queue.length} 首',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.type.captionMuted,
-                  ),
-                ),
+                const Spacer(flex: 2),
                 Expanded(
                   flex: 3,
                   child: FittedBox(

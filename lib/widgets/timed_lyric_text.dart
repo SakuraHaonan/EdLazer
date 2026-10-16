@@ -74,17 +74,21 @@ class _TimedLyricTextState extends State<TimedLyricText> {
 
 class _Segment {
   const _Segment(
-    this.word,
-    this.wordIndex,
     this.character,
     this.count,
     this.rect,
-    this.wordRects,
+    this.wordLeft,
+    this.consumed,
+    this.totalWidth,
+    this.startMs,
+    this.durationMs,
+    this.emphasized,
+    this.last,
   );
-  final LyricWord word;
-  final int wordIndex, character, count;
+  final int character, count;
   final Rect rect;
-  final List<Rect> wordRects;
+  final double wordLeft, consumed, totalWidth, startMs, durationMs;
+  final bool emphasized, last;
 }
 
 class _WordLayout {
@@ -125,15 +129,51 @@ class _WordLayout {
           )
           .map((box) => box.toRect())
           .toList();
+      final totalWidth = rects.fold<double>(0, (sum, rect) => sum + rect.width);
       final chars = word.text.characters.toList();
+      final trimmedLength = word.text.trim().characters.length;
+      final emphasized =
+          word.duration >= const Duration(milliseconds: 1000) &&
+          (_WordPainter.cjk.hasMatch(word.text) ||
+              trimmedLength > 1 && trimmedLength <= 7);
       for (var ci = 0; ci < chars.length; ci++) {
         final end = offset + chars[ci].length;
         for (final box in bright.getBoxesForSelection(
           TextSelection(baseOffset: offset, extentOffset: end),
         )) {
           if (box.right > box.left) {
+            final rect = box.toRect();
+            final glyphClip = Rect.fromLTRB(
+              rect.left,
+              rect.top - fontSize * .15,
+              rect.right,
+              rect.bottom + fontSize * .15,
+            );
+            baseClip.addRect(glyphClip);
+            var consumed = 0.0;
+            var wordLeft = rect.left;
+            for (final part in rects) {
+              if ((part.top - rect.top).abs() < 1 &&
+                  rect.left >= part.left - 1 &&
+                  rect.right <= part.right + 1) {
+                wordLeft = part.left;
+                break;
+              }
+              consumed += part.width;
+            }
             segments.add(
-              _Segment(word, wi, ci, chars.length, box.toRect(), rects),
+              _Segment(
+                ci,
+                chars.length,
+                rect,
+                wordLeft,
+                consumed,
+                totalWidth,
+                word.start.inMicroseconds / 1000,
+                word.duration.inMicroseconds / 1000,
+                emphasized,
+                wi == line.words.length - 1,
+              ),
             );
           }
         }
@@ -145,6 +185,7 @@ class _WordLayout {
   late final TextPainter bright, dim;
   late final double fontSize;
   final List<_Segment> segments = [];
+  final Path baseClip = Path();
   void dispose() {
     bright.dispose();
     dim.dispose();
@@ -161,7 +202,7 @@ class _WordPainter extends CustomPainter {
   final _WordLayout layout;
   final Duration Function() position;
   final double Function() emphasis;
-  static final _cjk = RegExp(r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]');
+  static final cjk = RegExp(r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]');
   @override
   void paint(Canvas canvas, Size size) {
     final focus = emphasis().clamp(0.0, 1.0);
@@ -181,41 +222,29 @@ class _WordPainter extends CustomPainter {
       Paint()..color = Colors.white.withValues(alpha: focus),
     );
     final now = position().inMicroseconds / 1000;
+    // Each clipped glyph used to repaint the entire dim lyric line. Paint the
+    // same base once, then retain the existing per-glyph highlight effects.
+    canvas.save();
+    canvas.clipPath(layout.baseClip);
+    layout.dim.paint(canvas, Offset.zero);
+    canvas.restore();
     for (final segment in layout.segments) {
-      final word = segment.word;
-      final elapsed = now - word.start.inMicroseconds / 1000;
-      final duration = word.duration.inMicroseconds / 1000;
-      final emphasize =
-          duration >= 1000 &&
-          (_cjk.hasMatch(word.text) ||
-              word.text.trim().characters.length > 1 &&
-                  word.text.trim().characters.length <= 7);
-      final motion = emphasize
+      final elapsed = now - segment.startMs;
+      final duration = segment.durationMs;
+      final motion = segment.emphasized
           ? LyricWordMotion.emphasized(
               elapsed,
               duration,
               segment.character,
               segment.count,
-              last: segment.wordIndex == layout.line.words.length - 1,
+              last: segment.last,
             )
           : LyricWordMotion.ordinary(elapsed, duration);
       final rect = segment.rect;
-      var consumed = 0.0;
-      var wordLeft = rect.left;
-      for (final part in segment.wordRects) {
-        if ((part.top - rect.top).abs() < 1 &&
-            rect.left >= part.left - 1 &&
-            rect.right <= part.right + 1) {
-          wordLeft = part.left;
-          break;
-        }
-        consumed += part.width;
-      }
-      final total = segment.wordRects.fold(0.0, (sum, box) => sum + box.width);
       final boundary =
-          wordLeft +
-          LyricWordMotion.maskBoundary(elapsed, duration, total) -
-          consumed;
+          segment.wordLeft +
+          LyricWordMotion.maskBoundary(elapsed, duration, segment.totalWidth) -
+          segment.consumed;
       final fade = math.max(1.0, rect.height * .5);
       canvas.save();
       canvas.translate(
@@ -232,7 +261,6 @@ class _WordPainter extends CustomPainter {
         rect.bottom + layout.fontSize * .15,
       );
       canvas.clipRect(clip);
-      layout.dim.paint(canvas, Offset.zero);
       if (boundary + fade / 2 >= rect.left) {
         canvas.saveLayer(clip, Paint());
         if (motion.glow > .001) {

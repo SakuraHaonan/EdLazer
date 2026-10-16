@@ -23,6 +23,7 @@ class LyricSpring {
       target = position,
       _params = params ?? const LyricSpringParams() {
     _solver = (_) => target;
+    _arrived = true;
   }
   double value;
   double target;
@@ -30,21 +31,19 @@ class LyricSpring {
   LyricSpringParams _params;
   late double Function(double) _solver;
   (double time, double position)? _queued;
+  bool _arrived = false;
 
   double _velocity(double time) =>
       (_solver(time + 0.001) - _solver(time - 0.001)) / 0.002;
   double _acceleration(double time) =>
       (_velocity(time + 0.001) - _velocity(time - 0.001)) / 0.002;
-  bool get arrived =>
-      (target - value).abs() < 0.01 &&
-      _velocity(_time).abs() < 0.01 &&
-      _acceleration(_time).abs() < 0.01 &&
-      _queued == null;
+  bool get arrived => _arrived;
 
   void _resetSolver() {
     final velocity = _velocity(_time);
     _time = 0;
     _solver = solveLyricSpring(value, velocity, target, _params);
+    _arrived = false;
   }
 
   void setParameters(LyricSpringParams params) {
@@ -58,6 +57,7 @@ class LyricSpring {
     value = position;
     _queued = null;
     _solver = (_) => target;
+    _arrived = true;
   }
 
   void setTarget(double position, {double delay = 0}) {
@@ -67,6 +67,7 @@ class LyricSpring {
     }
     if (delay > 0) {
       _queued = (delay, position);
+      _arrived = false;
     } else {
       _queued = null;
       target = position;
@@ -83,7 +84,12 @@ class LyricSpring {
       _queued = (remaining, queued.$2);
       if (remaining <= 0) setTarget(queued.$2);
     }
-    if (arrived) setPosition(target);
+    _arrived =
+        (target - value).abs() < 0.01 &&
+        _velocity(_time).abs() < 0.01 &&
+        _acceleration(_time).abs() < 0.01 &&
+        _queued == null;
+    if (_arrived) setPosition(target);
   }
 }
 

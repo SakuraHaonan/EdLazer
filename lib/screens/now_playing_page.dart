@@ -12,8 +12,7 @@ import 'dart:async';
 import '../widgets/catalog_links.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart'
-    show CupertinoFullscreenDialogTransition;
+import '../navigation/pull_down_page_route.dart';
 
 import '../widgets/lyric_viewport.dart';
 import '../data/models.dart';
@@ -23,66 +22,10 @@ import '../theme/paper_widgets.dart';
 import '../widgets/animated_notice.dart';
 import '../utils/cover_save.dart';
 
-/// A full-height sheet on every platform; Android keeps predictive back.
-class NowPlayingRoute extends MaterialPageRoute<void> {
+/// A full-height player with an interactive top-edge return gesture.
+class NowPlayingRoute extends PullDownPageRoute<void> {
   NowPlayingRoute({required AppState state})
     : super(builder: (_) => NowPlayingPage(state: state));
-
-  @override
-  bool canTransitionFrom(TransitionRoute<dynamic> previousRoute) => false;
-
-  @override
-  Duration get transitionDuration => const Duration(milliseconds: 420);
-  @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 340);
-
-  @override
-  Widget buildTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    final platform = Theme.of(context).platform;
-    if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
-      return CupertinoFullscreenDialogTransition(
-        primaryRouteAnimation: animation,
-        secondaryRouteAnimation: secondaryAnimation,
-        linearTransition: popGestureInProgress,
-        child: child,
-      );
-    }
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, _) {
-        final progress =
-            (animation.status == AnimationStatus.reverse
-                    ? Curves.easeInCubic
-                    : Curves.easeOutCubic)
-                .transform(animation.value);
-        final page = SlideTransition(
-          key: const ValueKey('now-playing-page-transition'),
-          position: AlwaysStoppedAnimation(
-            popGestureInProgress ? Offset.zero : Offset(0, 1 - progress),
-          ),
-          child: child,
-        );
-        if (platform == TargetPlatform.android) {
-          return const PredictiveBackFullscreenPageTransitionsBuilder()
-              .buildTransitions(
-                this,
-                context,
-                popGestureInProgress
-                    ? animation
-                    : const AlwaysStoppedAnimation(1),
-                secondaryAnimation,
-                page,
-              );
-        }
-        return page;
-      },
-    );
-  }
 }
 
 /// Shared queue entry from the player header and desktop transport.

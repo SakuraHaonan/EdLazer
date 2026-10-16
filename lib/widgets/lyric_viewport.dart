@@ -818,7 +818,9 @@ class _LyricViewportState extends State<LyricViewport>
                                         sigmaX: _sigma(i),
                                         sigmaY: _sigma(i),
                                       ),
-                                      child: _rows[i],
+                                      child: _lines[i].words.isEmpty
+                                          ? RepaintBoundary(child: _rows[i])
+                                          : _rows[i],
                                     ),
                                   ),
                                 ),

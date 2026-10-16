@@ -146,7 +146,7 @@ class _LazerAppState extends State<LazerApp> {
           GlobalCupertinoLocalizations.delegate,
         ],
         localeListResolutionCallback: (locales, _) =>
-            AppLocalizations.resolve(locales?.firstOrNull),
+            AppLocalizations.resolveLocales(locales),
         scrollBehavior: AppScrollBehavior(
           retention: _state.scrollRetention,
           acceleration: _state.scrollAcceleration,
