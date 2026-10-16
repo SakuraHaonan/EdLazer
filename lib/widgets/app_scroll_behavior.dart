@@ -6,13 +6,18 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import '../scrolling/scroll_motion.dart';
 
-/// One retention value controls both touch flings and mouse-wheel momentum.
+/// Shared momentum and acceleration for touch flings and mouse wheels.
 class AppScrollBehavior extends MaterialScrollBehavior {
-  const AppScrollBehavior({this.retention = ScrollMotion.defaultRetention});
+  const AppScrollBehavior({
+    this.retention = ScrollMotion.defaultRetention,
+    this.acceleration = ScrollMotion.defaultAcceleration,
+  });
   final double retention;
+  final double acceleration;
   @override
   bool shouldNotify(covariant AppScrollBehavior oldDelegate) =>
-      oldDelegate.retention != retention;
+      oldDelegate.retention != retention ||
+      oldDelegate.acceleration != acceleration;
   @override
   Widget buildScrollbar(
     BuildContext context,
@@ -24,21 +29,37 @@ class AppScrollBehavior extends MaterialScrollBehavior {
     BuildContext context,
     Widget child,
     ScrollableDetails details,
-  ) => _WheelMomentum(details: details, retention: retention, child: child);
+  ) => _WheelMomentum(
+    details: details,
+    retention: retention,
+    acceleration: acceleration,
+    child: child,
+  );
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) =>
-      InertiaScrollPhysics(retention: retention);
+      InertiaScrollPhysics(retention: retention, acceleration: acceleration);
 }
 
 class InertiaScrollPhysics extends ClampingScrollPhysics {
-  const InertiaScrollPhysics({required this.retention, super.parent});
+  const InertiaScrollPhysics({
+    required this.retention,
+    this.acceleration = ScrollMotion.defaultAcceleration,
+    super.parent,
+  });
   final double retention;
+  final double acceleration;
   @override
-  InertiaScrollPhysics applyTo(ScrollPhysics? ancestor) =>
-      InertiaScrollPhysics(retention: retention, parent: buildParent(ancestor));
+  InertiaScrollPhysics applyTo(ScrollPhysics? ancestor) => InertiaScrollPhysics(
+    retention: retention,
+    acceleration: acceleration,
+    parent: buildParent(ancestor),
+  );
   @override
   double carriedMomentum(double existingVelocity) =>
-      ScrollMotion.carriedVelocity(existingVelocity);
+      ScrollMotion.carriedVelocity(
+        existingVelocity,
+        acceleration: acceleration,
+      );
   @override
   Simulation? createBallisticSimulation(
     ScrollMetrics position,
@@ -66,10 +87,12 @@ class _WheelMomentum extends StatefulWidget {
   const _WheelMomentum({
     required this.details,
     required this.retention,
+    required this.acceleration,
     required this.child,
   });
   final ScrollableDetails details;
   final double retention;
+  final double acceleration;
   final Widget child;
   @override
   State<_WheelMomentum> createState() => _WheelMomentumState();
@@ -144,7 +167,11 @@ class _WheelMomentumState extends State<_WheelMomentum>
       }
       final consumed = position.pixels - before;
       position.jumpTo(before);
-      _velocity = ScrollMotion.addWheelImpulse(_velocity, consumed);
+      _velocity = ScrollMotion.addWheelImpulse(
+        _velocity,
+        consumed,
+        acceleration: widget.acceleration,
+      );
       if (!_ticker.isActive) {
         _last = Duration.zero;
         _ticker.start();

@@ -147,7 +147,10 @@ class _LazerAppState extends State<LazerApp> {
         ],
         localeListResolutionCallback: (locales, _) =>
             AppLocalizations.resolve(locales?.firstOrNull),
-        scrollBehavior: AppScrollBehavior(retention: _state.scrollRetention),
+        scrollBehavior: AppScrollBehavior(
+          retention: _state.scrollRetention,
+          acceleration: _state.scrollAcceleration,
+        ),
         builder: (context, child) => WindowFrame(child: child!),
         // Structural rebuilds only: `setState` fires on sign-in/out, never on
         // the 100 ms position ticks (leaf transport widgets consume those).

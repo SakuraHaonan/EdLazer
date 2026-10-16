@@ -256,5 +256,8 @@
   "半粗": "Semibold",
   "粗体": "Bold",
   "歌词样式预览": "Lyric style preview",
-  "让音乐陪你慢慢走": "Let the music walk with you"
+  "让音乐陪你慢慢走": "Let the music walk with you",
+  "滚动加速度": "Scroll acceleration",
+  "滚动加速度 · {percent}%": "Scroll acceleration · {percent}%",
+  "50–300%；数值越高，滚轮和连续甩动提速越明显。": "50–300%; higher values increase acceleration from the wheel and repeated flings."
 }

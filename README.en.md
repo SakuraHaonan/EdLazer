@@ -18,7 +18,7 @@ playlists come from the service.
 - Popular and latest comments with pagination, likes and unlikes; guests can read and sign in to react.
 - System media controls on Android, iOS, Windows, macOS and Linux.
 - Simplified Chinese, Traditional Chinese, Japanese and English interfaces.
-- Accumulating scroll momentum, lyric blur, 5ms follow checks and smooth line transitions.
+- Adjustable scroll acceleration and momentum, lyric blur, 5ms follow checks and smooth line transitions.
 - Haptics on controls and seek detents, with adjustable intensity on iOS.
 - A mobile Favorites shortcut, with automatic caching of audio, artwork, lyrics and playlists.
 

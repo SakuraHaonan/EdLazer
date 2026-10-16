@@ -462,7 +462,11 @@ class _LyricViewportState extends State<LyricViewport>
     }
     GestureBinding.instance.pointerSignalResolver.register(event, (_) {
       _beginManual(stopMomentum: false);
-      _velocity = ScrollMotion.addWheelImpulse(_velocity, event.scrollDelta.dy);
+      _velocity = ScrollMotion.addWheelImpulse(
+        _velocity,
+        event.scrollDelta.dy,
+        acceleration: widget.state.scrollAcceleration,
+      );
       _start();
       _scheduleResume();
     });
@@ -769,7 +773,10 @@ class _LyricViewportState extends State<LyricViewport>
                     _velocity =
                         released +
                         (released.sign == _dragCarry.sign
-                            ? ScrollMotion.carriedVelocity(_dragCarry)
+                            ? ScrollMotion.carriedVelocity(
+                                _dragCarry,
+                                acceleration: widget.state.scrollAcceleration,
+                              )
                             : 0);
                     _dragCarry = 0;
                     _start();

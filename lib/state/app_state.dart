@@ -204,6 +204,21 @@ class AppState extends ChangeNotifier {
   }
 
   double scrollRetention = ScrollMotion.defaultRetention;
+  double scrollAcceleration = ScrollMotion.defaultAcceleration;
+
+  Future<void> setScrollAcceleration(double value) async {
+    if (!value.isFinite) return;
+    scrollAcceleration = value.clamp(
+      ScrollMotion.minAcceleration,
+      ScrollMotion.maxAcceleration,
+    );
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setDouble(
+      'lazer_scroll_acceleration',
+      scrollAcceleration,
+    );
+  }
+
   double lyricResumeSeconds = 2;
 
   Future<void> setLyricBlurEnabled(bool value) async {
@@ -357,6 +372,13 @@ class AppState extends ChangeNotifier {
           (prefs.getDouble('lazer_scroll_retention') ??
                   ScrollMotion.defaultRetention)
               .clamp(ScrollMotion.minRetention, ScrollMotion.maxRetention);
+      scrollAcceleration =
+          (prefs.getDouble('lazer_scroll_acceleration') ??
+                  ScrollMotion.defaultAcceleration)
+              .clamp(
+                ScrollMotion.minAcceleration,
+                ScrollMotion.maxAcceleration,
+              );
       lyricResumeSeconds = (prefs.getDouble('lazer_lyric_resume_seconds') ?? 2)
           .clamp(1, 10);
     } catch (_) {}

@@ -3,6 +3,7 @@ import '../l10n/app_localizations.dart';
 import '../l10n/app_language.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/scroll_inertia_setting.dart';
+import '../widgets/scroll_acceleration_setting.dart';
 import '../widgets/lyric_typography_setting.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/square_switch_list_tile.dart';
@@ -1836,6 +1837,7 @@ class _SettingsView extends StatelessWidget {
           onChanged: (value) => unawaited(state.setLyricBlurEnabled(value)),
         ),
         ScrollInertiaSetting(state: state),
+        ScrollAccelerationSetting(state: state),
         TrText(
           '手动浏览后恢复跟随 · ${state.lyricResumeSeconds.toStringAsFixed(1)} 秒',
           style: context.type.bodySm,
