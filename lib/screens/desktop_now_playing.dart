@@ -79,12 +79,6 @@ class DesktopNowPlaying extends StatelessWidget {
                 onPressed: () => onPaneChanged(DesktopNowPlayingPane.queue),
               ),
             ),
-            const SizedBox(width: 16),
-            AccessibleIconButton(
-              tooltip: '保存封面',
-              onPressed: track.coverUrl == null ? null : onSaveArtwork,
-              icon: const Icon(Icons.save_alt_rounded, size: 21),
-            ),
           ],
         ),
       ),
