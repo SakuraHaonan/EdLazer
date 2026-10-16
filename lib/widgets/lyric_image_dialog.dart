@@ -10,22 +10,53 @@ import '../data/lyrics.dart';
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_palette.dart';
-import '../theme/paper_widgets.dart';
 import '../utils/artwork.dart';
 import '../utils/cover_save.dart';
 import 'accessible_controls.dart';
 import 'artwork_image.dart';
+import 'interaction_feedback.dart';
 import 'plate_art.dart';
 
 Future<void> showLyricImageDialog(
   BuildContext context, {
   required Track track,
   required List<LyricLine> lines,
-}) => showDialog<void>(
-  context: context,
-  builder: (_) =>
-      LyricImageDialog(track: track, lines: List.unmodifiable(lines)),
-);
+}) {
+  final themes = InheritedTheme.capture(
+    from: context,
+    to: Navigator.of(context, rootNavigator: true).context,
+  );
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: context.tr('关闭'),
+    barrierColor: Colors.black.withValues(alpha: context.colors.dark ? .6 : .3),
+    transitionDuration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 300),
+    pageBuilder: (_, _, _) => themes.wrap(
+      SafeArea(
+        child: LyricImageDialog(track: track, lines: List.unmodifiable(lines)),
+      ),
+    ),
+    transitionBuilder: (_, animation, _, child) {
+      final eased = animation.drive(CurveTween(curve: Curves.easeOutCubic));
+      return FadeTransition(
+        opacity: eased,
+        child: SlideTransition(
+          position: Tween(
+            begin: const Offset(0, .035),
+            end: Offset.zero,
+          ).animate(eased),
+          child: ScaleTransition(
+            scale: Tween(begin: .96, end: 1.0).animate(eased),
+            child: child,
+          ),
+        ),
+      );
+    },
+  );
+}
 
 /// The preview itself is captured, so exported text wrapping matches exactly.
 Future<Uint8List> captureLyricImage(RenderRepaintBoundary boundary) async {
@@ -59,11 +90,17 @@ class LyricImageDialog extends StatefulWidget {
 
 class _LyricImageDialogState extends State<LyricImageDialog> {
   final _imageKey = GlobalKey();
+  final _previewScroll = ScrollController();
   ImageProvider? _artwork;
   bool _loading = true;
   bool _saving = false;
+  bool _saved = false;
   bool _started = false;
   String? _error;
+
+  Duration get _motion => MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : const Duration(milliseconds: 240);
 
   @override
   void didChangeDependencies() {
@@ -91,6 +128,7 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
     if (_saving || _loading) return;
     setState(() {
       _saving = true;
+      _saved = false;
       _error = null;
     });
     try {
@@ -105,11 +143,7 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
         bytes,
         '${widget.track.title} - lyrics',
       );
-      if (mounted && saved) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: TrText('歌词图片已保存')));
-      }
+      if (mounted && saved) setState(() => _saved = true);
     } catch (_) {
       if (mounted) setState(() => _error = '保存失败，请检查相册权限或稍后重试。');
     } finally {
@@ -117,70 +151,391 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
     }
   }
 
+  Widget _preview() => AnimatedSwitcher(
+    duration: _motion,
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    transitionBuilder: (child, animation) => FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween(
+          begin: const Offset(0, .025),
+          end: Offset.zero,
+        ).animate(animation),
+        child: child,
+      ),
+    ),
+    layoutBuilder: (current, previous) => Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final old in previous)
+          ExcludeSemantics(child: IgnorePointer(child: old)),
+        ?current,
+      ],
+    ),
+    child: _loading
+        ? Center(
+            key: const ValueKey('lyric-image-loading'),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.image_outlined,
+                    size: 40,
+                    color: context.colors.cloudMedium,
+                  ),
+                  const SizedBox(height: 20),
+                  const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(height: 12),
+                  TrText('正在加载封面…', style: context.type.captionMuted),
+                ],
+              ),
+            ),
+          )
+        : Scrollbar(
+            key: const ValueKey('lyric-image-preview'),
+            controller: _previewScroll,
+            thumbVisibility: true,
+            thickness: 3,
+            radius: Radius.zero,
+            child: SingleChildScrollView(
+              controller: _previewScroll,
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topCenter,
+                  child: RepaintBoundary(
+                    key: _imageKey,
+                    child: LyricImageCard(
+                      track: widget.track,
+                      lines: widget.lines,
+                      artwork: _artwork,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+  );
+
+  Widget _status() => AnimatedSwitcher(
+    duration: _motion,
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    transitionBuilder: (child, animation) => SizeTransition(
+      sizeFactor: animation,
+      alignment: Alignment.topCenter,
+      child: FadeTransition(opacity: animation, child: child),
+    ),
+    child: _error == null && !_saved
+        ? const SizedBox.shrink(key: ValueKey('lyric-image-status-empty'))
+        : Padding(
+            key: ValueKey(_error ?? 'saved'),
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Semantics(
+              liveRegion: true,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _error == null
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.error_outline_rounded,
+                    size: 18,
+                    color: context.colors.clayDeep,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TrText(
+                      _error ?? '歌词图片已保存',
+                      style: context.type.caption.copyWith(
+                        color: context.colors.clayDeep,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+  );
+
+  Widget _header() => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
+    child: Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          color: context.colors.clay.withValues(alpha: .12),
+          child: Icon(
+            Icons.image_outlined,
+            size: 22,
+            color: context.colors.clayDeep,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TrText(
+                '生成歌词图片',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.subheading.copyWith(
+                  fontSize: 20,
+                  height: 1.25,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.track.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.captionMuted,
+              ),
+            ],
+          ),
+        ),
+        AccessibleIconButton(
+          tooltip: '关闭',
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          style: IconButton.styleFrom(
+            shape: const RoundedRectangleBorder(),
+            foregroundColor: context.colors.cloudDark,
+          ),
+          icon: const Icon(Icons.close_rounded, size: 20),
+        ),
+      ],
+    ),
+  );
+
+  Widget _footer() {
+    final back = TextButton(
+      onPressed: _saving
+          ? null
+          : feedbackAction(context, () => Navigator.pop(context)),
+      style: TextButton.styleFrom(
+        shape: const RoundedRectangleBorder(),
+        foregroundColor: context.colors.cloudDark,
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        enableFeedback: false,
+      ),
+      child: const TrText('返回选择', maxLines: 1, overflow: TextOverflow.ellipsis),
+    );
+    final save = _SaveImageButton(
+      saving: _saving,
+      saved: _saved,
+      onPressed: _loading || _saving ? null : () => unawaited(_save()),
+    );
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _status(),
+          if (MediaQuery.textScalerOf(context).scale(14) > 20)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [save, const SizedBox(height: 8), back],
+            )
+          else
+            Row(
+              children: [
+                back,
+                const SizedBox(width: 12),
+                Expanded(child: save),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_saving,
     child: Dialog(
-      backgroundColor: context.colors.ivoryMedium,
+      backgroundColor: context.colors.ivoryLight,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: context.borders.hairline,
+      ),
+      clipBehavior: Clip.antiAlias,
       insetPadding: const EdgeInsets.all(12),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 480,
-          maxHeight: MediaQuery.sizeOf(context).height - 48,
+      child: SizedBox(
+        width: 520,
+        height: math.min(
+          780,
+          math.max(
+            0,
+            MediaQuery.sizeOf(context).height -
+                MediaQuery.paddingOf(context).vertical -
+                24,
+          ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TrText('生成歌词图片', style: context.type.subheading),
-                  ),
-                  AccessibleIconButton(
-                    tooltip: '关闭',
-                    onPressed: _saving ? null : () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(48),
-                        child: CircularProgressIndicator(),
-                      )
-                    : SingleChildScrollView(
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.topCenter,
-                            child: RepaintBoundary(
-                              key: _imageKey,
-                              child: LyricImageCard(
-                                track: widget.track,
-                                lines: widget.lines,
-                                artwork: _artwork,
-                              ),
-                            ),
+        child: Column(
+          children: [
+            _header(),
+            Divider(height: 1, color: context.colors.stone),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          TrText('图片预览', style: context.type.captionStrong),
+                          TrText(
+                            '已选择 ${widget.lines.length} 行',
+                            style: context.type.captionMuted,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: context.colors.ivoryMedium,
+                          border: Border.fromBorderSide(
+                            context.borders.hairline,
+                          ),
+                        ),
+                        child: ClipRect(
+                          child: ShaderMask(
+                            blendMode: BlendMode.dstIn,
+                            shaderCallback: (bounds) {
+                              final fade = math.min(
+                                .12,
+                                12 / math.max(1, bounds.height),
+                              );
+                              return LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: const [
+                                  Colors.transparent,
+                                  Colors.black,
+                                  Colors.black,
+                                  Colors.transparent,
+                                ],
+                                stops: [0, fade, 1 - fade, 1],
+                              ).createShader(bounds);
+                            },
+                            child: _preview(),
                           ),
                         ),
                       ),
-              ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: TrText(_error!, style: context.type.captionMuted),
+                    ),
+                  ],
                 ),
-              const SizedBox(height: 12),
-              ClayButton(
-                label: _saving ? '正在保存…' : '保存图片',
-                onPressed: _loading || _saving
-                    ? null
-                    : () => unawaited(_save()),
+              ),
+            ),
+            Divider(height: 1, color: context.colors.stone),
+            _footer(),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  @override
+  void dispose() {
+    _previewScroll.dispose();
+    super.dispose();
+  }
+}
+
+class _SaveImageButton extends StatefulWidget {
+  const _SaveImageButton({
+    required this.saving,
+    required this.saved,
+    required this.onPressed,
+  });
+  final bool saving, saved;
+  final VoidCallback? onPressed;
+  @override
+  State<_SaveImageButton> createState() => _SaveImageButtonState();
+}
+
+class _SaveImageButtonState extends State<_SaveImageButton> {
+  bool _pressed = false;
+
+  void _press(bool value) {
+    if (mounted && _pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: widget.onPressed == null ? null : (_) => _press(true),
+    onPointerUp: (_) => _press(false),
+    onPointerCancel: (_) => _press(false),
+    child: AnimatedScale(
+      scale: _pressed ? .97 : 1,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+      child: FilledButton(
+        onPressed: feedbackAction(context, widget.onPressed),
+        style: FilledButton.styleFrom(
+          shape: const RoundedRectangleBorder(),
+          backgroundColor: widget.saved
+              ? context.colors.slateDark
+              : context.colors.clay,
+          foregroundColor: widget.saved ? context.colors.onInk : Colors.white,
+          disabledBackgroundColor: context.colors.oatWarm,
+          disabledForegroundColor: context.colors.cloudDark,
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          enableFeedback: false,
+        ),
+        child: AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: Row(
+            key: ValueKey((widget.saving, widget.saved)),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              widget.saving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      widget.saved
+                          ? Icons.check_rounded
+                          : Icons.save_alt_rounded,
+                      size: 18,
+                    ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: TrText(
+                  widget.saving
+                      ? '正在保存…'
+                      : widget.saved
+                      ? '再次保存'
+                      : '保存图片',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

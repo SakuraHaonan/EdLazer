@@ -140,6 +140,141 @@ void main() {
   );
 
   testWidgets(
+    'lyric background taps preserve selection, line seeking and playback controls',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final catalog = _Catalog();
+      final state = AppState(catalog: catalog)..lyricControlsSeconds = 10;
+      addTearDown(state.dispose);
+      state.playQueue([catalog.tracks.first]);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(),
+          home: NowPlayingPage(state: state),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('歌词'));
+      await tester.pumpAndSettle();
+
+      state.seek(.1);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Line 6'));
+      await tester.pumpAndSettle();
+      expect(state.position, const Duration(seconds: 12));
+      expect(find.byType(LyricViewport), findsOneWidget);
+      await tester.tap(find.byTooltip('随机播放'));
+      await tester.pumpAndSettle();
+      expect(state.shuffle, true);
+      expect(find.byType(LyricViewport), findsOneWidget);
+
+      await tester.longPress(find.text('Line 6'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LyricSelectionToolbar), findsOneWidget);
+      await tester.tapAt(const Offset(8, 400));
+      await tester.pumpAndSettle();
+      expect(find.byType(LyricSelectionToolbar), findsOneWidget);
+      expect(find.byType(LyricViewport), findsOneWidget);
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await tester.tap(find.byTooltip('复制所选歌词'));
+      await tester.pump();
+      expect(copied, 'Line 6\n翻译 6');
+      expect(find.byType(LyricSelectionToolbar), findsOneWidget);
+      await tester.tap(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+
+      final beforeDrag = state.position;
+      await tester.drag(find.byType(LyricViewport), const Offset(0, -80));
+      await tester.pumpAndSettle();
+      expect(state.position, beforeDrag);
+      expect(find.byType(LyricViewport), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final size in [const Size(390, 844), const Size(640, 360)]) {
+    testWidgets(
+      'blank taps return full lyrics to half lyrics and then the cover at $size',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final catalog = _Catalog();
+        final state = AppState(catalog: catalog)..lyricControlsSeconds = 10;
+        addTearDown(state.dispose);
+        state.playQueue([catalog.tracks.first]);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildAppTheme(),
+            home: NowPlayingPage(state: state),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('歌词'));
+        await tester.pumpAndSettle();
+        AnimatedOpacity header() => tester.widget<AnimatedOpacity>(
+          find
+              .ancestor(
+                of: find.byTooltip('歌词'),
+                matching: find.byType(AnimatedOpacity),
+              )
+              .first,
+        );
+        final outerBlank = Offset(8, size.height / 2);
+        expect(header().opacity, 1);
+
+        // Half lyrics can return directly from padding outside the viewport.
+        await tester.tapAt(outerBlank);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('mobile-cover')), findsOneWidget);
+        expect(find.byType(LyricViewport), findsNothing);
+
+        await tester.tap(find.byTooltip('歌词'));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 11));
+        await tester.pumpAndSettle();
+        expect(header().opacity, 0);
+        final before = state.position;
+        final viewport = tester.getRect(find.byType(LyricViewport));
+        // The side gutter belongs to the viewport but to no lyric row.
+        await tester.tapAt(Offset(viewport.left + 2, viewport.top + 12));
+        await tester.pumpAndSettle();
+        expect(find.byType(LyricViewport), findsOneWidget);
+        expect(find.byKey(const ValueKey('mobile-cover')), findsNothing);
+        expect(header().opacity, 1);
+        expect(state.position, before);
+
+        await tester.tapAt(outerBlank);
+        await tester.pumpAndSettle();
+        expect(find.byType(LyricViewport), findsNothing);
+        expect(find.byKey(const ValueKey('mobile-cover')), findsOneWidget);
+        expect(find.byType(NowPlayingPage), findsOneWidget);
+        expect(state.position, before);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets(
     'long hold drag selects inline, back clears selection, and changing tracks clears picks',
     (tester) async {
       final catalog = _Catalog();

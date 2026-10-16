@@ -197,14 +197,20 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     _wakeControls();
   }
 
-  /// Mobile two-step lyric tap: reveal the transport, then fold the lyrics in.
-  bool _onLyricLineTap(int index, bool isCurrentLine) {
-    if (isCurrentLine) return false;
+  /// Return one step using the state before pointer-down revealed controls.
+  void _stepBackFromLyrics() {
+    if (!_lyricsMode || _selectionOpen) return;
     if (_controlsHiddenAtTouchDown) {
       _wakeControls();
-      return true;
+    } else {
+      _toggleLyrics();
     }
-    _toggleLyrics();
+  }
+
+  /// The current line keeps seeking; other lines follow the background action.
+  bool _onLyricLineTap(int index, bool isCurrentLine) {
+    if (isCurrentLine) return false;
+    _stepBackFromLyrics();
     return true;
   }
 
@@ -388,14 +394,19 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
               onPointerDown: (_) => _onTouchDown(),
               onPointerUp: (_) => _armHide(),
               onPointerCancel: (_) => _armHide(),
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    _header(compact),
-                    Expanded(
-                      child: compact ? _mobile(track) : _desktop(track, box),
-                    ),
-                  ],
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
+                onTap: compact && _lyricsMode ? _stepBackFromLyrics : null,
+                child: SafeArea(
+                  child: Column(
+                    children: [
+                      _header(compact),
+                      Expanded(
+                        child: compact ? _mobile(track) : _desktop(track, box),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );

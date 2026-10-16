@@ -31,10 +31,24 @@ class LyricSelectionToolbar extends StatelessWidget {
         children: [
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween(
+                    begin: const Offset(0, .2),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              ),
               child: TrText(
                 copied ? '已复制' : '已选择 $count 行',
-                key: ValueKey(copied),
+                key: ValueKey((copied, count)),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: context.type.captionStrong,
@@ -48,15 +62,31 @@ class LyricSelectionToolbar extends StatelessWidget {
           ),
           AccessibleIconButton(
             tooltip: '生成歌词图片',
+            color: context.colors.clayDeep,
             onPressed: onCreateImage,
             icon: const Icon(Icons.image_outlined, size: 21),
           ),
           AccessibleIconButton(
             tooltip: '复制所选歌词',
             onPressed: onCopy,
-            icon: Icon(
-              copied ? Icons.check_rounded : Icons.content_copy_rounded,
-              size: 20,
+            icon: AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween(begin: .75, end: 1.0).animate(animation),
+                  child: child,
+                ),
+              ),
+              child: Icon(
+                copied ? Icons.check_rounded : Icons.content_copy_rounded,
+                key: ValueKey(copied),
+                size: 20,
+              ),
             ),
           ),
           AccessibleIconButton(

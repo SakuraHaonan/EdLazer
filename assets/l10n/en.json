@@ -204,5 +204,9 @@
   "生成歌词图片": "Create lyric image",
   "保存图片": "Save image",
   "正在保存…": "Saving…",
-  "歌词图片已保存": "Lyric image saved"
+  "歌词图片已保存": "Lyric image saved",
+  "图片预览": "Image preview",
+  "正在加载封面…": "Loading artwork…",
+  "返回选择": "Back to selection",
+  "再次保存": "Save again"
 }
