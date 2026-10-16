@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/catalog_links.dart';
 
 import 'package:flutter/material.dart';
 
@@ -239,17 +240,17 @@ class _Presentation extends StatelessWidget {
           ),
         ),
       SizedBox(height: compact ? 8 : 12),
-      Text(
-        track.artist,
+      ArtistNameLink(
+        state: state,
+        artists: track.artists,
+        fallback: track.artist,
         maxLines: 2,
-        overflow: TextOverflow.ellipsis,
         style: context.type.body.copyWith(fontSize: compact ? 14 : 18),
       ),
       SizedBox(height: compact ? 4 : 6),
-      Text(
-        track.album,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      AlbumNameLink(
+        state: state,
+        track: track,
         style: context.type.bodySmMuted.copyWith(fontSize: compact ? 12 : 15),
       ),
       AnimatedNotice(message: state.likeError),

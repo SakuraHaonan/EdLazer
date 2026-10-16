@@ -179,6 +179,30 @@ class AppState extends ChangeNotifier {
 
   double lyricControlsSeconds = 2.5;
   bool lyricBlurEnabled = true;
+  double lyricFontSize = 22;
+  int lyricFontWeight = 600;
+  static int normalizeLyricWeight(int value) =>
+      (value.clamp(400, 700) / 100).round() * 100;
+
+  Future<void> setLyricFontSize(double value) async {
+    if (!value.isFinite) return;
+    lyricFontSize = value.clamp(14, 40);
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setDouble(
+      'lazer_lyric_font_size',
+      lyricFontSize,
+    );
+  }
+
+  Future<void> setLyricFontWeight(int value) async {
+    lyricFontWeight = normalizeLyricWeight(value);
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setInt(
+      'lazer_lyric_font_weight',
+      lyricFontWeight,
+    );
+  }
+
   double scrollRetention = ScrollMotion.defaultRetention;
   double lyricResumeSeconds = 2;
 
@@ -322,6 +346,13 @@ class AppState extends ChangeNotifier {
       lyricControlsSeconds =
           (prefs.getDouble('lazer_lyric_controls_seconds') ?? 2.5).clamp(1, 10);
       lyricBlurEnabled = prefs.getBool('lazer_lyric_blur') ?? true;
+      lyricFontSize = (prefs.getDouble('lazer_lyric_font_size') ?? 22).clamp(
+        14,
+        40,
+      );
+      lyricFontWeight = normalizeLyricWeight(
+        prefs.getInt('lazer_lyric_font_weight') ?? 600,
+      );
       scrollRetention =
           (prefs.getDouble('lazer_scroll_retention') ??
                   ScrollMotion.defaultRetention)
@@ -812,7 +843,9 @@ class AppState extends ChangeNotifier {
       _queue = _queue.map((entry) {
         if (entry.id != track.id ||
             (entry.coverUrl == song.coverUrl &&
-                entry.translatedTitle == song.translatedTitle)) {
+                entry.translatedTitle == song.translatedTitle &&
+                entry.albumId > 0 &&
+                entry.artists.isNotEmpty)) {
           return entry;
         }
         changed = true;
@@ -820,11 +853,14 @@ class AppState extends ChangeNotifier {
           id: entry.id,
           title: entry.title,
           artist: entry.artist,
+          artists: song.artistDetails.isNotEmpty
+              ? song.artistDetails.map(Catalog.artistFromGateway).toList()
+              : entry.artists,
           album: entry.album,
           duration: entry.duration,
           coverSeed: entry.coverSeed,
           accent: entry.accent,
-          albumId: entry.albumId,
+          albumId: song.albumId > 0 ? song.albumId : entry.albumId,
           coverUrl: song.coverUrl ?? entry.coverUrl,
           translatedTitle: song.translatedTitle ?? entry.translatedTitle,
         );
@@ -857,6 +893,7 @@ class AppState extends ChangeNotifier {
             id: id,
             title: item['title'] as String? ?? '',
             artist: item['artist'] as String? ?? '',
+            artists: ArtistRef.list(item['artists']),
             album: item['album'] as String? ?? '',
             duration: Duration(
               milliseconds: (item['durationMs'] as num?)?.toInt() ?? 0,
@@ -894,6 +931,9 @@ class AppState extends ChangeNotifier {
                 'title': track.title,
                 'translatedTitle': track.translatedTitle,
                 'artist': track.artist,
+                'artists': track.artists
+                    .map((artist) => artist.toJson())
+                    .toList(),
                 'album': track.album,
                 'albumId': track.albumId,
                 'durationMs': track.duration.inMilliseconds,

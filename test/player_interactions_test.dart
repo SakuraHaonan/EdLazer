@@ -19,6 +19,7 @@ import 'package:lazer_nextgen/theme/app_theme.dart';
 import 'package:lazer_nextgen/theme/design_tokens.dart';
 import 'package:lazer_nextgen/widgets/lyric_selection_toolbar.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
+import 'package:lazer_nextgen/widgets/lyric_text_hit_region.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _playlist = Playlist(
@@ -61,6 +62,37 @@ class _Catalog extends Catalog {
         '[00:${(i * 2).toString().padLeft(2, '0')}]翻译 $i',
     ].join('\n'),
   );
+}
+
+class _TimedCatalog extends _Catalog {
+  @override
+  Future<GatewayLyrics?> lyricsFor(Track track) async => GatewayLyrics(
+    yrc: [
+      for (var i = 0; i < 30; i++)
+        '[${i * 2000},2000](${i * 2000},2000,0)Line $i',
+    ].join('\n'),
+  );
+}
+
+Offset _lyricPoint(WidgetTester tester, String text) {
+  final finder = find.byWidgetPredicate(
+    (widget) => widget is LyricTextHitRegion && widget.text == text,
+  );
+  final widget = tester.widget<LyricTextHitRegion>(finder);
+  final box = tester.renderObject<RenderBox>(finder);
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: widget.style),
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(tester.element(finder)),
+  )..layout(maxWidth: box.size.width);
+  final rect = painter
+      .getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: text.length),
+      )
+      .first
+      .toRect();
+  painter.dispose();
+  return box.localToGlobal(Offset(rect.left + 4, rect.center.dy));
 }
 
 Future<void> _capture(WidgetTester tester, GlobalKey key, String name) async {
@@ -268,6 +300,74 @@ void main() {
         expect(find.byKey(const ValueKey('mobile-cover')), findsOneWidget);
         expect(find.byType(NowPlayingPage), findsOneWidget);
         expect(state.position, before);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  for (final timed in [false, true]) {
+    testWidgets(
+      'only lyric glyphs seek; blank row space wakes or folds lyrics (timed: $timed)',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final catalog = timed ? _TimedCatalog() : _Catalog();
+        final state = AppState(catalog: catalog)..lyricControlsSeconds = 10;
+        addTearDown(state.dispose);
+        state.playQueue([catalog.tracks.first]);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildAppTheme(),
+            home: NowPlayingPage(state: state),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('歌词'));
+        await tester.pumpAndSettle();
+        AnimatedOpacity header() => tester.widget<AnimatedOpacity>(
+          find
+              .ancestor(
+                of: find.byTooltip('歌词'),
+                matching: find.byType(AnimatedOpacity),
+              )
+              .first,
+        );
+        await tester.tapAt(_lyricPoint(tester, 'Line 1'));
+        await tester.pumpAndSettle();
+        expect(state.position, const Duration(seconds: 2));
+        expect(find.byType(LyricViewport), findsOneWidget);
+        expect(header().opacity, 1);
+        if (!timed) {
+          await tester.tapAt(_lyricPoint(tester, '翻译 2'));
+          await tester.pumpAndSettle();
+          expect(state.position, const Duration(seconds: 4));
+        }
+        await tester.pump(const Duration(seconds: 11));
+        await tester.pumpAndSettle();
+        expect(header().opacity, 0);
+        await tester.tapAt(_lyricPoint(tester, 'Line 3'));
+        await tester.pumpAndSettle();
+        expect(state.position, const Duration(seconds: 6));
+        expect(
+          header().opacity,
+          0,
+          reason: 'seeking a lyric must preserve full lyrics',
+        );
+        final glyph = _lyricPoint(tester, 'Line 3');
+        final viewport = tester.getRect(find.byType(LyricViewport));
+        await tester.tapAt(Offset(viewport.right - 25, glyph.dy));
+        await tester.pumpAndSettle();
+        expect(header().opacity, 1);
+        expect(state.position, const Duration(seconds: 6));
+        expect(find.byType(LyricViewport), findsOneWidget);
+        final nextGlyph = _lyricPoint(tester, 'Line 3');
+        await tester.tapAt(Offset(viewport.right - 25, nextGlyph.dy));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('mobile-cover')), findsOneWidget);
+        expect(find.byType(LyricViewport), findsNothing);
+        expect(state.position, const Duration(seconds: 6));
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },

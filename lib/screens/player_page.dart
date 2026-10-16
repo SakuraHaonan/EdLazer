@@ -3,6 +3,8 @@ import '../l10n/app_localizations.dart';
 import '../l10n/app_language.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/scroll_inertia_setting.dart';
+import '../widgets/lyric_typography_setting.dart';
+import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/haptic_seek_slider.dart';
 import '../widgets/volume_control.dart';
@@ -945,6 +947,7 @@ class _HomeView extends StatelessWidget {
           _stackedRows([
             for (int i = 0; i < quick.length; i++)
               TrackRow(
+                state: state,
                 track: quick[i],
                 index: i + 1,
                 isCurrent: state.current?.id == quick[i].id,
@@ -1190,8 +1193,9 @@ class _AlbumCard extends StatelessWidget {
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
-                onTap: () => unawaited(
-                  _playCollection(context, state.playAlbum(album.id)),
+                onTap: feedbackAction(
+                  context,
+                  () => unawaited(openAlbumDetails(context, state, album)),
                 ),
                 child: Stack(
                   fit: StackFit.expand,
@@ -1204,19 +1208,16 @@ class _AlbumCard extends StatelessWidget {
                     Positioned(
                       right: 10,
                       bottom: 10,
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: context.colors.slateDark,
-                          shape: BoxShape.circle,
+                      child: AccessibleIconButton(
+                        tooltip: '播放专辑',
+                        onPressed: () => unawaited(
+                          _playCollection(context, state.playAlbum(album.id)),
                         ),
-                        child: Icon(
-                          Icons.play_arrow_rounded,
-                          color: context.colors.onInk,
-                          size: 24,
+                        style: IconButton.styleFrom(
+                          backgroundColor: context.colors.slateDark,
+                          foregroundColor: context.colors.onInk,
                         ),
+                        icon: const Icon(Icons.play_arrow_rounded, size: 24),
                       ),
                     ),
                   ],
@@ -1226,16 +1227,15 @@ class _AlbumCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        Text(
-          album.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        CatalogTextLink(
+          text: album.title,
+          onTap: () => unawaited(openAlbumDetails(context, state, album)),
           style: context.type.body.copyWith(fontSize: 16, height: 1.3),
         ),
-        Text(
-          album.artist,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        ArtistNameLink(
+          state: state,
+          artists: album.artists,
+          fallback: album.artist,
           style: context.type.captionMuted,
         ),
       ],
@@ -1509,6 +1509,7 @@ class _SearchViewState extends State<_SearchView> {
             _stackedRows([
               for (int i = 0; i < tracks.length; i++)
                 TrackRow(
+                  state: widget.state,
                   track: tracks[i],
                   index: i + 1,
                   isCurrent: widget.state.current?.id == tracks[i].id,
@@ -1531,9 +1532,8 @@ class _SearchViewState extends State<_SearchView> {
                   coverSeed: a.coverSeed,
                   accent: a.accent,
                   coverUrl: a.coverUrl,
-                  onPlay: () => unawaited(
-                    _playCollection(context, widget.state.playAlbum(a.id)),
-                  ),
+                  onPlay: () =>
+                      unawaited(openAlbumDetails(context, widget.state, a)),
                 ),
             ], indent: 64),
           ],
@@ -1827,6 +1827,8 @@ class _SettingsView extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const SectionHeading('歌词与滚动'),
+        const SizedBox(height: 16),
+        LyricTypographySetting(state: state),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const TrText('歌词模糊'),
@@ -2279,12 +2281,14 @@ class _ActionRowState extends State<_ActionRow> {
 class TrackRow extends StatelessWidget {
   const TrackRow({
     super.key,
+    this.state,
     required this.track,
     required this.index,
     required this.isCurrent,
     required this.onPlay,
   });
 
+  final AppState? state;
   final Track track;
   final int index;
   final bool isCurrent;
@@ -2293,6 +2297,7 @@ class TrackRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _TrackRowBody(
+      state: state,
       track: track,
       index: index,
       isCurrent: isCurrent,
@@ -2303,12 +2308,14 @@ class TrackRow extends StatelessWidget {
 
 class _TrackRowBody extends StatefulWidget {
   const _TrackRowBody({
+    this.state,
     required this.track,
     required this.index,
     required this.isCurrent,
     required this.onPlay,
   });
 
+  final AppState? state;
   final Track track;
   final int index;
   final bool isCurrent;
@@ -2403,12 +2410,20 @@ class _TrackRowBodyState extends State<_TrackRowBody> {
                                 : FontWeight.w400,
                           ),
                         ),
-                        Text(
-                          track.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.type.captionMuted,
-                        ),
+                        if (widget.state != null)
+                          ArtistNameLink(
+                            state: widget.state!,
+                            artists: track.artists,
+                            fallback: track.artist,
+                            style: context.type.captionMuted,
+                          )
+                        else
+                          Text(
+                            track.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.type.captionMuted,
+                          ),
                         if (track.translatedTitle?.isNotEmpty ?? false)
                           Text(
                             track.translatedTitle!,
@@ -2423,14 +2438,20 @@ class _TrackRowBodyState extends State<_TrackRowBody> {
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       flex: 2,
-                      child: Text(
-                        track.album,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.type.caption.copyWith(
-                          color: context.colors.cloudDark,
-                        ),
-                      ),
+                      child: widget.state != null
+                          ? AlbumNameLink(
+                              state: widget.state!,
+                              track: track,
+                              style: context.type.captionMuted,
+                            )
+                          : Text(
+                              track.album,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.type.caption.copyWith(
+                                color: context.colors.cloudDark,
+                              ),
+                            ),
                     ),
                   ],
                   const SizedBox(width: AppSpacing.sm),

@@ -1,6 +1,29 @@
 /// Models presented by the player, mapped from the gateway response.
 library;
 
+class ArtistRef {
+  const ArtistRef({required this.id, required this.name, this.coverUrl});
+  final int id;
+  final String name;
+  final String? coverUrl;
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'coverUrl': coverUrl,
+  };
+  factory ArtistRef.fromJson(Map<String, dynamic> json) => ArtistRef(
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    name: json['name'] as String? ?? '',
+    coverUrl: json['coverUrl'] as String?,
+  );
+  static List<ArtistRef> list(Object? values) => values is List
+      ? [
+          for (final value in values)
+            if (value is Map<String, dynamic>) ArtistRef.fromJson(value),
+        ]
+      : const [];
+}
+
 class Track {
   const Track({
     required this.id,
@@ -13,6 +36,7 @@ class Track {
     this.coverUrl,
     this.albumId = 0,
     this.translatedTitle,
+    this.artists = const [],
   });
 
   final String id;
@@ -29,6 +53,7 @@ class Track {
   final String? coverUrl;
   final int albumId;
   final String? translatedTitle;
+  final List<ArtistRef> artists;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -41,6 +66,7 @@ class Track {
     'coverUrl': coverUrl,
     'albumId': albumId,
     'translatedTitle': translatedTitle,
+    'artists': artists.map((artist) => artist.toJson()).toList(),
   };
 
   factory Track.fromJson(Map<String, dynamic> json) => Track(
@@ -54,6 +80,7 @@ class Track {
     coverUrl: json['coverUrl'] as String?,
     albumId: json['albumId'] as int? ?? 0,
     translatedTitle: json['translatedTitle'] as String?,
+    artists: ArtistRef.list(json['artists']),
   );
 }
 
@@ -108,6 +135,7 @@ class Album {
     this.accent = 0,
     this.trackCount,
     this.coverUrl,
+    this.artists = const [],
   });
 
   final String id;
@@ -120,6 +148,7 @@ class Album {
 
   final int? trackCount;
   final String? coverUrl;
+  final List<ArtistRef> artists;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -131,6 +160,7 @@ class Album {
     'accent': accent,
     'trackCount': trackCount,
     'coverUrl': coverUrl,
+    'artists': artists.map((artist) => artist.toJson()).toList(),
   };
 
   factory Album.fromJson(Map<String, dynamic> json) => Album(
@@ -143,5 +173,6 @@ class Album {
     accent: json['accent'] as int? ?? 0,
     trackCount: json['trackCount'] as int?,
     coverUrl: json['coverUrl'] as String?,
+    artists: ArtistRef.list(json['artists']),
   );
 }

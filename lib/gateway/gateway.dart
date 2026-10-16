@@ -121,6 +121,24 @@ class GatewayQrCheck {
   final String? cookie;
 }
 
+class GatewayArtist {
+  const GatewayArtist({required this.id, required this.name, this.coverUrl});
+  final int id;
+  final String name;
+  final String? coverUrl;
+  factory GatewayArtist.fromJson(Map<String, dynamic> json) => GatewayArtist(
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    name: json['name'] as String? ?? '',
+    coverUrl: (json['cover'] ?? json['picUrl'] ?? json['img1v1Url']) as String?,
+  );
+  static List<GatewayArtist> list(Object? values) => values is List
+      ? [
+          for (final value in values)
+            if (value is Map<String, dynamic>) GatewayArtist.fromJson(value),
+        ]
+      : const [];
+}
+
 class GatewaySong {
   const GatewaySong({
     required this.id,
@@ -133,6 +151,7 @@ class GatewaySong {
     this.mv = 0,
     this.fee = 0,
     this.translatedTitle,
+    this.artistDetails = const [],
   });
 
   final int id;
@@ -145,6 +164,7 @@ class GatewaySong {
   final int mv;
   final int fee;
   final String? translatedTitle;
+  final List<GatewayArtist> artistDetails;
 
   String get artistLine => artists.isEmpty ? '未知艺术家' : artists.join(' / ');
 
@@ -178,6 +198,7 @@ class GatewaySong {
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['name'] as String? ?? '',
       artists: artists,
+      artistDetails: GatewayArtist.list(ar),
       albumName: album['name'] as String? ?? '',
       duration: Duration(milliseconds: (dt as num?)?.toInt() ?? 0),
       albumId: (album['id'] as num?)?.toInt() ?? 0,
@@ -264,6 +285,7 @@ class GatewayAlbum {
     this.coverUrl,
     this.publishTime,
     this.trackCount = 0,
+    this.artists = const [],
   });
 
   final int id;
@@ -272,6 +294,7 @@ class GatewayAlbum {
   final String? coverUrl;
   final int? publishTime;
   final int trackCount;
+  final List<GatewayArtist> artists;
 
   factory GatewayAlbum.fromJson(Map<String, dynamic> json) {
     final dynamic artist =
@@ -279,15 +302,25 @@ class GatewayAlbum {
         (json['artists'] is List && (json['artists'] as List).isNotEmpty
             ? (json['artists'] as List).first
             : null);
+    final artists = GatewayArtist.list(
+      json['artists'] ?? (artist is Map<String, dynamic> ? [artist] : null),
+    );
+    final names = artists
+        .map((artist) => artist.name)
+        .where((name) => name.isNotEmpty)
+        .toSet();
     return GatewayAlbum(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['name'] as String? ?? '',
-      artist: artist is Map<String, dynamic>
+      artist: names.isNotEmpty
+          ? names.join(' / ')
+          : artist is Map<String, dynamic>
           ? artist['name'] as String? ?? ''
           : '',
       coverUrl: (json['picUrl'] ?? json['blurPicUrl']) as String?,
       publishTime: (json['publishTime'] as num?)?.toInt(),
       trackCount: (json['size'] as num?)?.toInt() ?? 0,
+      artists: artists,
     );
   }
 }

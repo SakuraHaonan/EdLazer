@@ -7,6 +7,7 @@ import '../cache/disk_cache.dart';
 import '../cache/media_cache.dart';
 import '../gateway/gateway.dart';
 import 'models.dart';
+import 'catalog_details.dart';
 
 /// Music returned by the gateway.
 class HomeFeed {
@@ -407,23 +408,123 @@ class Catalog {
   }
 
   Future<List<Track>> albumTracks(int albumId) async {
+    return (await albumDetails(albumId)).tracks;
+  }
+
+  Future<AlbumDetails> albumDetails(int albumId, {bool force = false}) async {
     if (albumId <= 0) throw ArgumentError.value(albumId, 'albumId');
-    try {
-      final Map<String, dynamic> body = await gateway.albumDetailRaw(albumId);
-      final dynamic songs = body['songs'];
-      final List<GatewaySong> parsed = songs is List
-          ? songs
-                .whereType<Map<String, dynamic>>()
-                .map<GatewaySong>(GatewaySong.fromJson)
-                .where((GatewaySong song) => song.id > 0)
-                .toList()
-          : const <GatewaySong>[];
-      _online = true;
-      return parsed.map<Track>(trackFromSong).toList();
-    } catch (_) {
-      _online = false;
-      rethrow;
-    }
+    final key = 'album-detail:$albumId';
+    if (force) await cache.expireJson(key);
+    return _cached(
+      key,
+      const Duration(hours: 1),
+      AlbumDetails.fromJson,
+      (value) => value.toJson(),
+      () async {
+        final Map<String, dynamic> body = await gateway.albumDetailRaw(albumId);
+        final rawAlbum = body['album'];
+        if (rawAlbum is! Map<String, dynamic>) {
+          throw StateError('Album metadata unavailable');
+        }
+        final dynamic songs = body['songs'];
+        final List<GatewaySong> parsed = songs is List
+            ? songs
+                  .whereType<Map<String, dynamic>>()
+                  .map<GatewaySong>(GatewaySong.fromJson)
+                  .where((GatewaySong song) => song.id > 0)
+                  .toList()
+            : const <GatewaySong>[];
+        _online = true;
+        return AlbumDetails(
+          album: albumFromGateway(GatewayAlbum.fromJson(rawAlbum)),
+          tracks: parsed.map<Track>(trackFromSong).toList(),
+          description: rawAlbum['description'] as String? ?? '',
+          company: rawAlbum['company'] as String? ?? '',
+          publishTime: (rawAlbum['publishTime'] as num?)?.toInt(),
+        );
+      },
+    );
+  }
+
+  Future<ArtistDetails> artistDetails(
+    ArtistRef seed, {
+    bool force = false,
+  }) async {
+    if (seed.id <= 0) throw ArgumentError.value(seed.id, 'artistId');
+    final key = 'artist-detail:${seed.id}';
+    if (force) await cache.expireJson(key);
+    return _cached(
+      key,
+      const Duration(minutes: 30),
+      ArtistDetails.fromJson,
+      (value) => value.toJson(),
+      () async {
+        final results = await Future.wait<Object>([
+          gateway.artistTopSongs(seed.id),
+          gateway.artistDetail(seed.id).catchError((_) => <String, dynamic>{}),
+        ]);
+        final tracks = (results[0] as List<GatewaySong>)
+            .where((song) => song.id > 0)
+            .map(trackFromSong)
+            .toList();
+        final payload = results[1] as Map<String, dynamic>;
+        final data = payload['data'];
+        final raw = data is Map<String, dynamic>
+            ? data['artist']
+            : payload['artist'];
+        final metadata = raw is Map<String, dynamic>
+            ? raw
+            : <String, dynamic>{};
+        final artist = GatewayArtist.fromJson(metadata);
+        _online = true;
+        return ArtistDetails(
+          artist: ArtistRef(
+            id: seed.id,
+            name: artist.name.isEmpty ? seed.name : artist.name,
+            coverUrl: artist.coverUrl ?? seed.coverUrl,
+          ),
+          tracks: tracks,
+          description: metadata['briefDesc'] as String? ?? '',
+          musicCount: (metadata['musicSize'] as num?)?.toInt() ?? 0,
+          albumCount: (metadata['albumSize'] as num?)?.toInt() ?? 0,
+        );
+      },
+    );
+  }
+
+  Future<ArtistAlbumPage> artistAlbumPage(
+    int id, {
+    int offset = 0,
+    bool force = false,
+  }) async {
+    if (id <= 0 || offset < 0) throw ArgumentError('Invalid artist album page');
+    final key = 'artist-albums:$id:$offset';
+    if (force) await cache.expireJson(key);
+    return _cached(
+      key,
+      const Duration(minutes: 15),
+      ArtistAlbumPage.fromJson,
+      (value) => value.toJson(),
+      () async {
+        final payload = await gateway.artistAlbums(id, offset: offset);
+        final raw = payload['hotAlbums'];
+        final albums = raw is List
+            ? [
+                for (final album in raw)
+                  if (album is Map<String, dynamic>)
+                    albumFromGateway(GatewayAlbum.fromJson(album)),
+              ]
+            : <Album>[];
+        _online = true;
+        return ArtistAlbumPage(
+          albums: albums
+              .where((album) => (int.tryParse(album.id) ?? 0) > 0)
+              .toList(),
+          more: payload['more'] == true && albums.isNotEmpty,
+          receivedCount: raw is List ? raw.length : 0,
+        );
+      },
+    );
   }
 
   /// Playback URL for a track, or null when the gateway has none (VIP /
@@ -537,6 +638,7 @@ class Catalog {
     id: song.id.toString(),
     title: song.title,
     artist: song.artistLine,
+    artists: song.artistDetails.map(artistFromGateway).toList(),
     album: song.albumName,
     albumId: song.albumId,
     translatedTitle: song.translatedTitle,
@@ -550,6 +652,7 @@ class Catalog {
     id: song.albumId.toString(),
     title: song.albumName,
     artist: song.artistLine,
+    artists: song.artistDetails.map(artistFromGateway).toList(),
     year: '',
     coverSeed: _seedFrom(song.albumId),
     note: '',
@@ -566,6 +669,7 @@ class Catalog {
       id: album.id.toString(),
       title: album.title,
       artist: album.artist,
+      artists: album.artists.map(artistFromGateway).toList(),
       year: year,
       coverSeed: _seedFrom(album.id),
       note: album.trackCount > 0 ? '${album.trackCount} 首曲目' : '',
@@ -574,6 +678,9 @@ class Catalog {
       coverUrl: album.coverUrl,
     );
   }
+
+  static ArtistRef artistFromGateway(GatewayArtist artist) =>
+      ArtistRef(id: artist.id, name: artist.name, coverUrl: artist.coverUrl);
 
   static Playlist playlistFromGateway(GatewayPlaylist playlist) => Playlist(
     id: playlist.id.toString(),

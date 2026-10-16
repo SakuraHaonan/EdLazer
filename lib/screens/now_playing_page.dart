@@ -8,6 +8,7 @@ import '../widgets/song_comments_view.dart';
 import '../state/song_comments_controller.dart';
 import 'desktop_now_playing.dart';
 import 'dart:async';
+import '../widgets/catalog_links.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart'
@@ -197,28 +198,21 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     if (!_controlsVisible) setState(() => _controlsVisible = true);
   }
 
-  // The page Listener wakes the controls before the row reports its tap, so
-  // the tap has to be judged against the state this touch interrupted.
+  // Record the starting mode without waking the controls for lyric or drag
+  // gestures. Only a completed background tap changes the presentation.
   void _onTouchDown() {
     _controlsHiddenAtTouchDown = !_controlsVisible;
-    _wakeControls();
   }
 
-  /// Return one step using the state before pointer-down revealed controls.
+  /// Return one step only after a completed tap outside the lyric text.
   void _stepBackFromLyrics() {
     if (!_lyricsMode || _selectionOpen) return;
     if (_controlsHiddenAtTouchDown) {
       _wakeControls();
+      _armHide();
     } else {
       _toggleLyrics();
     }
-  }
-
-  /// The current line keeps seeking; other lines follow the background action.
-  bool _onLyricLineTap(int index, bool isCurrentLine) {
-    if (isCurrentLine) return false;
-    _stepBackFromLyrics();
-    return true;
   }
 
   @override
@@ -288,7 +282,6 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
           child: LyricViewport(
             state: widget.state,
             onSelectionChanged: _selectionChanged,
-            onLineTap: _onLyricLineTap,
           ),
         ),
       ],
@@ -658,13 +651,27 @@ class _TrackDetails extends StatelessWidget {
         ),
       ],
       const SizedBox(height: 4),
-      Text(
-        '${track.artist} · ${track.album}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      DefaultTextStyle(
         style: context.type.body.copyWith(
           fontSize: 17,
           color: context.colors.cloudDark,
+        ),
+        child: Row(
+          children: [
+            Flexible(
+              child: ArtistNameLink(
+                state: state,
+                artists: track.artists,
+                fallback: track.artist,
+              ),
+            ),
+            if (track.album.isNotEmpty) ...[
+              const Text(' · '),
+              Flexible(
+                child: AlbumNameLink(state: state, track: track),
+              ),
+            ],
+          ],
         ),
       ),
       if (state.likeError != null) ...[

@@ -387,6 +387,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                       itemBuilder: (context, index) => AnimatedBuilder(
                         animation: widget.state,
                         builder: (context, _) => TrackRow(
+                          state: widget.state,
                           track: tracks[index],
                           index: index + 1,
                           isCurrent:
