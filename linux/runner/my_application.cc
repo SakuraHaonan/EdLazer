@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -24,6 +25,26 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+
+  // The Flutter bundle is installed beside the executable on Linux and in
+  // AppImage. Use that bundled master icon for the native window decoration.
+  gchar* executable_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (executable_path != nullptr) {
+    gchar* executable_dir = g_path_get_dirname(executable_path);
+    gchar* icon_path = g_build_filename(executable_dir, "data",
+                                        "flutter_assets", "assets",
+                                        "app_icon.png", nullptr);
+    GError* icon_error = nullptr;
+    GdkPixbuf* app_icon = gdk_pixbuf_new_from_file(icon_path, &icon_error);
+    if (app_icon != nullptr) {
+      gtk_window_set_icon(window, app_icon);
+      g_object_unref(app_icon);
+    }
+    g_clear_error(&icon_error);
+    g_free(icon_path);
+    g_free(executable_dir);
+    g_free(executable_path);
+  }
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
