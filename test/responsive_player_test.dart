@@ -507,12 +507,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'layout $size');
         final title = tester.widget<Text>(find.text(_track.title).first);
-        expect(title.maxLines, 1);
+        expect(title.maxLines, size.width >= 720 ? 2 : 1);
         expect(title.overflow, TextOverflow.ellipsis);
         expect(find.text('测试译名'), findsOneWidget);
         if (size.width >= 720) {
           expect(find.text('第一句翻译'), findsOneWidget);
-          expect(tester.getRect(find.byType(PlateArt).first).left, 32);
+          final artwork = tester.getRect(find.byType(PlateArt).first);
+          expect(artwork.left, greaterThanOrEqualTo(24));
+          expect(artwork.right, lessThan(size.width * .55));
         }
         final transport = tester.getRect(
           find.byKey(const ValueKey('now-playing-transport')),

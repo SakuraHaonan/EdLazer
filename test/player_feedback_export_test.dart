@@ -437,7 +437,11 @@ void main() {
       expect(color(1), oldColor);
       state.pause();
       await tester.pumpAndSettle();
-      expect(color(0), nextColor, reason: 'pausing preserves the inactive tone');
+      expect(
+        color(0),
+        nextColor,
+        reason: 'pausing preserves the inactive tone',
+      );
       expect(color(1), oldColor);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -495,7 +499,7 @@ void main() {
   );
 
   testWidgets(
-    'short desktop rail keeps metadata readable and scrolls to volume',
+    'short desktop workspace keeps the volume dock visible without scrolling',
     (tester) async {
       tester.view.physicalSize = const Size(800, 400);
       tester.view.devicePixelRatio = 1;
@@ -510,23 +514,24 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final railScroll = find
-          .ancestor(
-            of: find.byType(VolumeControl),
-            matching: find.byType(SingleChildScrollView),
-          )
-          .first;
       final title = tester.getRect(find.text(_track.title));
-      final viewport = tester.getRect(railScroll);
-      expect(title.top, greaterThanOrEqualTo(viewport.top));
-      expect(title.bottom, lessThanOrEqualTo(viewport.bottom));
-      await tester.ensureVisible(find.byType(VolumeControl));
-      await tester.pumpAndSettle();
+      final dock = tester.getRect(
+        find.byKey(const ValueKey('now-playing-transport')),
+      );
+      expect(title.top, greaterThanOrEqualTo(0));
+      expect(title.bottom, lessThanOrEqualTo(dock.top));
       final slider = find.descendant(
         of: find.byType(VolumeControl),
         matching: find.byType(Slider),
       );
-      expect(tester.getCenter(slider).dy, lessThan(viewport.bottom));
+      expect(tester.getCenter(slider).dy, lessThan(400));
+      expect(
+        find.ancestor(
+          of: find.byType(VolumeControl),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsNothing,
+      );
       await tester.drag(slider, const Offset(-30, 0));
       await tester.pumpAndSettle();
       expect(state.volume, lessThan(1));

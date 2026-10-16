@@ -12,7 +12,8 @@ playlists come from the service.
 
 - Live catalogue, search, recommended playlists, accounts and favorites.
 - Synchronized lyrics, translations, word timing, multi-line copying and lyric image export.
-- Desktop volume controls, mute and saved volume levels.
+- Desktop listening workspace with a full-width playback dock, lyrics/comments switching and saved volume levels.
+- Popular and latest comments with pagination, likes and unlikes; guests can read and sign in to react.
 - System media controls on Android, iOS, Windows, macOS and Linux.
 - Simplified Chinese, Traditional Chinese, Japanese and English interfaces.
 - Accumulating scroll momentum, lyric blur, 5ms follow checks and smooth line transitions.

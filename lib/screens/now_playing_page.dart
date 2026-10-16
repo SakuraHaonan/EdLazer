@@ -2,9 +2,11 @@ import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/interaction_feedback.dart';
-import '../widgets/haptic_seek_slider.dart';
+import '../widgets/player_seek_bar.dart';
 import '../widgets/animated_track_cover.dart';
-import '../widgets/volume_control.dart';
+import '../widgets/song_comments_view.dart';
+import '../state/song_comments_controller.dart';
+import 'desktop_now_playing.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -131,11 +133,15 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   bool _controlsHiddenAtTouchDown = true;
   bool _saving = false;
   bool _selectionOpen = false;
+  bool _commentsOpen = false;
+  bool _desktopComments = false;
+  late SongCommentsController _commentsController;
   Timer? _hideTimer;
 
   @override
   void initState() {
     super.initState();
+    _commentsController = SongCommentsController(widget.state.gateway);
     widget.state.addListener(_preferencesChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(widget.state.ensureCurrentLyrics());
@@ -152,6 +158,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   void _armHide() {
     _hideTimer?.cancel();
     if (_selectionOpen ||
+        _commentsOpen ||
         !_lyricsMode ||
         widget.state.lyricsLoading ||
         widget.state.lyrics.isEmpty) {
@@ -218,6 +225,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   void dispose() {
     _hideTimer?.cancel();
     widget.state.removeListener(_preferencesChanged);
+    _commentsController.dispose();
     super.dispose();
   }
 
@@ -232,22 +240,41 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
 
   void _queue() => showPlaybackQueue(context, widget.state);
 
-  Widget _lyricsPane() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      // 固定标题，不参与滚动
-      const InlineLabel('歌词'),
-      const SizedBox(height: AppSpacing.md),
+  Future<void> _openComments() async {
+    final track = widget.state.current;
+    if (track == null || _commentsOpen) return;
+    _commentsOpen = true;
+    _hideTimer?.cancel();
+    await showSongComments(
+      context,
+      state: widget.state,
+      track: track,
+      controller: _commentsController,
+    );
+    if (!mounted) return;
+    _commentsOpen = false;
+    _wakeControls();
+    _armHide();
+  }
 
-      // 歌词正文自带一个有界视口
-      Expanded(
-        child: LyricViewport(
-          state: widget.state,
-          onSelectionChanged: _selectionChanged,
-        ),
-      ),
-    ],
-  );
+  void _selectDesktopPane(bool comments) {
+    if (_desktopComments == comments) return;
+    setState(() {
+      _desktopComments = comments;
+      _selectionOpen = false;
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant NowPlayingPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.removeListener(_preferencesChanged);
+      widget.state.addListener(_preferencesChanged);
+      _commentsController.dispose();
+      _commentsController = SongCommentsController(widget.state.gateway);
+    }
+  }
 
   /// 移动端整屏歌词：标题固定，正文占满剩余高度。
   Widget _mobileLyrics() => Padding(
@@ -366,6 +393,11 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                 icon: const Icon(Icons.lyrics_outlined),
               ),
             AccessibleIconButton(
+              tooltip: '查看评论',
+              onPressed: () => unawaited(_openComments()),
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+            ),
+            AccessibleIconButton(
               tooltip: '播放队列',
               onPressed: _queue,
               icon: const Icon(Icons.queue_music_rounded),
@@ -389,6 +421,30 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
         return LayoutBuilder(
           builder: (context, box) {
             final compact = box.maxWidth < 720;
+            if (!compact) {
+              return SafeArea(
+                child: DesktopNowPlaying(
+                  state: widget.state,
+                  track: track,
+                  artwork: _cover(track),
+                  lyrics: LyricViewport(
+                    state: widget.state,
+                    onSelectionChanged: _selectionChanged,
+                  ),
+                  comments: SongCommentsView(
+                    state: widget.state,
+                    track: track,
+                    controller: _commentsController,
+                  ),
+                  showingComments: _desktopComments,
+                  onLyrics: () => _selectDesktopPane(false),
+                  onComments: () => _selectDesktopPane(true),
+                  onBack: () => Navigator.maybePop(context),
+                  onQueue: _queue,
+                  onSaveArtwork: () => unawaited(_saveArtwork(track)),
+                ),
+              );
+            }
             return Listener(
               behavior: HitTestBehavior.translucent,
               onPointerDown: (_) => _onTouchDown(),
@@ -402,9 +458,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                   child: Column(
                     children: [
                       _header(compact),
-                      Expanded(
-                        child: compact ? _mobile(track) : _desktop(track, box),
-                      ),
+                      Expanded(child: _mobile(track)),
                     ],
                   ),
                 ),
@@ -415,83 +469,6 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       },
     ),
   );
-
-  Widget _desktop(Track track, BoxConstraints box) => Padding(
-    padding: const EdgeInsets.fromLTRB(32, 20, 32, 28),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          width: (box.maxWidth * 0.28).clamp(260, 360),
-          child: LayoutBuilder(
-            builder: (context, rail) => _desktopRail(track, rail),
-          ),
-        ),
-        SizedBox(width: box.maxWidth > 1100 ? 80 : 40),
-        Expanded(
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: _lyricsPane(),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _desktopRail(Track track, BoxConstraints rail) {
-    final controls = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _PlaybackTransport(track: track, state: widget.state),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: VolumeControl(state: widget.state),
-        ),
-      ],
-    );
-    if (rail.maxHeight < 500 * MediaQuery.textScalerOf(context).scale(1)) {
-      return SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                SizedBox.square(dimension: 64, child: _cover(track)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _TrackDetails(track: track, state: widget.state),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            controls,
-          ],
-        ),
-      );
-    }
-    return Column(
-      children: [
-        Expanded(
-          child: CustomMultiChildLayout(
-            delegate: _ArtworkDetailsLayout(),
-            children: [
-              LayoutId(id: 'art', child: _cover(track)),
-              LayoutId(
-                id: 'details',
-                child: _TrackDetails(track: track, state: widget.state),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        controls,
-      ],
-    );
-  }
 
   Widget _readingPane(Track track) => AnimatedSwitcher(
     duration: const Duration(milliseconds: 280),
@@ -615,27 +592,6 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   }
 }
 
-class _ArtworkDetailsLayout extends MultiChildLayoutDelegate {
-  @override
-  void performLayout(Size size) {
-    final details = layoutChild(
-      'details',
-      BoxConstraints(
-        minWidth: size.width,
-        maxWidth: size.width,
-        maxHeight: size.height,
-      ),
-    );
-    final side = (size.height - details.height - 16).clamp(0.0, size.width);
-    layoutChild('art', BoxConstraints.tight(Size(size.width, side)));
-    positionChild('art', Offset.zero);
-    positionChild('details', Offset(0, side + 16));
-  }
-
-  @override
-  bool shouldRelayout(covariant _ArtworkDetailsLayout oldDelegate) => false;
-}
-
 class _TrackInfo extends StatelessWidget {
   const _TrackInfo({required this.track, required this.state});
   final Track track;
@@ -737,7 +693,7 @@ class _PlaybackTransport extends StatelessWidget {
         message: state.playbackError,
         onDismiss: state.clearPlaybackError,
       ),
-      _NowPlayingSeek(state: state),
+      PlayerSeekBar(state: state),
       const SizedBox(height: AppSpacing.sm),
       // Time labels ride the tick lane so position updates never rebuild
       // the whole page.
@@ -789,32 +745,6 @@ class _PlaybackTransport extends StatelessWidget {
       ),
     ],
   );
-}
-
-class _NowPlayingSeek extends StatelessWidget {
-  const _NowPlayingSeek({required this.state});
-
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    // Leaf: the only part of Now Playing that consumes 100 ms ticks.
-    return AnimatedBuilder(
-      animation: state.all,
-      builder: (BuildContext context, _) => SliderTheme(
-        data: SliderThemeData(
-          trackHeight: 4,
-          activeTrackColor: context.colors.slateDark,
-          inactiveTrackColor: context.colors.stone,
-          thumbColor: context.colors.clay,
-          overlayColor: context.colors.clay.withValues(alpha: 0.16),
-          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-          overlayShape: const RoundSliderOverlayShape(overlayRadius: 15),
-        ),
-        child: HapticSeekSlider(state: state),
-      ),
-    );
-  }
 }
 
 class _ControlIcon extends StatefulWidget {

@@ -344,7 +344,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       final art = find.byType(PlateArt).first;
-      expect(tester.getSize(art).width, closeTo(1100 * .28, .01));
+      expect(tester.getSize(art).width, inInclusiveRange(200, 440));
+      expect(tester.getSize(art).aspectRatio, closeTo(1, .01));
       await tester.tap(find.byTooltip('播放队列'));
       await tester.pumpAndSettle();
       expect(find.byType(Dialog), findsOneWidget);
