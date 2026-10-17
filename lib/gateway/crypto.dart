@@ -10,7 +10,11 @@ import 'package:encrypt/encrypt.dart' as enc;
 /// The protocol encoding is obfuscation only; HTTPS provides transport
 /// security. Everything here is deterministic given a [secret] so tests can
 /// pin vectors without a network.
-enum NeteaseEncoding { eapi, weapi }
+///
+/// [api] is the plain form surface (`music.163.com/api/…`, no envelope). The
+/// official desktop client drives QR sign-in through it, and the confirmed
+/// login only comes back on that surface.
+enum NeteaseEncoding { eapi, weapi, api }
 
 const String _weapiFirstKey = '0CoJUm6Qyw8W8jud';
 const String _eapiKey = 'e82ckenh8dichen8';

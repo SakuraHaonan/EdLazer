@@ -583,7 +583,8 @@ class AppState extends ChangeNotifier {
   /// fallback used to hide server rejections completely.
   String? qrPollError;
 
-  /// Polls a QR key: 800 expired, 801 waiting, 802 scanned, 803 confirmed.
+  /// Polls a QR key: 800 expired, 801 waiting, 802 scanned, 803 confirmed,
+  /// 8821 needs a security check on the phone.
   ///
   /// Only 803 means "this session is signed in": the scan URL was rejected by
   /// the phone when the poll never leaves 801, and a not-yet-ready account
@@ -591,16 +592,10 @@ class AppState extends ChangeNotifier {
   Future<int> pollQrLogin(String url) async {
     final Uri? uri = Uri.tryParse(url);
     final String? key = uri?.queryParameters['codekey'];
-    // The phone reads this off the QR and confirms with it; replay it so the
-    // confirmation can be matched to this scan session.
-    final String? traceId = uri?.queryParameters['login_traceId'];
     if (key == null || key.isEmpty) return 800;
     try {
       if (_qrConfirmed && await _adoptQrSession()) return 803;
-      final GatewayQrCheck check = await gateway.checkQrCode(
-        key,
-        clientTraceId: traceId,
-      );
+      final GatewayQrCheck check = await gateway.checkQrCode(key);
       qrPollError = null;
       if (check.code == 803) {
         _qrConfirmed = true;

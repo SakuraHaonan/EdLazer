@@ -43,11 +43,14 @@ NeteaseRequest buildNeteaseRequest(
   NeteaseRequest request(
     String path, {
     bool web = false,
+    bool plain = false,
     Map<String, Object?> body = const <String, Object?>{},
   }) => NeteaseRequest(
     path: path,
     payload: body,
-    encoding: web ? NeteaseEncoding.weapi : NeteaseEncoding.eapi,
+    encoding: plain
+        ? NeteaseEncoding.api
+        : (web ? NeteaseEncoding.weapi : NeteaseEncoding.eapi),
     mobileClient: alias.startsWith('/listentogether/'),
   );
 
@@ -88,21 +91,24 @@ NeteaseRequest buildNeteaseRequest(
         },
       );
     case '/login/qr/key':
+      // Plain `/api/` surface, exactly like the official desktop client
+      // (`page:loginQrcode` → `/api/login/qrcode/unikey`). The confirmed login
+      // is only handed back to a poller on this surface.
       return request(
         '/api/login/qrcode/unikey',
+        plain: true,
         body: <String, Object?>{'type': 3},
       );
     case '/login/qr/check':
       return request(
         '/api/login/qrcode/client/login',
+        plain: true,
         body: <String, Object?>{
           'key': value('key'),
           'type': 3,
-          // The confirmation the phone sends names the scan trace it read
-          // from the QR; replaying the same trace lets the server hand the
-          // finished login back to this poll.
-          if (value('clientTraceId').isNotEmpty)
-            'clientTraceId': value('clientTraceId'),
+          // The desktop client always sends it; it carries the Yidun captcha
+          // token when the scan hit risk control (8821).
+          'secureCaptcha': value('secureCaptcha'),
         },
       );
     case '/login/status':

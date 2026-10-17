@@ -200,18 +200,8 @@ void main() {
       );
       expect(body['code'], 200);
       final Map<String, dynamic> data = body['data'] as Map<String, dynamic>;
-      final String url = data['qrurl'] as String;
-      // The phone app (9.6.x) reads `login_traceId` off the scan URL and
-      // confirms with it, so every QR we mint has to carry one.
-      expect(url, startsWith('https://music.163.com/login?codekey=abc123&login_traceId='));
-      final String trace = Uri.parse(url).queryParameters['login_traceId']!;
-      expect(
-        RegExp(
-          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-        ).hasMatch(trace),
-        isTrue,
-        reason: 'trace ids are fresh v4 ids, got $trace',
-      );
+      // Exactly the URL the official desktop client renders: key only.
+      expect(data['qrurl'], 'https://music.163.com/login?codekey=abc123');
     });
 
     test('refuses a blank key', () async {
@@ -251,51 +241,63 @@ void main() {
     });
   });
 
-  group('qr poll trace', () {
-    test('sends the scan trace and falls back when it is rejected', () async {
-      final _TraceTransport transport = _TraceTransport();
-      final NeteaseGateway gateway = NeteaseGateway(transport: transport);
-      final GatewayQrCheck check = await gateway.checkQrCode(
-        'abc',
-        clientTraceId: 'trace-1',
+  group('qr sign-in rides the plain api surface', () {
+    test('the key route is the desktop client route', () {
+      final NeteaseRequest route = buildNeteaseRequest(
+        '/login/qr/key',
+        const <String, String>{},
       );
-      expect(check.code, 801);
-      expect(transport.calls.first['clientTraceId'], 'trace-1');
-      expect(
-        transport.calls.last.containsKey('clientTraceId'),
-        isFalse,
-        reason: 'the untraced poll is the compatibility path',
-      );
+      expect(route.path, '/api/login/qrcode/unikey');
+      expect(route.encoding, NeteaseEncoding.api);
+      expect(route.payload['type'], 3);
     });
 
-    test('the plain poll keeps working without a trace', () async {
-      final _TraceTransport transport = _TraceTransport(acceptTrace: true);
-      final NeteaseGateway gateway = NeteaseGateway(transport: transport);
-      await gateway.checkQrCode('abc');
-      expect(transport.calls, hasLength(1));
-      expect(transport.calls.single.containsKey('clientTraceId'), isFalse);
+    test('the poll sends the key, its type and the captcha token', () {
+      final NeteaseRequest route = buildNeteaseRequest(
+        '/login/qr/check',
+        const <String, String>{'key': 'k1', 'secureCaptcha': 'token'},
+      );
+      expect(route.path, '/api/login/qrcode/client/login');
+      expect(route.encoding, NeteaseEncoding.api);
+      expect(route.payload['key'], 'k1');
+      expect(route.payload['type'], 3);
+      expect(route.payload['secureCaptcha'], 'token');
+    });
+
+    test('the poll defaults to an empty captcha token', () {
+      final NeteaseRequest route = buildNeteaseRequest(
+        '/login/qr/check',
+        const <String, String>{'key': 'k1'},
+      );
+      expect(route.payload['secureCaptcha'], '');
+    });
+
+    test('a confirmed poll installs the session cookie it returns', () async {
+      final NeteaseGateway gateway = NeteaseGateway(
+        transport: _ConfirmedTransport(),
+      );
+      final GatewayQrCheck check = await gateway.checkQrCode('k1');
+      expect(check.code, 803);
+      // Without this the account lookup right after 803 runs as a guest.
+      expect(gateway.sessionCookie, 'MUSIC_U=abc; __csrf=t');
     });
   });
 }
 
-/// A transport whose traced poll fails the way a gateway without the field
-/// would, so the fallback path can be exercised.
-class _TraceTransport extends NeteaseTransport {
-  _TraceTransport({this.acceptTrace = false});
-
-  final bool acceptTrace;
-  final List<Map<String, String>> calls = <Map<String, String>>[];
-
+/// Poll transport that answers a confirmed scan with the fresh session.
+class _ConfirmedTransport extends NeteaseTransport {
   @override
   Future<Map<String, dynamic>> request(
     String alias,
     Map<String, String> parameters,
   ) async {
-    calls.add(Map<String, String>.of(parameters));
-    if (parameters.containsKey('clientTraceId') && !acceptTrace) {
-      throw GatewayServiceException(400, alias);
-    }
-    return <String, dynamic>{'code': 801, 'message': '等待扫码'};
+    expect(alias, '/login/qr/check');
+    expect(parameters['secureCaptcha'], '');
+    return <String, dynamic>{
+      'code': 803,
+      'message': '授权登陆成功',
+      'cookie': 'MUSIC_U=abc; __csrf=t',
+    };
   }
 }
 

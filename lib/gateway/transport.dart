@@ -320,14 +320,15 @@ class NeteaseTransport {
     // api-enhanced accepts both and so do the upstream weapi endpoints.
     final String csrf =
         cookies['__csrf'] ?? cookies['__csrf_token'] ?? '';
+    final bool plain = route.encoding == NeteaseEncoding.api;
     final bool web = route.encoding == NeteaseEncoding.weapi;
     final Map<String, Object?> payload = <String, Object?>{
       ...route.payload,
-      'e_r': false,
+      if (!plain) 'e_r': false,
     };
     if (web) {
       payload['csrf_token'] = csrf;
-    } else {
+    } else if (!plain) {
       payload['header'] = <String, Object?>{
         'os': route.mobileClient ? 'android' : 'pc',
         'appver': route.mobileClient ? '9.5.95' : '3.1.17.204416',
@@ -346,20 +347,31 @@ class NeteaseTransport {
     }
     final Map<String, String> form = web
         ? gatewayWeapi(jsonEncode(payload))
+        : plain
+        ? <String, String>{
+            for (final MapEntry<String, Object?> entry in payload.entries)
+              entry.key: '${entry.value}',
+          }
         : <String, String>{
             'params': gatewayEapi(route.path, jsonEncode(payload)),
           };
     final String endpoint = web
         ? 'https://music.163.com/weapi/'
+        : plain
+        ? 'https://music.163.com'
         : 'https://interfacepc.music.163.com/eapi/';
     final String upstreamPath = route.path.startsWith('/api/')
         ? route.path.substring(5)
         : route.path;
+    final String requestPath = plain ? route.path : upstreamPath;
     final io.HttpClientRequest request = await _client
-        .postUrl(Uri.parse('$endpoint$upstreamPath'))
+        .postUrl(Uri.parse('$endpoint$requestPath'))
         .timeout(requestTimeout);
     request.headers.set(io.HttpHeaders.acceptHeader, 'application/json');
-    request.headers.set(io.HttpHeaders.userAgentHeader, userAgent);
+    request.headers.set(
+      io.HttpHeaders.userAgentHeader,
+      plain ? _desktopUserAgent : userAgent,
+    );
     request.headers.set('Referer', 'https://music.163.com/');
     request.headers.set(io.HttpHeaders.cacheControlHeader, 'no-cache');
     final String? requestCookie = route.mobileClient
@@ -515,48 +527,22 @@ class NeteaseTransport {
     return List<int>.generate(size, (_) => _rng.nextInt(256));
   }
 
-  /// RFC 4122 version 4 id from the secure RNG.
-  static String _uuidV4() {
-    final List<int> bytes = _secureRandom(16);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    final String hex = bytes
-        .map((int b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
-    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
-        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
-  }
-
-  /// Scan URL for the QR login.
+  /// Scan URL for the QR login, matching the official desktop client
+  /// (`page:loginQrcode`): `https://music.163.com/login?codekey=<unikey>`.
   ///
-  /// The base form is `https://music.163.com/login?codekey=<unikey>`; the
-  /// phone app (9.6.x) recognises exactly that path and reads a
-  /// `login_traceId` query parameter on the way, which it forwards as
-  /// `clientTraceId` when it confirms the scan through
-  /// `login/qrcode/server/login`. Without that trace the confirmation has
-  /// nothing to bind back to this scan session, the key never reaches 803 and
-  /// the desktop keeps polling a scan the server cannot see. Every QR we mint
-  /// therefore carries its own trace, and the poll replays it.
-  ///
-  /// The `web` platform additionally expects a `chainId`
-  /// (`v1_{sDeviceId}_{platform}_{action}_{timestamp}`), but only one derived
-  /// from a **real** `sDeviceId`: a made-up `unknown-…` device id names a
-  /// session the phone cannot resolve. Only append it when the id is real,
-  /// never fabricate one.
+  /// That client also reads a `chainId` for its login monitor, but only ever
+  /// generates it on the platform layer from a real device id — a fabricated
+  /// value names no session, so it is never invented here. A `web` platform
+  /// request may append one when the session actually carries `sDeviceId`.
   String _qrLoginUrl(String key, String platform) {
-    final StringBuffer url = StringBuffer(
-      'https://music.163.com/login?codekey=${Uri.encodeQueryComponent(key)}',
-    );
-    url.write('&login_traceId=${Uri.encodeQueryComponent(_uuidV4())}');
-    if (platform == 'web') {
-      final String deviceId = _cookieValue(cookie, 'sDeviceId');
-      if (deviceId.isNotEmpty) {
-        final String chainId =
-            'v1_${deviceId}_web_login_${_clock().millisecondsSinceEpoch}';
-        url.write('&chainId=${Uri.encodeQueryComponent(chainId)}');
-      }
-    }
-    return url.toString();
+    final String base =
+        'https://music.163.com/login?codekey=${Uri.encodeQueryComponent(key)}';
+    if (platform != 'web') return base;
+    final String deviceId = _cookieValue(cookie, 'sDeviceId');
+    if (deviceId.isEmpty) return base;
+    final String chainId =
+        'v1_${deviceId}_web_login_${_clock().millisecondsSinceEpoch}';
+    return '$base&chainId=${Uri.encodeQueryComponent(chainId)}';
   }
 
   /// Reads a single cookie value out of a `Cookie` header, or ''.
@@ -572,6 +558,12 @@ class NeteaseTransport {
   }
 
   static final math.Random _rng = math.Random.secure();
+
+  /// User agent of the desktop client, used for the plain `api` surface the
+  /// QR sign-in endpoints live on.
+  static const String _desktopUserAgent =
+      'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like '
+      'Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117';
 }
 
 class _Response {

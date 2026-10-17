@@ -477,10 +477,10 @@ enum _QrPhase { fresh, scanned, expired }
 /// staying on screen forever.
 const int _qrLifetimeSeconds = 180;
 
-/// A poll every two seconds is what the reference implementation expects;
-/// the first one runs immediately so a scan during the key handshake is not
+/// A poll every second matches the official desktop client's QR loop; the
+/// first one runs immediately so a scan during the key handshake is not
 /// missed for a whole tick.
-const Duration _qrPollInterval = Duration(seconds: 2);
+const Duration _qrPollInterval = Duration(seconds: 1);
 
 class QrPanel extends StatefulWidget {
   const QrPanel({super.key, required this.state});
@@ -553,6 +553,12 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
           _timer?.cancel();
           Navigator.of(context).maybePop();
         case 802:
+          if (_phase != _QrPhase.scanned) {
+            setState(() => _phase = _QrPhase.scanned);
+          }
+        case 8821:
+          // Risk control: the phone must finish a security check before the
+          // desktop can claim the login.
           if (_phase != _QrPhase.scanned) {
             setState(() => _phase = _QrPhase.scanned);
           }
