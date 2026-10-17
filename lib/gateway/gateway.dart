@@ -490,13 +490,43 @@ class NeteaseGateway {
     return data is Map<String, dynamic> ? data['qrurl'] as String? ?? '' : '';
   }
 
-  Future<GatewayQrCheck> checkQrCode(String key) async {
+  /// Polls a scan key. [clientTraceId] is the `login_traceId` the QR carried:
+  /// the phone confirms with it as `clientTraceId`, so the poll replays it to
+  /// claim the same login. Older gateways reject unknown fields, in which case
+  /// the plain poll runs instead.
+  Future<GatewayQrCheck> checkQrCode(
+    String key, {
+    String? clientTraceId,
+  }) async {
     if (key.trim().isEmpty) throw ArgumentError('key cannot be blank.');
-    final Map<String, dynamic> body = await _transport.request(
-      '/login/qr/check',
-      <String, String>{'key': key},
-    );
-    final String? cookie = body['cookie'] as String?;
+    final bool traced =
+        clientTraceId != null && clientTraceId.trim().isNotEmpty;
+    late final Map<String, dynamic> body;
+    try {
+      body = await _transport.request('/login/qr/check', <String, String>{
+        'key': key,
+        if (traced) 'clientTraceId': clientTraceId,
+      });
+    } catch (error) {
+      // Only a rejected request retries: a timeout or socket error would just
+      // double the work with no different answer.
+      final bool rejected =
+          error is GatewayServiceException || error is GatewayProtocolException;
+      if (!traced || !rejected) rethrow;
+      // Compatibility: a gateway that does not know the trace field answers
+      // with an error; fall back to the untraced poll it does understand.
+      return _readQrCheck(
+        await _transport.request('/login/qr/check', <String, String>{
+          'key': key,
+        }),
+      );
+    }
+    return _readQrCheck(body);
+  }
+
+  GatewayQrCheck _readQrCheck(Map<String, dynamic> body) {
+    final Object? rawCookie = body['cookie'];
+    final String? cookie = rawCookie is String ? rawCookie : null;
     // Refresh on every code (801/802 included), not only on 803 — the QR
     // session rotates while the user scans, mirroring api-enhanced.
     if (cookie != null) sessionCookie = cookie;

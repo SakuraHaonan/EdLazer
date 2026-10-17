@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
@@ -21,6 +22,27 @@ double automaticDpiScale(BuildContext context) {
   return dpiScaleForWorkspace(workspace);
 }
 
+/// Whether this device is a car head unit, from the platform's own report.
+bool detectCarDisplay(BuildContext context) {
+  final MediaQueryData? media = MediaQuery.maybeOf(context);
+  if (media == null) return false;
+  final double dpr = media.devicePixelRatio;
+  final Size physical = media.size * (dpr > 0 ? dpr : 1);
+  return looksLikeCarDisplay(
+    platform: defaultTargetPlatform,
+    physicalSize: physical,
+    devicePixelRatio: dpr,
+  );
+}
+
+/// Whether the car profile applies to [surface] on this device.
+bool carSurfaceOf(BuildContext context, AppSurface surface) =>
+    carSurfaceActive(surface, detected: detectCarDisplay(context));
+
+/// Clamps a scale to the profile floor and the slider ceiling.
+double profileDpiScale(double value, {required double floor}) =>
+    normalizeDpiScale(value.clamp(floor, kDpiScaleMax));
+
 /// Publishes the resolved scales to the subtree so the settings page can show
 /// the value the shell actually applies — the child is laid out at
 /// `size / scale`, so reading [MediaQuery.sizeOf] from inside would lie.
@@ -29,6 +51,8 @@ class UiMetrics extends InheritedWidget {
     super.key,
     required this.scale,
     required this.autoScale,
+    required this.minScale,
+    required this.car,
     required super.child,
   });
 
@@ -37,6 +61,12 @@ class UiMetrics extends InheritedWidget {
 
   /// Scale the automatic mode would apply for this window.
   final double autoScale;
+
+  /// Smallest scale the manual slider offers under the active profile.
+  final double minScale;
+
+  /// Whether the car head-unit profile is in effect.
+  final bool car;
 
   static UiMetrics? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<UiMetrics>();
@@ -50,9 +80,19 @@ class UiMetrics extends InheritedWidget {
   static double autoScaleOf(BuildContext context) =>
       maybeOf(context)?.autoScale ?? automaticDpiScale(context);
 
+  /// The slider floor of the active profile.
+  static double minScaleOf(BuildContext context) =>
+      maybeOf(context)?.minScale ?? kDpiScaleMin;
+
+  /// Whether the car profile is active here.
+  static bool carOf(BuildContext context) => maybeOf(context)?.car ?? false;
+
   @override
   bool updateShouldNotify(UiMetrics oldWidget) =>
-      oldWidget.scale != scale || oldWidget.autoScale != autoScale;
+      oldWidget.scale != scale ||
+      oldWidget.autoScale != autoScale ||
+      oldWidget.minScale != minScale ||
+      oldWidget.car != car;
 }
 
 /// Applies the interface scale from [AppState].
@@ -62,6 +102,9 @@ class UiMetrics extends InheritedWidget {
 /// every row, icon, hit target and the custom window frame grow together —
 /// what a desktop app's DPI setting is expected to do. Text stays crisp
 /// because the transform is applied at paint time, not by upscaling a bitmap.
+///
+/// The car profile raises the floor: on a head unit the interface never drops
+/// to desktop density, whether the automatic mode or the slider is in charge.
 class UiScaling extends StatelessWidget {
   const UiScaling({super.key, required this.state, required this.child});
 
@@ -70,14 +113,50 @@ class UiScaling extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double autoScale = automaticDpiScale(context);
-    final double scale = normalizeDpiScale(
+    final bool car = carSurfaceOf(context, state.surface);
+    final double floor = dpiScaleFloor(car: car);
+    final double autoScale = profileDpiScale(
+      automaticDpiScale(context),
+      floor: floor,
+    );
+    final double scale = profileDpiScale(
       state.autoDpiScale ? autoScale : state.dpiScale,
+      floor: floor,
     );
     final Widget scaled = scale == kDpiScaleDefault
         ? child
         : _ScaledInterface(scale: scale, child: child);
-    return UiMetrics(scale: scale, autoScale: autoScale, child: scaled);
+    return UiMetrics(
+      scale: scale,
+      autoScale: autoScale,
+      minScale: floor,
+      car: car,
+      child: scaled,
+    );
+  }
+}
+
+/// Roomier Material metrics for the car profile.
+///
+/// The global scale already enlarges everything; this additionally swaps the
+/// compact desktop density Flutter picks by default for an expanded one and
+/// restores the padded 48 px tap target around framework controls (icon
+/// buttons, dropdowns, list tiles) that a moving hand needs.
+class CarMetrics extends StatelessWidget {
+  const CarMetrics({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!UiMetrics.carOf(context)) return child;
+    return Theme(
+      data: Theme.of(context).copyWith(
+        visualDensity: const VisualDensity(horizontal: 1, vertical: 1),
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+      ),
+      child: child,
+    );
   }
 }
 

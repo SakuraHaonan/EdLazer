@@ -10,7 +10,7 @@ import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/theme/app_theme.dart';
 
 const String _scanUrl =
-    'https://music.163.com/login?codekey=fixture-key';
+    'https://music.163.com/login?codekey=fixture-key&login_traceId=fixture-trace';
 
 const GatewayUserProfile _profile = GatewayUserProfile(
   userId: 7,
@@ -32,6 +32,7 @@ class _QrGateway extends NeteaseGateway {
   int polls = 0;
   int statusCalls = 0;
   final List<String> checkedKeys = <String>[];
+  final List<String> traces = <String>[];
 
   @override
   Future<String> createQrKey() async => 'fixture-key';
@@ -40,8 +41,9 @@ class _QrGateway extends NeteaseGateway {
   Future<String> createQrCodeUrl(String key) async => _scanUrl;
 
   @override
-  Future<GatewayQrCheck> checkQrCode(String key) async {
+  Future<GatewayQrCheck> checkQrCode(String key, {String? clientTraceId}) async {
     checkedKeys.add(key);
+    traces.add(clientTraceId ?? '');
     final int index = polls < codes.length ? polls : codes.length - 1;
     polls++;
     final int code = codes.isEmpty ? 801 : codes[index];
@@ -95,8 +97,11 @@ void main() {
     expect(url, _scanUrl);
     expect(await state.pollQrLogin(url!), 801);
     expect(state.signedIn, isFalse);
-    // The poll carries the key from the scan URL, not the whole URL.
+    // The poll carries the key from the scan URL, not the whole URL, and
+    // replays the scan trace the phone forwards when it confirms.
     expect(gateway.checkedKeys, <String>['fixture-key']);
+    expect(gateway.traces, <String>['fixture-trace']);
+    expect(state.qrPollError, isNull);
   });
 
   test(

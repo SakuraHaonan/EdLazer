@@ -95,7 +95,15 @@ NeteaseRequest buildNeteaseRequest(
     case '/login/qr/check':
       return request(
         '/api/login/qrcode/client/login',
-        body: <String, Object?>{'key': value('key'), 'type': 3},
+        body: <String, Object?>{
+          'key': value('key'),
+          'type': 3,
+          // The confirmation the phone sends names the scan trace it read
+          // from the QR; replaying the same trace lets the server hand the
+          // finished login back to this poll.
+          if (value('clientTraceId').isNotEmpty)
+            'clientTraceId': value('clientTraceId'),
+        },
       );
     case '/login/status':
       return request('/api/w/nuser/account/get', web: true);

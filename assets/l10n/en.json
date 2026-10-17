@@ -272,5 +272,14 @@
   "DPI 缩放 · {percent}": "DPI scale · {percent}",
   "80–175%；按比例放大整块界面，适合高分屏。": "80–175%. Scales the whole interface up, for high-density screens.",
   "自动调节 DPI 缩放": "Automatic DPI scale",
-  "按窗口可用空间自动推算；拖动拉杆即改为手动": "Fits the scale to the window; dragging the slider switches to manual"
+  "按窗口可用空间自动推算；拖动拉杆即改为手动": "Fits the scale to the window; dragging the slider switches to manual",
+  "设备形态": "Device",
+  "标准": "Standard",
+  "车机": "Car head unit",
+  "在 Android 车机上自动放大；其余设备保持标准密度": "Scales up on Android head units; other devices keep the standard density",
+  "按平台上报的密度显示，桌面与手机默认如此": "Use the density the platform reports — the default on desktop and phones",
+  "放大界面与控件，适合远距离、行进中的触控": "Enlarges the interface and its controls for distant, in-motion touch",
+  "已启用": "Active",
+  "{min}–{max}%；按比例放大整块界面，适合高分屏。": "{min}–{max}%. Scales the whole interface up, for high-density screens.",
+  "二维码服务暂时无法连接，正在重试…": "The QR service is unreachable right now. Retrying…"
 }

@@ -515,26 +515,48 @@ class NeteaseTransport {
     return List<int>.generate(size, (_) => _rng.nextInt(256));
   }
 
-  /// Scan URL for the QR login, following the api-enhanced contract.
+  /// RFC 4122 version 4 id from the secure RNG.
+  static String _uuidV4() {
+    final List<int> bytes = _secureRandom(16);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final String hex = bytes
+        .map((int b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
+  /// Scan URL for the QR login.
   ///
-  /// The plain form is `https://music.163.com/login?codekey=<unikey>` — the
-  /// shape every client hands the phone app (api-enhanced's `login_qr_create`
-  /// defaults to `platform: 'pc'`, music-lib builds the same URL). The `web`
-  /// platform adds a `chainId` trace parameter
-  /// (`v1_{sDeviceId}_{platform}_{action}_{timestamp}`) that only means
-  /// something for a **real** `sDeviceId` of the session that minted the
-  /// unikey. A made-up `unknown-…` device id names no session the phone can
-  /// resolve, and a scan of such a QR leaves the poll at 801 forever. Only
-  /// append the parameter when the id is real, never fabricated.
+  /// The base form is `https://music.163.com/login?codekey=<unikey>`; the
+  /// phone app (9.6.x) recognises exactly that path and reads a
+  /// `login_traceId` query parameter on the way, which it forwards as
+  /// `clientTraceId` when it confirms the scan through
+  /// `login/qrcode/server/login`. Without that trace the confirmation has
+  /// nothing to bind back to this scan session, the key never reaches 803 and
+  /// the desktop keeps polling a scan the server cannot see. Every QR we mint
+  /// therefore carries its own trace, and the poll replays it.
+  ///
+  /// The `web` platform additionally expects a `chainId`
+  /// (`v1_{sDeviceId}_{platform}_{action}_{timestamp}`), but only one derived
+  /// from a **real** `sDeviceId`: a made-up `unknown-…` device id names a
+  /// session the phone cannot resolve. Only append it when the id is real,
+  /// never fabricate one.
   String _qrLoginUrl(String key, String platform) {
-    final String base =
-        'https://music.163.com/login?codekey=${Uri.encodeQueryComponent(key)}';
-    if (platform != 'web') return base;
-    final String deviceId = _cookieValue(cookie, 'sDeviceId');
-    if (deviceId.isEmpty) return base;
-    final String chainId =
-        'v1_${deviceId}_web_login_${_clock().millisecondsSinceEpoch}';
-    return '$base&chainId=${Uri.encodeQueryComponent(chainId)}';
+    final StringBuffer url = StringBuffer(
+      'https://music.163.com/login?codekey=${Uri.encodeQueryComponent(key)}',
+    );
+    url.write('&login_traceId=${Uri.encodeQueryComponent(_uuidV4())}');
+    if (platform == 'web') {
+      final String deviceId = _cookieValue(cookie, 'sDeviceId');
+      if (deviceId.isNotEmpty) {
+        final String chainId =
+            'v1_${deviceId}_web_login_${_clock().millisecondsSinceEpoch}';
+        url.write('&chainId=${Uri.encodeQueryComponent(chainId)}');
+      }
+    }
+    return url.toString();
   }
 
   /// Reads a single cookie value out of a `Cookie` header, or ''.

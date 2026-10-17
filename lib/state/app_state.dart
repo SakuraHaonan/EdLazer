@@ -183,6 +183,10 @@ class AppState extends ChangeNotifier {
   /// Which presentation the shell forces; [AppUiMode.auto] follows the width.
   AppUiMode uiMode = AppUiMode.auto;
 
+  /// Which device form the density is tuned for; [AppSurface.auto] recognises
+  /// a car head unit from the platform.
+  AppSurface surface = AppSurface.auto;
+
   /// Manual interface scale, used while [autoDpiScale] is off.
   double dpiScale = kDpiScaleDefault;
 
@@ -196,6 +200,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
       'lazer_ui_mode',
+      value.name,
+    );
+  }
+
+  Future<void> setSurface(AppSurface value) async {
+    if (surface == value) return;
+    surface = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_surface',
       value.name,
     );
   }
@@ -410,6 +424,7 @@ class AppState extends ChangeNotifier {
       );
       language = AppLanguage.parse(prefs.getString('lazer_language'));
       uiMode = AppUiModeLabels.parse(prefs.getString('lazer_ui_mode'));
+      surface = AppSurfaceLabels.parse(prefs.getString('lazer_surface'));
       dpiScale = normalizeDpiScale(
         prefs.getDouble('lazer_dpi_scale') ?? kDpiScaleDefault,
       );
@@ -547,6 +562,7 @@ class AppState extends ChangeNotifier {
   /// Starts a QR session and returns the scan URL, or null on failure.
   Future<String?> beginQrLogin() async {
     _qrConfirmed = false;
+    qrPollError = null;
     try {
       final String key = await gateway.createQrKey();
       if (key.isEmpty) return null;
@@ -562,6 +578,11 @@ class AppState extends ChangeNotifier {
   /// asking the key again (the key itself is spent after a confirmation).
   bool _qrConfirmed = false;
 
+  /// Last transport/gateway failure while polling the scan key, for the
+  /// sign-in card. Cleared as soon as a poll answers again — a silent 801
+  /// fallback used to hide server rejections completely.
+  String? qrPollError;
+
   /// Polls a QR key: 800 expired, 801 waiting, 802 scanned, 803 confirmed.
   ///
   /// Only 803 means "this session is signed in": the scan URL was rejected by
@@ -570,10 +591,17 @@ class AppState extends ChangeNotifier {
   Future<int> pollQrLogin(String url) async {
     final Uri? uri = Uri.tryParse(url);
     final String? key = uri?.queryParameters['codekey'];
+    // The phone reads this off the QR and confirms with it; replay it so the
+    // confirmation can be matched to this scan session.
+    final String? traceId = uri?.queryParameters['login_traceId'];
     if (key == null || key.isEmpty) return 800;
     try {
       if (_qrConfirmed && await _adoptQrSession()) return 803;
-      final GatewayQrCheck check = await gateway.checkQrCode(key);
+      final GatewayQrCheck check = await gateway.checkQrCode(
+        key,
+        clientTraceId: traceId,
+      );
+      qrPollError = null;
       if (check.code == 803) {
         _qrConfirmed = true;
         if (await _adoptQrSession()) return 803;
@@ -587,7 +615,8 @@ class AppState extends ChangeNotifier {
         if (await _adoptQrSession()) return 803;
       }
       return check.code;
-    } catch (_) {
+    } catch (error) {
+      qrPollError = _friendly(error);
       return 801;
     }
   }

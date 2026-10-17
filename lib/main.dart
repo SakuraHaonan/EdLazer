@@ -153,10 +153,11 @@ class _LazerAppState extends State<LazerApp> {
           acceleration: _state.scrollAcceleration,
         ),
         // The whole interface — custom title bar included — is drawn at the
-        // resolved DPI scale, so the window frame and the pages agree.
+        // resolved DPI scale, so the window frame and the pages agree. The car
+        // profile additionally rooms out the framework's own tap targets.
         builder: (context, child) => UiScaling(
           state: _state,
-          child: WindowFrame(child: child!),
+          child: CarMetrics(child: WindowFrame(child: child!)),
         ),
         // Structural rebuilds only: `setState` fires on sign-in/out, never on
         // the 100 ms position ticks (leaf transport widgets consume those).

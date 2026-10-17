@@ -72,7 +72,7 @@ class _Gateway extends NeteaseGateway {
   Future<String> createQrCodeUrl(String key) async =>
       'https://music.163.com/login?codekey=$key';
   @override
-  Future<GatewayQrCheck> checkQrCode(String key) async =>
+  Future<GatewayQrCheck> checkQrCode(String key, {String? clientTraceId}) async =>
       const GatewayQrCheck(code: 801);
 }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:lazer_nextgen/gateway/crypto.dart';
+import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/gateway/routes.dart';
 import 'package:lazer_nextgen/gateway/transport.dart';
 
@@ -199,7 +200,18 @@ void main() {
       );
       expect(body['code'], 200);
       final Map<String, dynamic> data = body['data'] as Map<String, dynamic>;
-      expect(data['qrurl'], 'https://music.163.com/login?codekey=abc123');
+      final String url = data['qrurl'] as String;
+      // The phone app (9.6.x) reads `login_traceId` off the scan URL and
+      // confirms with it, so every QR we mint has to carry one.
+      expect(url, startsWith('https://music.163.com/login?codekey=abc123&login_traceId='));
+      final String trace = Uri.parse(url).queryParameters['login_traceId']!;
+      expect(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ).hasMatch(trace),
+        isTrue,
+        reason: 'trace ids are fresh v4 ids, got $trace',
+      );
     });
 
     test('refuses a blank key', () async {
@@ -219,10 +231,10 @@ void main() {
         '/login/qr/create',
         <String, String>{'key': 'k1', 'platform': 'web'},
       );
-      expect(
-        (body['data'] as Map<String, dynamic>)['qrurl'],
-        'https://music.163.com/login?codekey=k1',
-      );
+      final String url =
+          (body['data'] as Map<String, dynamic>)['qrurl'] as String;
+      expect(url, startsWith('https://music.163.com/login?codekey=k1'));
+      expect(url, isNot(contains('chainId')));
     });
 
     test('adds the web chainId only for a real sDeviceId', () async {
@@ -234,12 +246,57 @@ void main() {
       );
       expect(
         (body['data'] as Map<String, dynamic>)['qrurl'],
-        startsWith(
-          'https://music.163.com/login?codekey=k1&chainId=v1_DEV42_web_login_',
-        ),
+        contains('&chainId=v1_DEV42_web_login_'),
       );
     });
   });
+
+  group('qr poll trace', () {
+    test('sends the scan trace and falls back when it is rejected', () async {
+      final _TraceTransport transport = _TraceTransport();
+      final NeteaseGateway gateway = NeteaseGateway(transport: transport);
+      final GatewayQrCheck check = await gateway.checkQrCode(
+        'abc',
+        clientTraceId: 'trace-1',
+      );
+      expect(check.code, 801);
+      expect(transport.calls.first['clientTraceId'], 'trace-1');
+      expect(
+        transport.calls.last.containsKey('clientTraceId'),
+        isFalse,
+        reason: 'the untraced poll is the compatibility path',
+      );
+    });
+
+    test('the plain poll keeps working without a trace', () async {
+      final _TraceTransport transport = _TraceTransport(acceptTrace: true);
+      final NeteaseGateway gateway = NeteaseGateway(transport: transport);
+      await gateway.checkQrCode('abc');
+      expect(transport.calls, hasLength(1));
+      expect(transport.calls.single.containsKey('clientTraceId'), isFalse);
+    });
+  });
+}
+
+/// A transport whose traced poll fails the way a gateway without the field
+/// would, so the fallback path can be exercised.
+class _TraceTransport extends NeteaseTransport {
+  _TraceTransport({this.acceptTrace = false});
+
+  final bool acceptTrace;
+  final List<Map<String, String>> calls = <Map<String, String>>[];
+
+  @override
+  Future<Map<String, dynamic>> request(
+    String alias,
+    Map<String, String> parameters,
+  ) async {
+    calls.add(Map<String, String>.of(parameters));
+    if (parameters.containsKey('clientTraceId') && !acceptTrace) {
+      throw GatewayServiceException(400, alias);
+    }
+    return <String, dynamic>{'code': 801, 'message': '等待扫码'};
+  }
 }
 
 List<int> _hexToBytes(String hex) {

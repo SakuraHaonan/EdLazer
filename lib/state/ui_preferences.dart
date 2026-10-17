@@ -1,9 +1,12 @@
 /// Interface preferences shared by the shell and the settings page: which
-/// presentation the app forces, and how large the interface is drawn.
+/// presentation the app forces, how large the interface is drawn, and which
+/// device form the density is tuned for.
 library;
 
 import 'dart:math' as math;
 import 'dart:ui' show Size;
+
+import 'package:flutter/foundation.dart' show TargetPlatform;
 
 /// Window width below which the shell normally switches to its compact
 /// (phone) presentation: bottom tab bar, floating transport, pushed details.
@@ -102,3 +105,100 @@ double dpiScaleForWorkspace(Size workspace) {
   if (estimate <= 1) return kDpiScaleDefault;
   return normalizeDpiScale(estimate.clamp(1, kAutoDpiScaleMax));
 }
+
+// ---------------------------------------------------------------------------
+// Device form
+// ---------------------------------------------------------------------------
+
+/// Which device the interface is drawn for.
+///
+/// The interface is designed at desktop density: a 15 px body, 48 px controls,
+/// rows a mouse can hit. A car head unit is a different place to use it — the
+/// screen is large but sits an arm's length away behind glass, it is touched in
+/// motion, and its pixels are not dense (a 1280×720 or 1920×720 panel reports a
+/// 100% density, so the same logical pixels are physically big but far away).
+/// The car profile answers that with a larger interface floor and roomier
+/// controls.
+enum AppSurface {
+  /// Recognise a head unit from the platform and switch by itself.
+  auto,
+
+  /// Whatever density the platform reports.
+  standard,
+
+  /// Large, arm's-length controls, whatever the platform reports.
+  car,
+}
+
+extension AppSurfaceLabels on AppSurface {
+  /// Chinese source string, translated through `context.tr`.
+  String get label => switch (this) {
+    AppSurface.auto => '自动选择',
+    AppSurface.standard => '标准',
+    AppSurface.car => '车机',
+  };
+
+  String get detail => switch (this) {
+    AppSurface.auto => '在 Android 车机上自动放大；其余设备保持标准密度',
+    AppSurface.standard => '按平台上报的密度显示，桌面与手机默认如此',
+    AppSurface.car => '放大界面与控件，适合远距离、行进中的触控',
+  };
+
+  /// Parses a persisted [name]; unknown or missing values fall back to
+  /// [AppSurface.auto].
+  static AppSurface parse(String? name) => AppSurface.values.firstWhere(
+    (AppSurface surface) => surface.name == name,
+    orElse: () => AppSurface.auto,
+  );
+}
+
+/// Smallest interface scale the car profile allows.
+///
+/// A head unit is read from a metre away, through glass, while the car moves:
+/// 1× desktop density is what made the interface look tiny there. The floor is
+/// a starting point the DPI slider can still raise.
+const double kCarScaleMin = 1.35;
+
+/// Physical pixels below which a display is never a head unit.
+const Size kCarMinPhysicalSize = Size(960, 540);
+
+/// Highest device pixel ratio a head unit reports. Phones report 2–3.5×, so a
+/// 1× panel is either an embedded/10-foot display or an old, low-density one —
+/// both of which want the larger treatment.
+const double kCarMaxDevicePixelRatio = 1.5;
+
+/// Best-effort head-unit recognition.
+///
+/// The app cannot ask Android whether it is running on a vehicle head unit
+/// without platform code, so this reads the shape such a device always has:
+/// an embedded Android panel that renders at (or near) one physical pixel per
+/// logical pixel, is landscape, and is at least 960×540. Android TV boxes pass
+/// the same test and want the same large, far-viewed interface, so they share
+/// it; phones (density ≥ 2) and portrait tablets never match. Desktop
+/// platforms are excluded on purpose — a window's size says nothing about the
+/// display behind it, so there the choice stays manual.
+bool looksLikeCarDisplay({
+  required TargetPlatform platform,
+  required Size physicalSize,
+  required double devicePixelRatio,
+}) {
+  if (platform != TargetPlatform.android) return false;
+  if (!devicePixelRatio.isFinite || devicePixelRatio <= 0) return false;
+  if (devicePixelRatio > kCarMaxDevicePixelRatio) return false;
+  if (physicalSize.width < kCarMinPhysicalSize.width) return false;
+  if (physicalSize.height < kCarMinPhysicalSize.height) return false;
+  // Head units are mounted in landscape; a portrait window is not one.
+  return physicalSize.width > physicalSize.height;
+}
+
+/// Whether the car profile is in effect for [surface], given the platform's
+/// own answer ([detected]).
+bool carSurfaceActive(AppSurface surface, {required bool detected}) =>
+    switch (surface) {
+      AppSurface.car => true,
+      AppSurface.standard => false,
+      AppSurface.auto => detected,
+    };
+
+/// The smallest interface scale the active profile allows.
+double dpiScaleFloor({required bool car}) => car ? kCarScaleMin : kDpiScaleMin;

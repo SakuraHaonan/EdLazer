@@ -67,6 +67,62 @@ void main() {
       expect(dpiScaleForWorkspace(Size.zero), kDpiScaleDefault);
     });
 
+    test('a head unit is a low-density landscape Android panel', () {
+      bool detect({
+        TargetPlatform platform = TargetPlatform.android,
+        Size size = const Size(1280, 720),
+        double dpr = 1,
+      }) => looksLikeCarDisplay(
+        platform: platform,
+        physicalSize: size,
+        devicePixelRatio: dpr,
+      );
+
+      // Typical 720p and 1080p head units, including wide short panels.
+      expect(detect(), isTrue);
+      expect(detect(size: const Size(1920, 720)), isTrue);
+      expect(detect(size: const Size(1024, 600)), isTrue);
+      // Phones report a high density, tablets and portrait panels are excluded.
+      expect(detect(dpr: 2.75), isFalse);
+      expect(detect(size: const Size(720, 1280)), isFalse);
+      expect(detect(size: const Size(800, 480)), isFalse);
+      // A window on a desktop says nothing about the display behind it.
+      expect(detect(platform: TargetPlatform.windows), isFalse);
+      expect(detect(platform: TargetPlatform.linux), isFalse);
+      expect(detect(platform: TargetPlatform.iOS, dpr: 3), isFalse);
+      expect(detect(dpr: 0), isFalse);
+    });
+
+    test('the device form decides whether the car profile applies', () {
+      expect(
+        carSurfaceActive(AppSurface.auto, detected: true),
+        isTrue,
+      );
+      expect(
+        carSurfaceActive(AppSurface.auto, detected: false),
+        isFalse,
+      );
+      expect(
+        carSurfaceActive(AppSurface.car, detected: false),
+        isTrue,
+        reason: 'an explicit choice wins over detection',
+      );
+      expect(carSurfaceActive(AppSurface.standard, detected: true), isFalse);
+      expect(AppSurfaceLabels.parse('car'), AppSurface.car);
+      expect(AppSurfaceLabels.parse('standard'), AppSurface.standard);
+      expect(AppSurfaceLabels.parse('nope'), AppSurface.auto);
+    });
+
+    test('the car profile floors the scale at its minimum', () {
+      expect(dpiScaleFloor(car: true), kCarScaleMin);
+      expect(dpiScaleFloor(car: false), kDpiScaleMin);
+      expect(profileDpiScale(1, floor: kCarScaleMin), kCarScaleMin);
+      expect(profileDpiScale(kCarScaleMin, floor: kCarScaleMin), kCarScaleMin);
+      expect(profileDpiScale(1.5, floor: kCarScaleMin), 1.5);
+      expect(profileDpiScale(9, floor: kCarScaleMin), kDpiScaleMax);
+      expect(profileDpiScale(1, floor: kDpiScaleMin), 1);
+    });
+
     test('layout and dpi choices persist and reset together', () async {
       final state = AppState(catalog: _Catalog());
       addTearDown(state.dispose);
@@ -103,6 +159,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final state = AppState(catalog: _Catalog())
+      ..surface = AppSurface.standard
       ..autoDpiScale = false
       ..dpiScale = 1.25;
     addTearDown(state.dispose);
@@ -146,7 +203,9 @@ void main() {
     tester.view.physicalSize = const Size(900, 700);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final state = AppState(catalog: _Catalog())..autoDpiScale = false;
+    final state = AppState(catalog: _Catalog())
+      ..surface = AppSurface.standard
+      ..autoDpiScale = false;
     addTearDown(state.dispose);
     Size? laidOut;
     BuildContext? probe;
@@ -210,7 +269,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the settings sheet drives layout, dpi scale and its auto mode', (
+  testWidgets('the settings sheet drives device form, layout and dpi scale', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1200);
@@ -223,6 +282,8 @@ void main() {
         animation: state,
         builder: (BuildContext context, _) => MaterialApp(
           theme: buildAppTheme(),
+          builder: (BuildContext context, Widget? child) =>
+              UiScaling(state: state, child: child!),
           home: Scaffold(
             body: SingleChildScrollView(child: InterfaceSettings(state: state)),
           ),
@@ -233,7 +294,8 @@ void main() {
     expect(find.text('强制桌面端'), findsNothing);
 
     // Layout dropdown: the forced modes are the three documented choices.
-    await tester.tap(find.text('自动选择'));
+    final layoutDropdown = find.byType(DropdownButtonFormField<AppUiMode>);
+    await tester.tap(layoutDropdown);
     await tester.pumpAndSettle();
     expect(find.text('强制桌面端'), findsOneWidget);
     expect(find.text('强制移动端'), findsOneWidget);
@@ -261,13 +323,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(state.autoDpiScale, isTrue);
 
-    // Reset returns to the shipped 100% default.
-    await state.setDpiScale(1.4);
+    // Device form: choosing the car raises the floor the slider may reach.
+    expect(tester.widget<Slider>(find.byType(Slider)).min, kDpiScaleMin);
+    final surfaceDropdown = find.byType(DropdownButtonFormField<AppSurface>);
+    await tester.tap(surfaceDropdown);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('车机').last);
+    await tester.pumpAndSettle();
+    expect(state.surface, AppSurface.car);
+    expect(
+      (await SharedPreferences.getInstance()).getString('lazer_surface'),
+      'car',
+    );
+    expect(UiMetrics.carOf(tester.element(surfaceDropdown)), isTrue);
+    expect(find.text('已启用'), findsOneWidget);
+    expect(find.textContaining('135–175%'), findsOneWidget);
+    final Slider carSlider = tester.widget<Slider>(find.byType(Slider));
+    expect(carSlider.min, kCarScaleMin);
+    expect(carSlider.value, greaterThanOrEqualTo(kCarScaleMin));
+
+    // The floor holds whatever the manual value is: the applied scale can
+    // never fall back to desktop density on a head unit.
+    BuildContext settingsContext = tester.element(surfaceDropdown);
+    expect(UiMetrics.scaleOf(settingsContext), kCarScaleMin);
+    await state.setDpiScale(0.9);
+    await tester.pumpAndSettle();
+    settingsContext = tester.element(surfaceDropdown);
+    expect(state.dpiScale, 0.9);
+    expect(
+      UiMetrics.scaleOf(settingsContext),
+      kCarScaleMin,
+      reason: 'the car floor overrides a smaller manual value',
+    );
+    expect(
+      tester.widget<Slider>(find.byType(Slider)).value,
+      kCarScaleMin,
+    );
+    expect(find.text('DPI 缩放 · 135%'), findsOneWidget);
+
+    // Reset returns to the shipped 100% default, and standard restores 80%.
     await tester.tap(find.byKey(const ValueKey('dpi-scale-reset')));
     await tester.pumpAndSettle();
     expect(state.dpiScale, kDpiScaleDefault);
     expect(state.autoDpiScale, isTrue);
+    await tester.tap(surfaceDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('标准').last);
+    await tester.pumpAndSettle();
+    settingsContext = tester.element(surfaceDropdown);
+    expect(UiMetrics.carOf(settingsContext), isFalse);
+    expect(tester.widget<Slider>(find.byType(Slider)).min, kDpiScaleMin);
     expect(tester.takeException(), isNull);
   });
 }

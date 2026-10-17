@@ -505,6 +505,10 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
   /// tick race it and replay an older session cookie.
   bool _polling = false;
 
+  /// Last poll failure, mirrored from the state so the card can say why the
+  /// scan is not progressing instead of silently waiting forever.
+  bool _pollFailed = false;
+
   @override
   void initState() {
     super.initState();
@@ -517,6 +521,7 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
     setState(() {
       _qrUrl = url;
       _qrError = url == null ? '二维码获取失败，请检查网络后重试。' : null;
+      _pollFailed = false;
     });
     if (url != null) _startPolling();
     if (url != null) _startCountdown();
@@ -540,6 +545,8 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
     try {
       final int code = await widget.state.pollQrLogin(url);
       if (!mounted || _phase == _QrPhase.expired) return;
+      final bool failed = widget.state.qrPollError != null;
+      if (failed != _pollFailed) setState(() => _pollFailed = failed);
       switch (code) {
         case 803:
           _poll?.cancel();
@@ -588,6 +595,7 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
       _qrUrl = null;
       _qrError = null;
       _polling = false;
+      _pollFailed = false;
     });
     unawaited(_beginReal());
   }
@@ -707,6 +715,18 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
             style: context.type.captionMuted,
           ),
         ),
+        if (_pollFailed && _phase == _QrPhase.fresh) ...[
+          const SizedBox(height: 6),
+          Center(
+            child: TrText(
+              '二维码服务暂时无法连接，正在重试…',
+              textAlign: TextAlign.center,
+              style: context.type.captionMuted.copyWith(
+                color: context.colors.clayDeep,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.lg),
         BusyRow(
           busy: busy,

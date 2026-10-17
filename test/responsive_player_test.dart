@@ -112,7 +112,7 @@ class _AuthGateway extends NeteaseGateway {
   @override
   Future<String> createQrKey() async => 'fixture-key';
   @override
-  Future<GatewayQrCheck> checkQrCode(String key) async {
+  Future<GatewayQrCheck> checkQrCode(String key, {String? clientTraceId}) async {
     if (!qrCompletes) return const GatewayQrCheck(code: 801);
     sessionCookie = 'MUSIC_U=fixture';
     return const GatewayQrCheck(code: 803, cookie: 'MUSIC_U=fixture');
