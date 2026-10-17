@@ -6371,17 +6371,18 @@ class DesktopPlayerController private constructor(
             qrFallbackUrl = null
             loginError = null
             try {
-                val key = gateway.createQrKey(platform = "web").data?.unikey.orEmpty()
+                val key = gateway.createQrKey().data?.unikey.orEmpty()
                 check(key.isNotBlank()) { tr("login.qr_key_empty") }
-                val code = gateway.createQrCode(key, includeImage = true, platform = "web").data
+                val code = gateway.createQrCode(key, includeImage = true).data
                 qrImageData = code?.qrimg
                 qrFallbackUrl = code?.qrurl?.let(::normalizeGatewayQrLoginUrl)
                 check(!qrImageData.isNullOrBlank() || !qrFallbackUrl.isNullOrBlank()) { tr("login.qr_empty") }
                 qrLoginState = QrLoginState.WAITING_FOR_SCAN
 
                 while (isActive) {
-                    delay(1_800)
-                    val result = gateway.checkQrCode(key, platform = "web")
+                    // The desktop client polls once a second.
+                    delay(1_000)
+                    val result = gateway.checkQrCode(key)
                     when (result.code) {
                         QrCheckResponse.EXPIRED_CODE -> {
                             qrLoginState = QrLoginState.EXPIRED
@@ -6389,6 +6390,8 @@ class DesktopPlayerController private constructor(
                         }
                         QrCheckResponse.WAITING_FOR_SCAN_CODE -> qrLoginState = QrLoginState.WAITING_FOR_SCAN
                         QrCheckResponse.WAITING_FOR_CONFIRMATION_CODE -> qrLoginState = QrLoginState.WAITING_FOR_CONFIRMATION
+                        // Risk control: the scan landed, the phone has one more check to clear.
+                        QrCheckResponse.RISK_CONTROL_CODE -> qrLoginState = QrLoginState.WAITING_FOR_CONFIRMATION
                         QrCheckResponse.AUTHORIZED_CODE -> {
                             qrLoginState = QrLoginState.AUTHORIZED
                             // Close the sheet immediately; library sync continues in the background.

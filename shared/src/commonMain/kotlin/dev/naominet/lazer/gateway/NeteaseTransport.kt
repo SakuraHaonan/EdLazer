@@ -41,9 +41,13 @@ internal class NeteaseTransport(
         return when (alias) {
             "/login/qr/key" -> buildJsonObject { put("code", 200); put("data", body) }
             "/login/status" -> buildJsonObject { put("data", body) }
-            "/login", "/login/cellphone", "/login/refresh", "/login/qr/check" -> {
-                val successful = body["code"]?.jsonPrimitive?.intOrNull ==
-                    if (alias == "/login/qr/check") 803 else 200
+            // The QR session rotates while the user scans, so every poll hands back whichever
+            // cookies it received — 801/802 included, not just the 803 that ends the login.
+            "/login/qr/check" -> JsonObject(body + (result.cookie?.let {
+                mapOf("cookie" to JsonPrimitive(it))
+            } ?: emptyMap()))
+            "/login", "/login/cellphone", "/login/refresh" -> {
+                val successful = body["code"]?.jsonPrimitive?.intOrNull == 200
                 JsonObject(body + if (successful && result.cookie != null) {
                     mapOf("cookie" to JsonPrimitive(result.cookie))
                 } else emptyMap())
@@ -93,9 +97,11 @@ internal class NeteaseTransport(
         }.toMap()
         val csrf = cookies["__csrf"].orEmpty()
         val web = route.encoding == NeteaseEncoding.WEAPI
+        val plain = route.encoding == NeteaseEncoding.API
         val profile = route.client
         val payload = buildJsonObject {
             route.payload.forEach { (key, value) -> put(key, value) }
+            if (plain) return@buildJsonObject
             put("e_r", false)
             if (web) put("csrf_token", csrf)
             else putJsonObject("header") {
@@ -109,12 +115,21 @@ internal class NeteaseTransport(
                 }
             }
         }
-        val form = if (web) NeteaseCrypto.weapi(payload.toString())
-            else mapOf("params" to NeteaseCrypto.eapi(route.path, payload.toString()))
-        val endpoint = if (web) "https://music.163.com/weapi/" else "https://interfacepc.music.163.com/eapi/"
-        val response = client.post(endpoint + route.path.removePrefix("/api/")) {
+        val form = when {
+            plain -> payload.mapValues { (_, value) -> value.jsonPrimitive.content }
+            web -> NeteaseCrypto.weapi(payload.toString())
+            else -> mapOf("params" to NeteaseCrypto.eapi(route.path, payload.toString()))
+        }
+        val endpoint = when {
+            plain -> "https://music.163.com"
+            web -> "https://music.163.com/weapi/"
+            else -> "https://interfacepc.music.163.com/eapi/"
+        }
+        val target = if (plain) route.path else route.path.removePrefix("/api/")
+        val response = client.post(endpoint + target) {
             header(HttpHeaders.Accept, "application/json")
-            header(HttpHeaders.UserAgent, config.userAgent ?: "Lazer")
+            // The plain surface is the desktop client's own: present its user agent there.
+            header(HttpHeaders.UserAgent, if (plain) DESKTOP_USER_AGENT else config.userAgent ?: "Lazer")
             header("Referer", "https://music.163.com/")
             header(HttpHeaders.CacheControl, "no-cache")
             requestCookie(profile, currentCookie)?.let { header(HttpHeaders.Cookie, it) }
@@ -143,6 +158,11 @@ internal class NeteaseTransport(
 private val transportOverrides = setOf(
     "cookie", "domain", "crypto", "proxy", "headers", "realIP", "randomCNIP", "ua", "checkToken", "e_r",
 )
+
+/** The desktop client's own user agent, presented on the plain `api` surface it owns. */
+private const val DESKTOP_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 " +
+        "Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117"
 
 /**
  * The mobile app mirrors its own client version into plain cookies next to the encrypted header,

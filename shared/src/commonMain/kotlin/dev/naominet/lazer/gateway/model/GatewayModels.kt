@@ -191,6 +191,9 @@ data class QrCheckResponse(
         public const val EXPIRED_CODE: Int = 800
         public const val WAITING_FOR_SCAN_CODE: Int = 801
         public const val WAITING_FOR_CONFIRMATION_CODE: Int = 802
+
+        /** Risk control: the phone still has to clear a security check before the login lands. */
+        public const val RISK_CONTROL_CODE: Int = 8821
     }
 }
 

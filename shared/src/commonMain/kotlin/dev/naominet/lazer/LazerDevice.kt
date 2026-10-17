@@ -127,6 +127,13 @@ interface LazerPlatformHost {
     /** Turns encoded image bytes into something the screens can draw. */
     fun decodeImageBytes(bytes: ByteArray): ImageBitmap?
 
+    /**
+     * Renders [content] as a square QR image, or null when the platform cannot. The Gateway
+     * synthesizes the scan URL locally and has no encoder of its own, so the sign-in screen asks
+     * the platform for the picture instead of expecting a base64 one from the service.
+     */
+    fun encodeQrCode(content: String, size: Int): ByteArray? = null
+
     /** Drops the platform's own downloaded media cache. Returns how many files went away. */
     fun clearPlatformCache(): Int
 

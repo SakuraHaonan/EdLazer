@@ -94,9 +94,12 @@ class NeteaseMusicGatewayTest {
         val session = InMemoryGatewaySessionStore()
         val client = HttpClient(MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
-            assertEquals("/eapi/login/qrcode/client/login", request.url.encodedPath)
+            // The official desktop client polls the plain api surface, not the eapi envelope.
+            assertEquals("/api/login/qrcode/client/login", request.url.encodedPath)
             val form = (request.body as FormDataContent).formData
-            assertEquals(setOf("params"), form.names())
+            assertEquals(setOf("key", "type", "secureCaptcha"), form.names())
+            assertEquals("qr-key", form["key"])
+            assertEquals("3", form["type"])
 
             respond(
                 content = """{"code":803,"message":"授权登录成功"}""",
@@ -105,10 +108,26 @@ class NeteaseMusicGatewayTest {
         })
         val gateway = gateway(client, session)
 
-        val response = gateway.checkQrCode("qr-key", platform = "web")
+        val response = gateway.checkQrCode("qr-key")
 
         assertTrue(response.isAuthorized)
         assertEquals("MUSIC_U=qr-session", gateway.sessionCookie)
+    }
+
+    @Test
+    fun `scan key is minted on the plain api surface`() = runTest {
+        val client = HttpClient(MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals("/api/login/qrcode/unikey", request.url.encodedPath)
+            val form = (request.body as FormDataContent).formData
+            assertEquals(setOf("type"), form.names())
+            assertEquals("3", form["type"])
+
+            respond(content = """{"code":200,"unikey":"qr-key"}""", headers = jsonHeaders())
+        })
+        val gateway = gateway(client)
+
+        assertEquals("qr-key", gateway.createQrKey().data?.unikey)
     }
 
     @Test

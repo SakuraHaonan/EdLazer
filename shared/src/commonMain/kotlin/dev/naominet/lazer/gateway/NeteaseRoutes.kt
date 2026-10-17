@@ -2,7 +2,14 @@ package dev.naominet.lazer.gateway
 
 import kotlinx.serialization.json.*
 
-internal enum class NeteaseEncoding { EAPI, WEAPI }
+/**
+ * How a route's payload reaches the service.
+ *
+ * [EAPI] wraps it in the encrypted device envelope, [WEAPI] in the browser envelope, and [API]
+ * posts it as a plain form to `music.163.com/api/…` — the unencrypted surface the official desktop
+ * client uses for QR sign-in.
+ */
+internal enum class NeteaseEncoding { EAPI, WEAPI, API }
 
 /**
  * Client identity the upstream request declares. Listen-together rooms remember the creator's
@@ -32,13 +39,21 @@ internal fun neteaseRequest(alias: String, parameters: Map<String, String>): Net
             "roomId must be a non-empty opaque room identifier."
         }
     }
-    fun request(path: String, web: Boolean = false, body: JsonObjectBuilder.() -> Unit = {}) =
-        NeteaseRequest(
-            path,
-            buildJsonObject(body),
-            if (web) NeteaseEncoding.WEAPI else NeteaseEncoding.EAPI,
-            if (alias.startsWith("/listentogether/")) NeteaseClient.Mobile else NeteaseClient.Desktop,
-        )
+    fun request(
+        path: String,
+        web: Boolean = false,
+        plain: Boolean = false,
+        body: JsonObjectBuilder.() -> Unit = {},
+    ) = NeteaseRequest(
+        path,
+        buildJsonObject(body),
+        when {
+            plain -> NeteaseEncoding.API
+            web -> NeteaseEncoding.WEAPI
+            else -> NeteaseEncoding.EAPI
+        },
+        if (alias.startsWith("/listentogether/")) NeteaseClient.Mobile else NeteaseClient.Desktop,
+    )
     fun JsonObjectBuilder.page(defaultLimit: Int = 30) {
         put("limit", value("limit", defaultLimit.toString()))
         put("offset", value("offset", "0"))
@@ -56,9 +71,18 @@ internal fun neteaseRequest(alias: String, parameters: Map<String, String>): Net
             put("password", parameters["md5_password"] ?: NeteaseCrypto.md5(value("password")))
             put("rememberLogin", "true")
         }
-        "/login/qr/key" -> request("/api/login/qrcode/unikey") { put("type", 3) }
-        "/login/qr/check" -> request("/api/login/qrcode/client/login") {
+        /*
+         * QR sign-in runs on the plain `/api/` surface, exactly like the official desktop client
+         * (`page:loginQrcode`): `/api/login/qrcode/unikey` with `type: 3`, then
+         * `/api/login/qrcode/client/login` with `key`, `type` and `secureCaptcha`. Every client
+         * that completes the flow uses this surface; the encrypted routes answer 801 forever and
+         * never hand the confirmed login back to the poller.
+         */
+        "/login/qr/key" -> request("/api/login/qrcode/unikey", plain = true) { put("type", 3) }
+        "/login/qr/check" -> request("/api/login/qrcode/client/login", plain = true) {
             put("key", value("key")); put("type", 3)
+            // Carries the Yidun token when the scan tripped risk control (8821).
+            put("secureCaptcha", value("secureCaptcha"))
         }
         "/login/status" -> request("/api/w/nuser/account/get", web = true)
         "/login/refresh" -> request("/api/login/token/refresh")

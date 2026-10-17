@@ -1,13 +1,18 @@
 package dev.naominet.lazer
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
 import dev.naominet.lazer.gateway.model.UserProfile
 import kotlinx.coroutines.flow.StateFlow
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URL
 
@@ -110,6 +115,26 @@ class AndroidHost(private val context: Context) : LazerPlatformHost {
 
     override fun decodeImageBytes(bytes: ByteArray): ImageBitmap? =
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+
+    override fun encodeQrCode(content: String, size: Int): ByteArray? = runCatching {
+        val matrix = QRCodeWriter().encode(
+            content,
+            BarcodeFormat.QR_CODE,
+            size,
+            size,
+            mapOf(EncodeHintType.MARGIN to 2),
+        )
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        for (y in 0 until size) {
+            for (x in 0 until size) {
+                bitmap.setPixel(x, y, if (matrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
+            }
+        }
+        ByteArrayOutputStream().use { output ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+            output.toByteArray()
+        }
+    }.getOrNull()
 
     override fun importImageFile(source: String, name: String): String? {
         val target = File(context.filesDir, name)

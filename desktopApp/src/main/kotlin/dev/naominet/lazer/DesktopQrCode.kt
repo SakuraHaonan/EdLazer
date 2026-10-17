@@ -13,8 +13,9 @@ import java.net.URI
 import javax.imageio.ImageIO
 
 /**
- * The deployed Gateway currently emits a web QR URL with the legacy `/login` path. Keep its
- * codekey and chainId, but route the QR through NetEase's current web scan-login entry point.
+ * Normalizes a scan URL from a gateway that still asks for the web platform. This build mints the
+ * plain `…/login?codekey=` URL the official desktop client renders, so the rewrite only kicks in
+ * when a URL arrives carrying a chainId.
  */
 internal fun normalizeGatewayQrLoginUrl(rawUrl: String): String {
     val uri = runCatching { URI(rawUrl) }.getOrNull() ?: return rawUrl

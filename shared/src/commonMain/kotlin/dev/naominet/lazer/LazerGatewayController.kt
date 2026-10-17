@@ -17,6 +17,7 @@ import dev.naominet.lazer.gateway.model.ListenTogetherPlaybackState
 import dev.naominet.lazer.gateway.model.ListenTogetherPlaylistVersion
 import dev.naominet.lazer.gateway.model.ListenTogetherRoomKind
 import dev.naominet.lazer.gateway.model.Playlist
+import dev.naominet.lazer.gateway.model.QrCheckResponse
 import dev.naominet.lazer.gateway.model.Song
 import dev.naominet.lazer.gateway.model.SongComment
 import dev.naominet.lazer.gateway.model.UserProfile
@@ -1530,7 +1531,14 @@ class LazerGatewayController(private val device: LazerDevice) {
                 val key = gateway.createQrKey().data?.unikey.orEmpty()
                 check(key.isNotBlank()) { tr("login.qr_key_empty") }
                 val code = gateway.createQrCode(key, includeImage = true).data
-                qrImageData = code?.qrimg
+                // The in-process gateway synthesizes the scan URL and has no image encoder, so
+                // render it locally when the service did not hand one back.
+                qrImageData = code?.qrimg?.takeIf(String::isNotBlank)
+                    ?: code?.qrurl?.let { url ->
+                        host.encodeQrCode(url, QR_IMAGE_SIZE)?.let {
+                            "data:image/png;base64," + kotlin.io.encoding.Base64.encode(it)
+                        }
+                    }
                 check(!qrImageData.isNullOrBlank()) { tr("login.qr_empty") }
                 qrState = LazerQrLoginState.WAITING_FOR_SCAN
                 while (isActive) {
@@ -1542,6 +1550,9 @@ class LazerGatewayController(private val device: LazerDevice) {
                         }
                         801 -> qrState = LazerQrLoginState.WAITING_FOR_SCAN
                         802 -> qrState = LazerQrLoginState.WAITING_FOR_CONFIRMATION
+                        // Risk control: the scan landed, the phone has one more check to clear.
+                        QrCheckResponse.RISK_CONTROL_CODE ->
+                            qrState = LazerQrLoginState.WAITING_FOR_CONFIRMATION
                         803 -> {
                             finishLogin()
                             return@launch
@@ -1899,7 +1910,8 @@ class LazerGatewayController(private val device: LazerDevice) {
         const val BACKGROUND_IMAGE_FILE = "lazer.background.png"
         const val HOME_TRACKS_CACHE_ID = -101L
         const val PLAYLIST_PAGE_SIZE = 500
-        const val QR_POLL_INTERVAL_MILLIS = 1_800L
+        const val QR_POLL_INTERVAL_MILLIS = 1_000L
+        const val QR_IMAGE_SIZE = 512
     }
 }
 

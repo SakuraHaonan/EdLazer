@@ -232,27 +232,28 @@ class NeteaseMusicGateway(
         )
     }
 
-    suspend fun createQrKey(platform: String = "web"): QrKeyResponse =
-        post("/login/qr/key", parametersOf("platform" to platform))
+    /**
+     * Mints a scan key. The QR the official desktop client renders is
+     * `https://music.163.com/login?codekey=<unikey>` — no platform, trace or chain parameter.
+     */
+    suspend fun createQrKey(): QrKeyResponse = post("/login/qr/key")
 
-    suspend fun createQrCode(
-        key: String,
-        includeImage: Boolean = true,
-        platform: String = "web",
-    ): QrCodeResponse {
+    /** Synthesized locally from the key; the URL shape matches the desktop client exactly. */
+    suspend fun createQrCode(key: String, includeImage: Boolean = true): QrCodeResponse {
         require(key.isNotBlank()) { "key cannot be blank." }
-        return post(
-            "/login/qr/create",
-            parametersOf("key" to key, "qrimg" to includeImage, "platform" to platform),
-        )
+        return post("/login/qr/create", parametersOf("key" to key, "qrimg" to includeImage))
     }
 
-    suspend fun checkQrCode(key: String, platform: String = "web"): QrCheckResponse {
+    /**
+     * Polls the scan key. [secureCaptcha] carries the Yidun token once the service answers 8821,
+     * exactly like the desktop client's `checkQRCodeLogin`.
+     */
+    suspend fun checkQrCode(key: String, secureCaptcha: String = ""): QrCheckResponse {
         require(key.isNotBlank()) { "key cannot be blank." }
         return rememberCookie(
             post<QrCheckResponse>(
                 "/login/qr/check",
-                parametersOf("key" to key, "platform" to platform),
+                parametersOf("key" to key, "secureCaptcha" to secureCaptcha),
             ),
         )
     }
