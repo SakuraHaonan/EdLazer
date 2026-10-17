@@ -36,6 +36,37 @@ class InterfaceSettings extends StatelessWidget {
         children: [
           const SectionHeading('界面'),
           const SizedBox(height: 12),
+          DropdownButtonFormField<AppUiStyle>(
+            key: ValueKey(state.uiStyle),
+            initialValue: state.uiStyle,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: context.tr('界面风格'),
+              filled: true,
+              fillColor: context.colors.ivoryLight,
+              border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: context.borders.hairline,
+              ),
+            ),
+            items: [
+              for (final AppUiStyle style in AppUiStyle.values)
+                DropdownMenuItem<AppUiStyle>(
+                  value: style,
+                  child: Text(style.label),
+                ),
+            ],
+            onChanged: (AppUiStyle? value) {
+              if (value != null) unawaited(state.setUiStyle(value));
+            },
+          ),
+          const SizedBox(height: 6),
+          TrText(
+            state.uiStyle.detail,
+            style: context.type.captionMuted.copyWith(height: 1.5),
+          ),
+          const SizedBox(height: 20),
           DropdownButtonFormField<AppSurface>(
             key: ValueKey(state.surface),
             initialValue: state.surface,

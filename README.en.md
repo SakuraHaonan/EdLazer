@@ -21,6 +21,7 @@ playlists come from the service.
 - Adjustable scroll acceleration and momentum, lyric blur, 5ms follow checks and smooth line transitions.
 - Haptics on controls and seek detents, with adjustable intensity on iOS.
 - Layout override (automatic / desktop / mobile), DPI scaling (80–175%) and a car head-unit profile that starts at 135% with roomier controls.
+- Switchable interface style: Nextgen UI by default, or the Legacy UI ported from the Lazer project (dark Material 3, left rail and transport bar).
 - A mobile Favorites shortcut, with automatic caching of audio, artwork, lyrics and playlists.
 
 Completed audio downloads play locally; the first play streams while caching in the background.

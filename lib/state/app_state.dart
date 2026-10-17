@@ -180,6 +180,10 @@ class AppState extends ChangeNotifier {
 
   // -- interface ------------------------------------------------------------
 
+  /// Which interface the app draws; [AppUiStyle.nextgen] unless the user picks
+  /// the ported legacy shell.
+  AppUiStyle uiStyle = AppUiStyle.nextgen;
+
   /// Which presentation the shell forces; [AppUiMode.auto] follows the width.
   AppUiMode uiMode = AppUiMode.auto;
 
@@ -200,6 +204,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
       'lazer_ui_mode',
+      value.name,
+    );
+  }
+
+  Future<void> setUiStyle(AppUiStyle value) async {
+    if (uiStyle == value) return;
+    uiStyle = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_ui_style',
       value.name,
     );
   }
@@ -423,6 +437,7 @@ class AppState extends ChangeNotifier {
         orElse: () => ThemeMode.system,
       );
       language = AppLanguage.parse(prefs.getString('lazer_language'));
+      uiStyle = AppUiStyleLabels.parse(prefs.getString('lazer_ui_style'));
       uiMode = AppUiModeLabels.parse(prefs.getString('lazer_ui_mode'));
       surface = AppSurfaceLabels.parse(prefs.getString('lazer_surface'));
       dpiScale = normalizeDpiScale(

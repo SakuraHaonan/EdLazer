@@ -56,9 +56,13 @@ Future<void> initWindowFrame() async {
 /// so pushed routes never cover it). Falls through to the plain child
 /// wherever the system frame is in charge.
 class WindowFrame extends StatelessWidget {
-  const WindowFrame({super.key, required this.child});
+  const WindowFrame({super.key, required this.child, this.legacy = false});
 
   final Widget child;
+
+  /// Follow the active theme instead of the parchment palette, so the frame
+  /// matches the legacy Material shell when that style is selected.
+  final bool legacy;
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +72,7 @@ class WindowFrame extends StatelessWidget {
       textDirection: TextDirection.ltr,
       child: Column(
         children: [
-          const DesktopTitleBar(),
+          DesktopTitleBar(legacy: legacy),
           Expanded(child: child),
         ],
       ),
@@ -85,7 +89,10 @@ class WindowFrame extends StatelessWidget {
 /// The frame strip itself: parchment fill, window title on the left, window
 /// controls on the right, closed off by a Stone hairline (never a shadow).
 class DesktopTitleBar extends StatefulWidget {
-  const DesktopTitleBar({super.key});
+  const DesktopTitleBar({super.key, this.legacy = false});
+
+  /// Parchment chrome for the Nextgen shell, theme colours for the legacy one.
+  final bool legacy;
 
   @override
   State<DesktopTitleBar> createState() => _DesktopTitleBarState();
@@ -140,14 +147,21 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    final bool legacy = widget.legacy;
     return DefaultTextStyle(
-      style: context.type.caption.copyWith(decoration: TextDecoration.none),
+      style: legacy
+          ? theme.textTheme.labelMedium!.copyWith(
+              decoration: TextDecoration.none,
+            )
+          : context.type.caption.copyWith(decoration: TextDecoration.none),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             height: _barHeight,
-            color: context.colors.ivoryMedium,
+            color: legacy ? scheme.surface : context.colors.ivoryMedium,
             child: DragToMoveArea(
               child: Row(
                 children: [
@@ -162,24 +176,31 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                       kWindowTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.type.caption.copyWith(
-                        color: context.colors.cloudDark,
-                      ),
+                      style: legacy
+                          ? theme.textTheme.labelMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            )
+                          : context.type.caption.copyWith(
+                              color: context.colors.cloudDark,
+                            ),
                     ),
                   ),
                   if (!_usesNativeWindowButtons) ...[
                     _WindowButton(
                       control: _FrameControl.minimize,
+                      legacy: legacy,
                       onPressed: () => windowManager.minimize(),
                     ),
                     _WindowButton(
                       control: _maximized
                           ? _FrameControl.restore
                           : _FrameControl.maximize,
+                      legacy: legacy,
                       onPressed: _toggleMaximize,
                     ),
                     _WindowButton(
                       control: _FrameControl.close,
+                      legacy: legacy,
                       onPressed: () => windowManager.close(),
                     ),
                   ],
@@ -187,7 +208,10 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
               ),
             ),
           ),
-          const Hairline(),
+          if (legacy)
+            Container(height: 1, color: scheme.outlineVariant)
+          else
+            const Hairline(),
         ],
       ),
     );
@@ -199,10 +223,15 @@ enum _FrameControl { minimize, maximize, restore, close }
 /// One caption button: flat fill, no radius, no shadow. Hover moves the
 /// tone (Oat Warm for the quiet controls, Slate Dark inversion for close).
 class _WindowButton extends StatefulWidget {
-  const _WindowButton({required this.control, required this.onPressed});
+  const _WindowButton({
+    required this.control,
+    required this.onPressed,
+    this.legacy = false,
+  });
 
   final _FrameControl control;
   final VoidCallback onPressed;
+  final bool legacy;
 
   @override
   State<_WindowButton> createState() => _WindowButtonState();
@@ -221,16 +250,19 @@ class _WindowButtonState extends State<_WindowButton> {
   @override
   Widget build(BuildContext context) {
     final bool isClose = widget.control == _FrameControl.close;
+    final ColorScheme scheme = Theme.of(context).colorScheme;
     final Color background = !_hovering
         ? Colors.transparent
         : isClose
-        ? context.colors.slateDark
-        : context.colors.oatWarm;
+        ? (widget.legacy ? scheme.error : context.colors.slateDark)
+        : (widget.legacy ? scheme.secondaryContainer : context.colors.oatWarm);
     final Color glyph = !_hovering
-        ? context.colors.cloudDark
+        ? (widget.legacy ? scheme.onSurfaceVariant : context.colors.cloudDark)
         : isClose
-        ? context.colors.onDark
-        : context.colors.slateDark;
+        ? (widget.legacy ? scheme.onError : context.colors.onDark)
+        : (widget.legacy
+              ? scheme.onSecondaryContainer
+              : context.colors.slateDark);
 
     return Semantics(
       button: true,

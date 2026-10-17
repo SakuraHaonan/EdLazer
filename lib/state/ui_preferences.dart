@@ -12,6 +12,38 @@ import 'package:flutter/foundation.dart' show TargetPlatform;
 /// (phone) presentation: bottom tab bar, floating transport, pushed details.
 const double kCompactBreakpoint = 720;
 
+/// Which interface the app draws.
+///
+/// [nextgen] is the parchment shell this build has always shipped. [legacy] is
+/// the interface ported from the Lazer project (`E:\projects\Lazer`): the
+/// Material 3 chrome built around the blue-grey night palette, the rail, the
+/// playlist cards and the transport bar of that app.
+enum AppUiStyle {
+  nextgen,
+  legacy,
+}
+
+extension AppUiStyleLabels on AppUiStyle {
+  /// Product name, shown as written in both catalogues.
+  String get label => switch (this) {
+    AppUiStyle.nextgen => 'Nextgen UI',
+    AppUiStyle.legacy => 'Legacy UI',
+  };
+
+  /// Chinese source string, translated through `context.tr`.
+  String get detail => switch (this) {
+    AppUiStyle.nextgen => '当前的纸张式界面：编辑排版、细腻动效',
+    AppUiStyle.legacy => '移植自 Lazer 的经典界面：深色 Material 3 与左侧导航',
+  };
+
+  /// Parses a persisted [name]; unknown or missing values fall back to the
+  /// shipped interface.
+  static AppUiStyle parse(String? name) => AppUiStyle.values.firstWhere(
+    (AppUiStyle style) => style.name == name,
+    orElse: () => AppUiStyle.nextgen,
+  );
+}
+
 /// How the shell picks between the desktop and the mobile presentation.
 enum AppUiMode {
   /// Follow the window width — the desktop shell on wide windows, the compact

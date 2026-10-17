@@ -281,5 +281,8 @@
   "放大界面与控件，适合远距离、行进中的触控": "Enlarges the interface and its controls for distant, in-motion touch",
   "已启用": "Active",
   "{min}–{max}%；按比例放大整块界面，适合高分屏。": "{min}–{max}%. Scales the whole interface up, for high-density screens.",
-  "二维码服务暂时无法连接，正在重试…": "The QR service is unreachable right now. Retrying…"
+  "二维码服务暂时无法连接，正在重试…": "The QR service is unreachable right now. Retrying…",
+  "界面风格": "Interface style",
+  "当前的纸张式界面：编辑排版、细腻动效": "The current paper interface: editorial type and fine motion",
+  "移植自 Lazer 的经典界面：深色 Material 3 与左侧导航": "The classic interface ported from Lazer: dark Material 3 with a left rail"
 }

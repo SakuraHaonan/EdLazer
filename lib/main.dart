@@ -11,8 +11,11 @@ import 'package:audio_session/audio_session.dart';
 
 import 'audio/audio_engine.dart';
 import 'audio/system_media_handler.dart';
+import 'legacy/legacy_shell.dart';
+import 'legacy/legacy_theme.dart';
 import 'screens/player_page.dart';
 import 'state/app_state.dart';
+import 'state/ui_preferences.dart';
 import 'theme/app_theme.dart';
 import 'widgets/window_frame.dart';
 import 'widgets/interaction_feedback.dart';
@@ -128,6 +131,7 @@ class _LazerAppState extends State<LazerApp> {
 
   @override
   Widget build(BuildContext context) {
+    final bool legacy = _state.uiStyle == AppUiStyle.legacy;
     // WindowFrame is a pass-through off desktop: the system frame (and the
     // plain MaterialApp) stays exactly as it was.
     return InteractionFeedback(
@@ -135,8 +139,12 @@ class _LazerAppState extends State<LazerApp> {
       child: MaterialApp(
         title: 'Lazer · Field Player',
         debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        darkTheme: buildAppTheme(brightness: Brightness.dark),
+        // Legacy UI is the Material 3 shell ported from the Lazer project, so
+        // it brings its own palette and type ramp instead of the paper theme.
+        theme: legacy ? buildLegacyTheme() : buildAppTheme(),
+        darkTheme: legacy
+            ? buildLegacyTheme(brightness: Brightness.dark)
+            : buildAppTheme(brightness: Brightness.dark),
         themeMode: _state.themeMode,
         locale: _state.language.locale,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -157,7 +165,7 @@ class _LazerAppState extends State<LazerApp> {
         // profile additionally rooms out the framework's own tap targets.
         builder: (context, child) => UiScaling(
           state: _state,
-          child: CarMetrics(child: WindowFrame(child: child!)),
+          child: CarMetrics(child: WindowFrame(legacy: legacy, child: child!)),
         ),
         // Structural rebuilds only: `setState` fires on sign-in/out, never on
         // the 100 ms position ticks (leaf transport widgets consume those).
@@ -166,8 +174,11 @@ class _LazerAppState extends State<LazerApp> {
         // overlap can leave AX nodes pending after the old page is detached.
         // The shell is always home: the guest session boots straight into
         // it, and sign-in happens in a popup card that closes over this —
-        // no gate, no home swap to churn the accessibility tree.
-        home: PlayerPage(key: const ValueKey('player'), state: _state),
+        // no gate, no home swap to churn the accessibility tree. The legacy
+        // style swaps the whole shell for the Lazer-ported one.
+        home: legacy
+            ? LegacyShell(key: const ValueKey('legacy'), state: _state)
+            : PlayerPage(key: const ValueKey('player'), state: _state),
       ),
     );
   }
