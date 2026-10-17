@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../interaction/app_haptics.dart';
 import '../l10n/app_localizations.dart';
+import '../state/app_state.dart';
 import 'interaction_feedback.dart';
 
 /// Keep a control's OverlayPortal and its anchor in the same semantics island.
@@ -20,7 +24,10 @@ class SemanticsPortal extends StatelessWidget {
   );
 }
 
-class AccessibleSlider extends StatelessWidget {
+/// A semantics-labelled Material slider. [detentFeedback] opts into the app's
+/// haptics: a grab clicks once, each notch crossed clicks again (stronger at
+/// the ends), mirroring the seek bar so dragged values feel like a dial.
+class AccessibleSlider extends StatefulWidget {
   const AccessibleSlider({
     super.key,
     required this.value,
@@ -35,6 +42,7 @@ class AccessibleSlider extends StatelessWidget {
     this.semanticFormatterCallback,
     this.focusNode,
     this.autofocus = false,
+    this.detentFeedback = false,
   });
   final double value;
   final double min;
@@ -48,29 +56,79 @@ class AccessibleSlider extends StatelessWidget {
   final SemanticFormatterCallback? semanticFormatterCallback;
   final FocusNode? focusNode;
   final bool autofocus;
+  final bool detentFeedback;
   @override
-  Widget build(BuildContext context) => SemanticsPortal(
-    child: MergeSemantics(
-      child: Semantics(
-        label: semanticLabel == null ? null : context.tr(semanticLabel!),
-        child: Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: divisions,
-          label: label == null ? null : context.tr(label!),
-          onChanged: onChanged,
-          onChangeStart: onChangeStart,
-          onChangeEnd: onChangeEnd,
-          semanticFormatterCallback: semanticFormatterCallback == null
+  State<AccessibleSlider> createState() => _AccessibleSliderState();
+}
+
+class _AccessibleSliderState extends State<AccessibleSlider> {
+  SliderDetents? _detents;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState? state = widget.detentFeedback
+        ? InteractionFeedback.of(context)
+        : null;
+    final ValueChanged<double>? onChanged = widget.onChanged;
+    return SemanticsPortal(
+      child: MergeSemantics(
+        child: Semantics(
+          label: widget.semanticLabel == null
               ? null
-              : (value) => context.tr(semanticFormatterCallback!(value)),
-          focusNode: focusNode,
-          autofocus: autofocus,
+              : context.tr(widget.semanticLabel!),
+          child: Slider(
+            value: widget.value,
+            min: widget.min,
+            max: widget.max,
+            divisions: widget.divisions,
+            label: widget.label == null ? null : context.tr(widget.label!),
+            onChangeStart: widget.detentFeedback
+                ? (value) {
+                    _detents = SliderDetents(
+                      min: widget.min,
+                      max: widget.max,
+                      steps: widget.divisions,
+                    );
+                    _detents!.begin(value);
+                    if (state != null) unawaited(state.feedback(detent: true));
+                    widget.onChangeStart?.call(value);
+                  }
+                : widget.onChangeStart,
+            onChanged: !widget.detentFeedback || onChanged == null
+                ? onChanged
+                : (value) {
+                    final detents = _detents;
+                    if (detents != null &&
+                        state != null &&
+                        detents.update(value)) {
+                      unawaited(
+                        state.feedback(
+                          detent: true,
+                          boundary: value <= widget.min || value >= widget.max,
+                        ),
+                      );
+                    }
+                    onChanged(value);
+                  },
+            onChangeEnd: widget.detentFeedback
+                ? (value) {
+                    _detents?.end();
+                    _detents = null;
+                    widget.onChangeEnd?.call(value);
+                  }
+                : widget.onChangeEnd,
+            semanticFormatterCallback:
+                widget.semanticFormatterCallback == null
+                ? null
+                : (value) =>
+                      context.tr(widget.semanticFormatterCallback!(value)),
+            focusNode: widget.focusNode,
+            autofocus: widget.autofocus,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Give each portal anchor a separate node while retaining the page overlay's

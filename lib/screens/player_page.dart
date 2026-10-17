@@ -1792,7 +1792,7 @@ class _SettingsView extends StatelessWidget {
         const SectionHeading('交互'),
         SquareSwitchListTile(
           title: const TrText('震动反馈'),
-          subtitle: const TrText('点击可操作的元素和拖动进度条时反馈'),
+          subtitle: const TrText('点击可操作的元素和拖动进度条、数值条时反馈'),
           value: state.hapticsEnabled,
           onChanged: (value) => unawaited(state.setHapticsEnabled(value)),
         ),
@@ -1806,6 +1806,7 @@ class _SettingsView extends StatelessWidget {
             semanticFormatterCallback: (value) => '${(value * 100).round()}%',
             value: state.hapticIntensity,
             divisions: 20,
+            detentFeedback: true,
             onChanged: state.hapticsEnabled
                 ? (value) => unawaited(state.setHapticIntensity(value))
                 : null,
@@ -1823,6 +1824,7 @@ class _SettingsView extends StatelessWidget {
           min: 1,
           max: 10,
           divisions: 18,
+          detentFeedback: true,
           label: '${state.lyricControlsSeconds.toStringAsFixed(1)} 秒',
           onChanged: (value) => unawaited(state.setLyricControlsSeconds(value)),
         ),
@@ -1849,6 +1851,7 @@ class _SettingsView extends StatelessWidget {
           min: 1,
           max: 10,
           divisions: 18,
+          detentFeedback: true,
           label: '${state.lyricResumeSeconds.toStringAsFixed(1)} 秒',
           onChanged: (value) => unawaited(state.setLyricResumeSeconds(value)),
         ),

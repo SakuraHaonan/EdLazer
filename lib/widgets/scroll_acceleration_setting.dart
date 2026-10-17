@@ -46,6 +46,7 @@ class ScrollAccelerationSetting extends StatelessWidget {
           min: ScrollMotion.minAcceleration,
           max: ScrollMotion.maxAcceleration,
           divisions: 25,
+          detentFeedback: true,
           label: '${(state.scrollAcceleration * 100).round()}%',
           onChanged: (value) =>
               unawaited(state.setScrollAcceleration((value * 10).round() / 10)),

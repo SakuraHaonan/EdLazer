@@ -80,3 +80,40 @@ class SeekDetents {
     _notch = null;
   }
 }
+
+/// Quantized detents for setting sliders over any [min, max] range. A repeat
+/// tick requires crossing another division (1/100 of the range when the bar
+/// is undivided), so a held thumb or a keyboard auto-repeat cannot keep
+/// vibrating the way a raw onChanged stream would.
+class SliderDetents {
+  SliderDetents({required this.min, required this.max, this.steps});
+  final double min;
+  final double max;
+  final int? steps;
+  int? _notch;
+  bool active = false;
+
+  int _notchOf(double value) {
+    final span = max - min;
+    final t = span > 0 ? (value.clamp(min, max) - min) / span : 0.0;
+    return (t * (steps ?? 100)).round();
+  }
+
+  void begin(double value) {
+    active = true;
+    _notch = _notchOf(value);
+  }
+
+  bool update(double value) {
+    if (!active) return false;
+    final next = _notchOf(value);
+    if (next == _notch) return false;
+    _notch = next;
+    return true;
+  }
+
+  void end() {
+    active = false;
+    _notch = null;
+  }
+}

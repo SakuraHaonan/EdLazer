@@ -194,7 +194,7 @@
   "网络请求失败（HTTP {code}）。": "Network request failed (HTTP {code}).",
   "服务暂时拒绝了请求（{code}）。": "The server rejected the request ({code}).",
   "推荐歌单": "Recommended playlists",
-  "点击可操作的元素和拖动进度条时反馈": "Feedback on controls and seek bar detents",
+  "点击可操作的元素和拖动进度条、数值条时反馈": "Feedback on controls, seek bar and setting sliders",
   "震动强度": "Haptic intensity",
   "震动强度 · {value}%": "Haptic intensity · {value}%",
   "音量": "Volume",

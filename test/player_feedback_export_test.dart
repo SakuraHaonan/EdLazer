@@ -259,6 +259,104 @@ void main() {
     expect(find.byType(CupertinoSwitch), findsNothing);
   }, variant: TargetPlatformVariant({TargetPlatform.iOS}));
 
+  testWidgets('setting sliders click through detents and stop when disabled', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      AppHaptics.channel,
+      (call) async {
+        calls.add(call);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        AppHaptics.channel,
+        null,
+      ),
+    );
+    final state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      InteractionFeedback(
+        state: state,
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: PlayerPage(state: state),
+        ),
+      ),
+    );
+    await tester.tap(find.text('设置').first);
+    await tester.pumpAndSettle();
+    final slider = find.byWidgetPredicate(
+      (w) => w is AccessibleSlider && w.semanticLabel == '歌词控件自动隐藏时间',
+    );
+    expect(tester.widget<AccessibleSlider>(slider).detentFeedback, isTrue);
+    await tester.ensureVisible(slider);
+    await tester.pumpAndSettle();
+    calls.clear();
+    final track = tester.getRect(
+      find.descendant(of: slider, matching: find.byType(Slider)),
+    );
+    final gesture = await tester.startGesture(
+      Offset(track.left + 300, track.center.dy),
+    );
+    await tester.pump();
+    for (var dx = 250.0; dx >= 0; dx -= 25) {
+      await gesture.moveTo(Offset(track.left + dx, track.center.dy));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(calls, isNotEmpty);
+    expect(state.lyricControlsSeconds, 1);
+    expect(
+      calls.map((call) => (call.arguments as Map)['kind']),
+      everyElement(anyOf(equals('detent'), equals('boundary'))),
+    );
+    expect(
+      calls.map((call) => (call.arguments as Map)['kind']),
+      contains('detent'),
+    );
+    expect(
+      calls.map((call) => (call.arguments as Map)['kind']),
+      contains('boundary'),
+    );
+    await state.setHapticsEnabled(false);
+    calls.clear();
+    final back = await tester.startGesture(
+      Offset(track.left + 5, track.center.dy),
+    );
+    await tester.pump();
+    for (var dx = 50.0; dx <= 300; dx += 25) {
+      await back.moveTo(Offset(track.left + dx, track.center.dy));
+      await tester.pump();
+    }
+    await back.up();
+    await tester.pumpAndSettle();
+    expect(state.lyricControlsSeconds, greaterThan(1));
+    expect(calls, isEmpty);
+  }, variant: TargetPlatformVariant({TargetPlatform.iOS}));
+
+  test('SliderDetents quantizes by divisions and stays silent when idle', () {
+    final detents = SliderDetents(min: 1, max: 10, steps: 18);
+    expect(detents.update(9), false);
+    detents.begin(3.5);
+    expect(detents.update(3.5), false);
+    expect(detents.update(4), true);
+    expect(detents.update(4.02), false);
+    detents.end();
+    expect(detents.update(5), false);
+    final open = SliderDetents(min: 0, max: 1);
+    open.begin(0);
+    expect(open.update(0.004), false);
+    expect(open.update(0.01), true);
+  });
+
   testWidgets(
     'volume changes reach the engine, survive tracks and restore the unmuted level',
     (tester) async {

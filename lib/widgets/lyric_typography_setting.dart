@@ -28,6 +28,7 @@ class LyricTypographySetting extends StatelessWidget {
           min: 14,
           max: 40,
           divisions: 26,
+          detentFeedback: true,
           label: '${state.lyricFontSize.round()}',
           onChanged: (value) => unawaited(state.setLyricFontSize(value)),
         ),

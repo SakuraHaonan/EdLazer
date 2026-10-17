@@ -146,6 +146,7 @@ class _ScrollInertiaSettingState extends State<ScrollInertiaSetting> {
         min: ScrollMotion.minRetention,
         max: ScrollMotion.maxRetention,
         divisions: 13,
+        detentFeedback: true,
         label: '$_percent%',
         onChanged: (value) => _apply((value * 100).round()),
       ),
