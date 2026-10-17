@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../data/lyrics.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
+import '../state/ui_preferences.dart';
+import 'legacy_background.dart';
 import 'legacy_widgets.dart';
 
 /// The legacy now-playing page: cover and title on the left, the scrolling
@@ -66,22 +68,35 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
+    final bool hasBackground =
+        state.legacyBackground != LegacyBackgroundMode.off;
     return Scaffold(
-      backgroundColor: scheme.surface,
-      body: AnimatedBuilder(
-        animation: state,
-        builder: (BuildContext context, _) {
-          final Track? track = state.current;
-          if (track == null) {
-            return SafeArea(
-              child: Column(
-                children: [
-                  _header(context, '正在播放', showQueue: false),
-                  const Expanded(child: LegacyNotice(message: '还没有播放中的曲目。')),
-                ],
-              ),
-            );
-          }
+      backgroundColor: hasBackground ? Colors.transparent : scheme.surface,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (hasBackground)
+            LegacyAlbumBackdrop(
+              track: state.current,
+              mode: state.legacyBackground,
+              uiAlpha: state.legacyUiAlpha,
+            ),
+          AnimatedBuilder(
+            animation: state,
+            builder: (BuildContext context, _) {
+              final Track? track = state.current;
+              if (track == null) {
+                return SafeArea(
+                  child: Column(
+                    children: [
+                      _header(context, '正在播放', showQueue: false),
+                      const Expanded(
+                        child: LegacyNotice(message: '还没有播放中的曲目。'),
+                      ),
+                    ],
+                  ),
+                );
+              }
           final bool wide = MediaQuery.sizeOf(context).width >= 860;
           final Widget cover = Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -189,7 +204,9 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage> {
               ],
             ),
           );
-        },
+            },
+          ),
+        ],
       ),
     );
   }

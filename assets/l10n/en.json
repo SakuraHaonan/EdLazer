@@ -284,5 +284,12 @@
   "二维码服务暂时无法连接，正在重试…": "The QR service is unreachable right now. Retrying…",
   "界面风格": "Interface style",
   "当前的纸张式界面：编辑排版、细腻动效": "The current paper interface: editorial type and fine motion",
-  "移植自 Lazer 的经典界面：深色 Material 3 与左侧导航": "The classic interface ported from Lazer: dark Material 3 with a left rail"
+  "移植自 Lazer 的经典界面：深色 Material 3 与左侧导航": "The classic interface ported from Lazer: dark Material 3 with a left rail",
+  "背景": "Background",
+  "内容不透明度": "Content opacity",
+  "使用当前歌曲封面主色渲染整页画布": "Paints the page from the current track's cover colour",
+  "数值越小，封面主色越明显": "Lower values let more of the cover colour through",
+  "跟随当前歌曲（流动）": "Follow the track (flowing)",
+  "当前歌曲纯色": "Flat track colour",
+  "不使用": "Off"
 }

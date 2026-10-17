@@ -510,6 +510,58 @@ class LegacySettingsPage extends StatelessWidget {
           ),
         ),
         _LegacySettingRow(
+          label: '背景',
+          subtitle: '使用当前歌曲封面主色渲染整页画布',
+          trailing: DropdownButton<LegacyBackgroundMode>(
+            value: state.legacyBackground,
+            underline: const SizedBox.shrink(),
+            borderRadius: BorderRadius.circular(16),
+            items: <DropdownMenuItem<LegacyBackgroundMode>>[
+              for (final LegacyBackgroundMode mode in LegacyBackgroundMode.values)
+                DropdownMenuItem<LegacyBackgroundMode>(
+                  value: mode,
+                  child: Text(mode.label),
+                ),
+            ],
+            onChanged: (LegacyBackgroundMode? value) {
+              if (value != null) unawaited(state.setLegacyBackground(value));
+            },
+          ),
+        ),
+        _LegacySettingRow(
+          label: '内容不透明度',
+          subtitle: '数值越小，封面主色越明显',
+          trailing: SizedBox(
+            width: 220,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Slider(
+                    value: state.legacyUiAlpha.clamp(0.4, 1.0),
+                    min: 0.4,
+                    max: 1.0,
+                    onChanged: state.legacyBackground ==
+                            LegacyBackgroundMode.off
+                        ? null
+                        : (double value) =>
+                              unawaited(state.setLegacyUiAlpha(value)),
+                  ),
+                ),
+                SizedBox(
+                  width: 44,
+                  child: Text(
+                    '${(state.legacyUiAlpha * 100).round()}%',
+                    textAlign: TextAlign.right,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        _LegacySettingRow(
           label: '主题',
           subtitle: switch (state.themeMode) {
             ThemeMode.system => '跟随系统',

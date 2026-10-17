@@ -53,11 +53,37 @@ Everything above the pixels is shared with Nextgen: `AppState`, the catalogue,
 playback, artwork loading and the DPI / car display profiles all still apply,
 and the custom window frame follows the selected style's colours.
 
+## Album backdrop
+
+The album-coloured canvas is ported too — `lib/legacy/legacy_background.dart`
+against `AlbumFlowBackground.kt` and the seed extractor in `LazerBackgrounds.kt`.
+
+- **Seed** — the current cover is fetched at 96 px, sampled on a 48 px grid,
+  and bucketed by hue; the dominant bucket wins, weighted by saturation and
+  how close its lightness is to mid-grey, then its saturation is boosted 1.25×.
+  An achromatic cover keeps the legacy floor chroma. Results are cached per
+  URL (24 covers), and the previous seed stays on screen until the next one
+  decodes.
+- **Ramp** — `flowColorsFromSeed` turns the seed into five colours of the same
+  hue from 0.90 to 0.31 lightness, with chroma scaled around the seed's own
+  saturation.
+- **Flow** — four of the five colours drift as full-page radial gradients, each
+  with its own phase offset, speed, orbit, scale pulse and rotation, repainted
+  at 30 fps; the fifth paints the base and a slow overlay. A track change
+  crossfades the palette over 650 ms with a cosine ease.
+- **Veil** — the content-opacity setting composites the surface colour over the
+  canvas at its square (70% → 0.49), so the tint reads through the chrome while
+  text stays legible. The rail, the player bar and the bottom tabs turn
+  translucent while the backdrop is on.
+- **Settings** — `设置 → 界面 → 背景` chooses follow-the-track (flowing), a flat
+  track colour, or off; `内容不透明度` (40–100%) controls the veil. Stored as
+  `lazer_legacy_background` and `lazer_legacy_ui_alpha`.
+- **Reduced motion** — `MediaQuery.disableAnimations` freezes the flow, which is
+  also how the widget tests settle.
+
 ## Not ported
 
-- The album-coloured flowing background and the tinting engine
-  (`AlbumFlowBackground`, `LazerBackgrounds`) — the legacy shell uses the flat
-  palette.
 - The Miuix style engine (`LazerThemeEngine.MIUIX`); only the Material look.
+- A custom wallpaper background (`DesktopBackgroundMode.IMAGE`).
 - Comments, listen-together, the local library / HiFi pages, artist and album
   detail pages, and the queue as a floating card (the queue is a sheet here).

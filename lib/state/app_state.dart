@@ -218,6 +218,33 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  /// Legacy shell backdrop: the album-coloured flowing canvas, or off.
+  LegacyBackgroundMode legacyBackground = LegacyBackgroundMode.nowPlayingDynamic;
+
+  /// `内容不透明度` of the legacy shell — how much of the backdrop the content
+  /// veil hides.
+  double legacyUiAlpha = 0.7;
+
+  Future<void> setLegacyBackground(LegacyBackgroundMode value) async {
+    if (legacyBackground == value) return;
+    legacyBackground = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_legacy_background',
+      value.name,
+    );
+  }
+
+  Future<void> setLegacyUiAlpha(double value) async {
+    if (!value.isFinite) return;
+    legacyUiAlpha = value.clamp(0.4, 1.0);
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setDouble(
+      'lazer_legacy_ui_alpha',
+      legacyUiAlpha,
+    );
+  }
+
   Future<void> setSurface(AppSurface value) async {
     if (surface == value) return;
     surface = value;
@@ -438,6 +465,13 @@ class AppState extends ChangeNotifier {
       );
       language = AppLanguage.parse(prefs.getString('lazer_language'));
       uiStyle = AppUiStyleLabels.parse(prefs.getString('lazer_ui_style'));
+      legacyBackground = LegacyBackgroundModeLabels.parse(
+        prefs.getString('lazer_legacy_background'),
+      );
+      legacyUiAlpha = (prefs.getDouble('lazer_legacy_ui_alpha') ?? 0.7).clamp(
+        0.4,
+        1.0,
+      );
       uiMode = AppUiModeLabels.parse(prefs.getString('lazer_ui_mode'));
       surface = AppSurfaceLabels.parse(prefs.getString('lazer_surface'));
       dpiScale = normalizeDpiScale(

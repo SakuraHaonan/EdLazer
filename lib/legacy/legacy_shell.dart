@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
+import '../state/ui_preferences.dart';
+import 'legacy_background.dart';
 import 'legacy_login.dart';
 import 'legacy_now_playing.dart';
 import 'legacy_pages.dart';
@@ -89,58 +91,76 @@ class _LegacyShellState extends State<LegacyShell> {
         // row; below this the bar folds to the compact form even while the
         // rail is still on screen.
         final bool compactBar = window.width < 1_000;
+        final bool hasBackground =
+            state.legacyBackground != LegacyBackgroundMode.off;
         return Scaffold(
-          backgroundColor: scheme.surface,
-          body: Column(
+          backgroundColor: hasBackground ? Colors.transparent : scheme.surface,
+          body: Stack(
+            fit: StackFit.expand,
             children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    if (wide) _rail(scheme),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          _topBar(context, scheme, wide),
-                          Expanded(child: _content()),
-                        ],
-                      ),
-                    ),
-                  ],
+              // The album-coloured canvas the Lazer app floats its chrome over.
+              if (hasBackground)
+                LegacyAlbumBackdrop(
+                  track: state.current,
+                  mode: state.legacyBackground,
+                  uiAlpha: state.legacyUiAlpha,
                 ),
+              Column(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (wide) _rail(scheme, hasBackground),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              _topBar(context, scheme, wide),
+                              Expanded(child: _content()),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _LegacyPlayerBar(
+                    state: state,
+                    compact: compactBar,
+                    translucent: hasBackground,
+                    onOpen: _openNowPlaying,
+                  ),
+                  if (!wide)
+                    NavigationBar(
+                      backgroundColor: hasBackground
+                          ? scheme.surface.withValues(alpha: 0.78)
+                          : null,
+                      selectedIndex: _section.index,
+                      onDestinationSelected: (int index) =>
+                          _select(_LegacySection.values[index]),
+                      destinations: const <NavigationDestination>[
+                        NavigationDestination(
+                          icon: Icon(Icons.home_outlined),
+                          selectedIcon: Icon(Icons.home_rounded),
+                          label: '主页',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.library_music_outlined),
+                          selectedIcon: Icon(Icons.library_music_rounded),
+                          label: '音乐库',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.favorite_border_rounded),
+                          selectedIcon: Icon(Icons.favorite_rounded),
+                          label: '我喜欢',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.settings_outlined),
+                          selectedIcon: Icon(Icons.settings_rounded),
+                          label: '设置',
+                        ),
+                      ],
+                    ),
+                ],
               ),
-              _LegacyPlayerBar(
-                state: state,
-                compact: compactBar,
-                onOpen: _openNowPlaying,
-              ),
-              if (!wide)
-                NavigationBar(
-                  selectedIndex: _section.index,
-                  onDestinationSelected: (int index) =>
-                      _select(_LegacySection.values[index]),
-                  destinations: const <NavigationDestination>[
-                    NavigationDestination(
-                      icon: Icon(Icons.home_outlined),
-                      selectedIcon: Icon(Icons.home_rounded),
-                      label: '主页',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.library_music_outlined),
-                      selectedIcon: Icon(Icons.library_music_rounded),
-                      label: '音乐库',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.favorite_border_rounded),
-                      selectedIcon: Icon(Icons.favorite_rounded),
-                      label: '我喜欢',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings_rounded),
-                      label: '设置',
-                    ),
-                  ],
-                ),
             ],
           ),
         );
@@ -150,12 +170,18 @@ class _LegacyShellState extends State<LegacyShell> {
 
   // -- chrome ---------------------------------------------------------------
 
-  Widget _rail(ColorScheme scheme) {
+  Widget _rail(ColorScheme scheme, bool translucent) {
     return Container(
       width: LegacyTokens.railWidth,
       decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border(right: BorderSide(color: scheme.outlineVariant)),
+        color: translucent
+            ? scheme.surface.withValues(alpha: 0.55)
+            : scheme.surface,
+        border: Border(
+          right: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: translucent ? 0.5 : 1),
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -480,11 +506,15 @@ class _LegacyPlayerBar extends StatelessWidget {
     required this.state,
     required this.compact,
     required this.onOpen,
+    this.translucent = false,
   });
 
   final AppState state;
   final bool compact;
   final VoidCallback onOpen;
+
+  /// Sits over the album canvas instead of an opaque surface.
+  final bool translucent;
 
   @override
   Widget build(BuildContext context) {
@@ -536,8 +566,16 @@ class _LegacyPlayerBar extends StatelessWidget {
               ? LegacyTokens.compactPlayerBarHeight
               : LegacyTokens.playerBarHeight,
           decoration: BoxDecoration(
-            color: scheme.surface,
-            border: Border(top: BorderSide(color: scheme.outlineVariant)),
+            color: translucent
+                ? scheme.surface.withValues(alpha: 0.72)
+                : scheme.surface,
+            border: Border(
+              top: BorderSide(
+                color: scheme.outlineVariant.withValues(
+                  alpha: translucent ? 0.5 : 1,
+                ),
+              ),
+            ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: compact

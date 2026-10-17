@@ -23,6 +23,34 @@ enum AppUiStyle {
   legacy,
 }
 
+/// How the legacy shell paints its page backdrop.
+///
+/// The flowing album-colour canvas is ported from the Lazer project's
+/// `AlbumFlowBackground`; [nowPlayingDynamic] animates it, [nowPlayingStatic]
+/// freezes the palette to one flat base, and [off] leaves the theme surface.
+enum LegacyBackgroundMode {
+  nowPlayingDynamic,
+  nowPlayingStatic,
+  off,
+}
+
+extension LegacyBackgroundModeLabels on LegacyBackgroundMode {
+  /// Chinese source string, translated through `context.tr`.
+  String get label => switch (this) {
+    LegacyBackgroundMode.nowPlayingDynamic => '跟随当前歌曲（流动）',
+    LegacyBackgroundMode.nowPlayingStatic => '当前歌曲纯色',
+    LegacyBackgroundMode.off => '不使用',
+  };
+
+  /// Parses a persisted [name]; unknown or missing values keep the flowing
+  /// canvas the port ships with.
+  static LegacyBackgroundMode parse(String? name) =>
+      LegacyBackgroundMode.values.firstWhere(
+        (LegacyBackgroundMode mode) => mode.name == name,
+        orElse: () => LegacyBackgroundMode.nowPlayingDynamic,
+      );
+}
+
 extension AppUiStyleLabels on AppUiStyle {
   /// Product name, shown as written in both catalogues.
   String get label => switch (this) {

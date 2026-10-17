@@ -62,6 +62,18 @@ class _Catalog extends Catalog {
   );
 }
 
+/// The legacy shell under a theme whose backdrop animation is disabled, so
+/// `pumpAndSettle` can settle: the flowing canvas keeps a ticker running, and
+/// reduced-motion is exactly how the shell handles that for tests and users.
+Widget _legacyApp(AppState state) => MaterialApp(
+  theme: buildLegacyTheme(brightness: Brightness.dark),
+  builder: (BuildContext context, Widget? child) => MediaQuery(
+    data: MediaQuery.of(context).copyWith(disableAnimations: true),
+    child: child!,
+  ),
+  home: LegacyShell(state: state),
+);
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -104,15 +116,7 @@ void main() {
     addTearDown(tester.view.reset);
     final AppState state = AppState(catalog: _Catalog());
     addTearDown(state.dispose);
-    await tester.pumpWidget(
-      AnimatedBuilder(
-        animation: state,
-        builder: (BuildContext context, _) => MaterialApp(
-          theme: buildLegacyTheme(brightness: Brightness.dark),
-          home: LegacyShell(state: state),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_legacyApp(state));
     await tester.pumpAndSettle();
 
     // Rail chrome and the discovery page. 'Lazer' is both the rail wordmark
@@ -150,12 +154,7 @@ void main() {
     addTearDown(tester.view.reset);
     final AppState state = AppState(catalog: _Catalog());
     addTearDown(state.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildLegacyTheme(brightness: Brightness.dark),
-        home: LegacyShell(state: state),
-      ),
-    );
+    await tester.pumpWidget(_legacyApp(state));
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('音乐库'), findsOneWidget);
@@ -209,12 +208,7 @@ void main() {
     ]) {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildLegacyTheme(brightness: Brightness.dark),
-          home: LegacyShell(key: ValueKey<String>('$size'), state: state),
-        ),
-      );
+      await tester.pumpWidget(_legacyApp(state));
       await tester.pumpAndSettle();
       expect(
         tester.takeException(),
@@ -232,12 +226,7 @@ void main() {
     addTearDown(tester.view.reset);
     final AppState state = AppState(catalog: _Catalog());
     addTearDown(state.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildLegacyTheme(brightness: Brightness.dark),
-        home: LegacyShell(state: state),
-      ),
-    );
+    await tester.pumpWidget(_legacyApp(state));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'まにまに');
     await tester.pump(const Duration(milliseconds: 400));
