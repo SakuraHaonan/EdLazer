@@ -276,9 +276,10 @@ void main() {
     // Lyrics: size slider, weight chips and the blur switch.
     final Finder lyricSize = controlFor<Slider>('歌词字号');
     await tester.ensureVisible(lyricSize);
-    await tester.drag(lyricSize, const Offset(60, 0));
+    await tester.drag(lyricSize, const Offset(200, 0));
     await tester.pumpAndSettle();
-    expect(state.lyricFontSize, greaterThan(22));
+    expect(state.legacyLyricFontSize, greaterThanOrEqualTo(36));
+    expect(state.legacyLyricFontSize % 2, 0);
     await tester.ensureVisible(find.text('粗体'));
     await tester.tap(find.text('粗体'));
     await tester.pumpAndSettle();

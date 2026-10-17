@@ -17,9 +17,9 @@ import 'legacy_widgets.dart';
 /// Scroll padding shared by every legacy page.
 const EdgeInsets _pagePadding = EdgeInsets.fromLTRB(
   LegacyTokens.pagePadding,
-  4,
+  18,
   LegacyTokens.pagePadding,
-  40,
+  28,
 );
 
 /// `今天为你整理` — the discovery page: a rail of recommended playlists and the
@@ -67,24 +67,24 @@ class LegacyHomePage extends StatelessWidget {
             title: '今天为你整理',
             subtitle: '来自你的听歌偏好',
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           SizedBox(
-            height: 250,
+            height: 200,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               clipBehavior: Clip.none,
               itemCount: rail.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 18),
+              separatorBuilder: (_, _) => const SizedBox(width: 16),
               itemBuilder: (BuildContext context, int index) => LegacyPlaylistCard(
                 playlist: rail[index],
                 onTap: () => onOpenPlaylist(rail[index]),
               ),
             ),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 22),
         ],
         LegacySectionHeader(
-          title: likedName ?? '为你推荐',
+          title: likedName ?? '继续播放',
           subtitle: tracks.isEmpty ? null : '${tracks.length} 首',
         ),
         const SizedBox(height: 10),
@@ -488,15 +488,15 @@ class LegacySettingsPage extends StatelessWidget {
     return ListView(
       padding: _pagePadding,
       children: [
-        Text('设置', style: theme.textTheme.displaySmall),
-        const SizedBox(height: 6),
+        Text('设置', style: theme.textTheme.headlineMedium),
+        const SizedBox(height: 5),
         Text(
           '外观、界面和账户。',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 22),
         const _LegacySectionLabel('界面'),
         _LegacySettingRow(
           label: '界面风格',
@@ -692,12 +692,13 @@ class LegacySettingsPage extends StatelessWidget {
         const _LegacySectionLabel('歌词'),
         _LegacySliderRow(
           label: '歌词字号',
-          valueText: '${state.lyricFontSize.round()}',
-          value: state.lyricFontSize.clamp(14.0, 40.0),
-          min: 14,
-          max: 40,
-          divisions: 26,
-          onChanged: (double value) => unawaited(state.setLyricFontSize(value)),
+          valueText: '${state.legacyLyricFontSize.round()}',
+          value: state.legacyLyricFontSize.clamp(22.0, 44.0),
+          min: 22,
+          max: 44,
+          divisions: 11,
+          onChanged: (double value) =>
+              unawaited(state.setLegacyLyricFontSize(value)),
         ),
         _LegacyChoiceRow(
           label: '歌词粗细',

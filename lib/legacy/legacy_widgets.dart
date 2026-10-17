@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
-import '../state/app_state.dart';
 import '../utils/artwork.dart';
 import '../widgets/artwork_image.dart';
 
@@ -64,7 +63,7 @@ class LegacyPlaylistCard extends StatefulWidget {
     super.key,
     required this.playlist,
     required this.onTap,
-    this.width = 172,
+    this.width = 148,
     this.subtitle,
   });
 
@@ -117,7 +116,7 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
                 widget.playlist.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium,
+                style: theme.textTheme.titleSmall,
               ),
               if (detail.isNotEmpty) ...[
                 const SizedBox(height: 2),
@@ -125,7 +124,7 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
                   detail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -138,9 +137,9 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
   }
 }
 
-/// A track line: ordinal, cover, title/artist, translated title, duration and
-/// a hover play button — the legacy track row.
-class LegacyTrackRow extends StatefulWidget {
+/// A track line, laid out like the legacy `TrackRow`: ordinal, cover 44,
+/// title / translation / artist stacked, album, duration, play button.
+class LegacyTrackRow extends StatelessWidget {
   const LegacyTrackRow({
     super.key,
     required this.track,
@@ -157,124 +156,114 @@ class LegacyTrackRow extends StatefulWidget {
   final bool playing;
 
   @override
-  State<LegacyTrackRow> createState() => _LegacyTrackRowState();
-}
-
-class _LegacyTrackRowState extends State<LegacyTrackRow> {
-  bool _hovering = false;
-
-  @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
-    final Color title = widget.current ? scheme.primary : scheme.onSurface;
-    final String? secondary = widget.track.translatedTitle?.trim();
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
+    final String? translated = track.translatedTitle?.trim();
+    final Color titleColor = current ? scheme.primary : scheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
       child: Material(
-        color: _hovering
-            ? scheme.onSurface.withValues(alpha: 0.05)
+        color: current
+            ? scheme.primaryContainer.withValues(alpha: 0.68)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(11),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: widget.onTap,
-          child: SizedBox(
-            height: 58,
+          borderRadius: BorderRadius.circular(11),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
             child: Row(
               children: [
                 SizedBox(
-                  width: 34,
-                  child: Center(
-                    child: widget.current
-                        ? Icon(
-                            widget.playing
-                                ? Icons.equalizer_rounded
-                                : Icons.pause_rounded,
-                            size: 16,
-                            color: scheme.primary,
-                          )
-                        : Text(
-                            '${widget.index + 1}',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
+                  width: 28,
+                  child: Text(
+                    '${index + 1}',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: current ? scheme.primary : scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 LegacyCover(
-                  url: widget.track.coverUrl,
-                  size: 42,
-                  radius: 8,
+                  url: track.coverUrl,
+                  size: 44,
+                  radius: 10,
                   iconSize: 16,
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
-                  flex: 5,
+                  flex: 12,
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.track.title,
+                        track.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: title,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: titleColor,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      if (translated != null && translated.isNotEmpty)
+                        Text(
+                          translated,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
                       Text(
-                        widget.track.artist,
+                        track.artist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
+                        style: theme.textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (secondary != null && secondary.isNotEmpty)
-                  Expanded(
-                    flex: 4,
-                    child: Text(
-                      secondary,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  )
-                else
-                  const Spacer(flex: 4),
-                SizedBox(
-                  width: 52,
+                Expanded(
+                  flex: 8,
                   child: Text(
-                    legacyDuration(widget.track.duration),
-                    textAlign: TextAlign.right,
-                    style: theme.textTheme.labelMedium?.copyWith(
+                    track.album,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),
                 SizedBox(
-                  width: 44,
-                  child: AnimatedOpacity(
-                    opacity: _hovering || widget.current ? 1 : 0,
-                    duration: const Duration(milliseconds: 140),
-                    child: IconButton(
-                      tooltip: widget.current && widget.playing ? '暂停' : '播放',
-                      iconSize: 20,
-                      onPressed: widget.onTap,
-                      icon: Icon(
-                        widget.current && widget.playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: widget.current ? scheme.primary : scheme.onSurface,
-                      ),
+                  width: 48,
+                  child: Text(
+                    legacyDuration(track.duration),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                SizedBox.square(
+                  dimension: 30,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 30,
+                      height: 30,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: current && playing ? '暂停' : '播放',
+                    onPressed: onTap,
+                    icon: Icon(
+                      current && playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 17,
+                      color: scheme.primary,
                     ),
                   ),
                 ),
@@ -287,7 +276,6 @@ class _LegacyTrackRowState extends State<LegacyTrackRow> {
   }
 }
 
-/// Section heading with an optional muted subtitle and trailing action.
 class LegacySectionHeader extends StatelessWidget {
   const LegacySectionHeader({
     super.key,
@@ -311,18 +299,18 @@ class LegacySectionHeader extends StatelessWidget {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.headlineMedium,
+            style: theme.textTheme.headlineSmall,
           ),
         ),
         if (subtitle != null && subtitle!.isNotEmpty) ...[
           const SizedBox(width: 12),
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.only(bottom: 2),
             child: Text(
               subtitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
@@ -361,51 +349,48 @@ class _LegacyRailItemState extends State<LegacyRailItem> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
-    final Color foreground = widget.selected
-        ? scheme.onSecondaryContainer
+    final Color labelColor = widget.selected
+        ? scheme.onPrimaryContainer
         : _hovering
         ? scheme.onSurface
         : scheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovering = true),
-        onExit: (_) => setState(() => _hovering = false),
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? scheme.secondaryContainer
-                  : _hovering
-                  ? scheme.onSurface.withValues(alpha: 0.06)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              children: [
-                Icon(widget.icon, size: 20, color: foreground),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: foreground,
-                      fontWeight: widget.selected
-                          ? FontWeight.w600
-                          : FontWeight.w500,
-                    ),
+    final Color iconColor = widget.selected ? scheme.primary : labelColor;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+          decoration: BoxDecoration(
+            color: widget.selected
+                ? scheme.primaryContainer
+                : _hovering
+                ? scheme.onSurface.withValues(alpha: 0.06)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Row(
+            children: [
+              Icon(widget.icon, size: 19, color: iconColor),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: labelColor,
+                    fontWeight: widget.selected
+                        ? FontWeight.w500
+                        : FontWeight.w400,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -452,147 +437,3 @@ class LegacyNotice extends StatelessWidget {
   }
 }
 
-/// Shuffle, previous, play/pause, next and repeat — the legacy transport row.
-class LegacyTransportControls extends StatelessWidget {
-  const LegacyTransportControls({
-    super.key,
-    required this.state,
-    this.large = false,
-  });
-
-  final AppState state;
-  final bool large;
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme scheme = Theme.of(context).colorScheme;
-    final IconData repeatIcon = switch (state.repeat) {
-      LoopMode.off => Icons.repeat_rounded,
-      LoopMode.all => Icons.repeat_on_rounded,
-      LoopMode.one => Icons.repeat_one_on_rounded,
-    };
-    final double button = large ? 30 : 24;
-    final double accent = large ? 56 : 42;
-    final Color muted = scheme.onSurfaceVariant;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          tooltip: '随机播放',
-          onPressed: state.toggleShuffle,
-          icon: Icon(
-            Icons.shuffle_rounded,
-            size: button - 2,
-            color: state.shuffle ? scheme.primary : muted,
-          ),
-        ),
-        IconButton(
-          tooltip: '上一首',
-          onPressed: state.previous,
-          icon: Icon(Icons.skip_previous_rounded, size: button),
-        ),
-        const SizedBox(width: 4),
-        Material(
-          color: scheme.primary,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: state.togglePlay,
-            child: SizedBox.square(
-              dimension: accent,
-              child: Icon(
-                state.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                color: scheme.onPrimary,
-                size: large ? 30 : 26,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 4),
-        IconButton(
-          tooltip: '下一首',
-          onPressed: state.next,
-          icon: Icon(Icons.skip_next_rounded, size: button),
-        ),
-        IconButton(
-          tooltip: '循环模式',
-          onPressed: state.cycleRepeat,
-          icon: Icon(
-            repeatIcon,
-            size: button - 2,
-            color: state.repeat == LoopMode.off ? muted : scheme.primary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Elapsed/Slider/total, driven by the 100 ms tick lane and draggable.
-class LegacyProgressBar extends StatefulWidget {
-  const LegacyProgressBar({super.key, required this.state});
-
-  final AppState state;
-
-  @override
-  State<LegacyProgressBar> createState() => _LegacyProgressBarState();
-}
-
-class _LegacyProgressBarState extends State<LegacyProgressBar> {
-  double? _drag;
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final TextStyle? label = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-    );
-    return AnimatedBuilder(
-      animation: widget.state.all,
-      builder: (BuildContext context, _) {
-        final Track? track = widget.state.current;
-        final double duration = (track?.duration.inMilliseconds ?? 0).toDouble();
-        final double position = widget.state.precisePosition.inMilliseconds
-            .toDouble();
-        final double fraction = _drag ??
-            (duration > 0 ? (position / duration).clamp(0.0, 1.0) : 0.0);
-        final Duration shown = Duration(
-          milliseconds: ((_drag ?? (duration > 0 ? position / duration : 0.0)) *
-                  duration)
-              .round(),
-        );
-        return Row(
-          children: [
-            SizedBox(
-              width: 44,
-              child: Text(legacyDuration(shown), style: label),
-            ),
-            Expanded(
-              child: Slider(
-                value: fraction,
-                onChanged: duration > 0
-                    ? (double value) => setState(() => _drag = value)
-                    : null,
-                onChangeEnd: duration > 0
-                    ? (double value) {
-                        widget.state.seek(value);
-                        setState(() => _drag = null);
-                      }
-                    : null,
-              ),
-            ),
-            SizedBox(
-              width: 44,
-              child: Text(
-                legacyDuration(track?.duration ?? Duration.zero),
-                textAlign: TextAlign.right,
-                style: label,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}

@@ -498,6 +498,8 @@ class LegacyAlbumBackdrop extends StatefulWidget {
     required this.track,
     required this.mode,
     required this.uiAlpha,
+    this.veil,
+    this.pageColor,
   });
 
   final Track? track;
@@ -505,6 +507,14 @@ class LegacyAlbumBackdrop extends StatefulWidget {
 
   /// `内容不透明度` — 0.4 … 1.0. The veil over the palette is its square.
   final double uiAlpha;
+
+  /// When set, the flow carries this veil itself and no content scrim is drawn
+  /// — the now-playing page uses the legacy `background @ 0.38`.
+  final Color? veil;
+
+  /// Painted under the flow (legacy `colors.background`), and on its own when
+  /// the backdrop is off.
+  final Color? pageColor;
 
   @override
   State<LegacyAlbumBackdrop> createState() => _LegacyAlbumBackdropState();
@@ -538,20 +548,26 @@ class _LegacyAlbumBackdropState extends State<LegacyAlbumBackdrop> {
 
   @override
   Widget build(BuildContext context) {
+    final Color? pageColor = widget.pageColor;
     if (widget.mode == LegacyBackgroundMode.off) {
-      return const SizedBox.shrink();
+      return pageColor == null
+          ? const SizedBox.shrink()
+          : ColoredBox(color: pageColor);
     }
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final double veil = (widget.uiAlpha * widget.uiAlpha).clamp(0.0, 1.0);
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
+        if (pageColor != null) ColoredBox(color: pageColor),
         AlbumFlowBackground(
           colors: _colors,
           animated: widget.mode == LegacyBackgroundMode.nowPlayingDynamic,
           solid: widget.mode == LegacyBackgroundMode.nowPlayingStatic,
+          veil: widget.veil ?? const Color(0x00000000),
         ),
-        ColoredBox(color: scheme.surface.withValues(alpha: veil)),
+        if (widget.veil == null)
+          ColoredBox(color: scheme.surface.withValues(alpha: veil)),
       ],
     );
   }

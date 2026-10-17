@@ -295,6 +295,25 @@ class AppState extends ChangeNotifier {
   static int normalizeLyricWeight(int value) =>
       (value.clamp(400, 700) / 100).round() * 100;
 
+  /// The legacy shell's lyric size: the Lazer range (22–44, step 2) opening at
+  /// its 34 sp desktop default, independent of the Nextgen ramp.
+  double legacyLyricFontSize = 34;
+
+  static double normalizeLegacyLyricFontSize(double value) =>
+      ((value.clamp(22, 44) / 2).round() * 2).toDouble();
+
+  Future<void> setLegacyLyricFontSize(double value) async {
+    if (!value.isFinite) return;
+    final double next = normalizeLegacyLyricFontSize(value);
+    if (next == legacyLyricFontSize) return;
+    legacyLyricFontSize = next;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setDouble(
+      'lazer_legacy_lyric_font_size',
+      next,
+    );
+  }
+
   Future<void> setLyricFontSize(double value) async {
     if (!value.isFinite) return;
     lyricFontSize = value.clamp(14, 40);
@@ -492,6 +511,9 @@ class AppState extends ChangeNotifier {
       );
       lyricFontWeight = normalizeLyricWeight(
         prefs.getInt('lazer_lyric_font_weight') ?? 600,
+      );
+      legacyLyricFontSize = normalizeLegacyLyricFontSize(
+        prefs.getDouble('lazer_legacy_lyric_font_size') ?? 34,
       );
       scrollRetention =
           (prefs.getDouble('lazer_scroll_retention') ??
@@ -949,6 +971,23 @@ class AppState extends ChangeNotifier {
 
   void toggleShuffle() {
     _shuffle = !_shuffle;
+    notifyListeners();
+  }
+
+  /// The legacy single play-mode button: Sequential → ListLoop → SingleLoop →
+  /// Shuffle → Sequential.
+  void cyclePlayMode() {
+    if (_shuffle) {
+      _shuffle = false;
+      _repeat = LoopMode.off;
+    } else if (_repeat == LoopMode.off) {
+      _repeat = LoopMode.all;
+    } else if (_repeat == LoopMode.all) {
+      _repeat = LoopMode.one;
+    } else {
+      _repeat = LoopMode.off;
+      _shuffle = true;
+    }
     notifyListeners();
   }
 

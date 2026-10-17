@@ -29,7 +29,7 @@ class LegacyTokens {
   static const Color nightBlue = Color(0xFF91BED3);
 
   /// Page padding and the rail width the legacy desktop shell uses.
-  static const double railWidth = 262;
+  static const double railWidth = 208;
   static const double pagePadding = 28;
   static const double playerBarHeight = 84;
   static const double compactPlayerBarHeight = 64;
@@ -38,6 +38,12 @@ class LegacyTokens {
 /// `LightColors` / `DarkColors` from `LazerTheme.kt`.
 ColorScheme legacyColorScheme(Brightness brightness) =>
     brightness == Brightness.dark ? _legacyDark : _legacyLight;
+
+/// The legacy `MaterialTheme.colorScheme.background` (paper / night paper).
+Color legacyPageBackground(Brightness brightness) =>
+    brightness == Brightness.dark
+    ? LegacyTokens.nightPaper
+    : LegacyTokens.paper;
 
 const ColorScheme _legacyLight = ColorScheme(
   brightness: Brightness.light,
@@ -191,7 +197,7 @@ ThemeData buildLegacyTheme({Brightness brightness = Brightness.light}) {
       bodyColor: scheme.onSurface,
       displayColor: scheme.onSurface,
     ),
-    scaffoldBackgroundColor: scheme.surface,
+    scaffoldBackgroundColor: legacyPageBackground(brightness),
     canvasColor: scheme.surface,
     dividerColor: scheme.outlineVariant,
     splashFactory: InkSparkle.splashFactory,

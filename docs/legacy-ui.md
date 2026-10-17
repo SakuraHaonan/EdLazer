@@ -40,19 +40,26 @@ its 34 → 11 sp Material ramp, not the Nextgen editorial scale.
 - **音乐库** — liked / created / subscribed playlists and the recommended ones.
 - **我喜欢** and any playlist page with a play-all header.
 - **搜索** — tracks, playlists and albums for the query.
-- **正在播放** — cover, title, scrolling lyrics with translations (tap a line
-  seeks), transport.
-- **Player bar** — cover/title, like, shuffle/previous/play/next/repeat,
-  draggable progress, volume, queue sheet. Below 1000 dp it folds to the
-  compact form so the transport never overflows.
+- **正在播放** — the legacy two-pane page: 44% hero (cover with the 26 dp drop
+  shadow, title, translation, artist) over the rounded transport card, 56% the
+  lyric sheet. Lines are centered on the singing line, at the Lazer 34 sp
+  default with its 22–44 step-2 ladder, faded and blurred by distance from it
+  (max 9 dp), each translation under its line. Tapping a line seeks; the wheel
+  or a drag scrolls manually and follow resumes after the configured delay.
+- **Player bar** — the 84 dp `PlayerBar`: a 250 dp now-playing tile (cover 50,
+  title, translation, artist) that opens the lyrics page, the centred transport
+  (like, previous, 38 dp play, next, one play-mode cycle) over the thin seek
+  row, and a 168 dp right group (volume popover, queue, lyrics). Its surface is
+  `surface @ 0.96 × content opacity` with a 1 dp outline, so the album canvas
+  reads through it. Under 1000 dp it folds to the compact form.
 - **Login** — QR card with the same gateway calls as the Nextgen card, plus the
   cookie paste field. 8821 (risk control) reads as "scanned, waiting".
 - **Settings** — every preference the Nextgen shell exposes, in the legacy row
   style: interface style, device form, layout mode, DPI scale (with reset and
   the automatic switch), the album backdrop and its opacity, theme, language,
-  haptics, lyric controls, lyric size/weight/blur, follow delay, scroll inertia
-  and acceleration, the account, a catalogue refresh and the port note. Rows
-  stack label-over-control under 560 dp.
+  haptics, lyric controls, the legacy lyric size, weight, blur, follow delay,
+  scroll inertia and acceleration, the account, a catalogue refresh and the
+  port note. Rows stack label-over-control under 560 dp.
 
 Everything above the pixels is shared with Nextgen: `AppState`, the catalogue,
 playback, artwork loading and the DPI / car display profiles all still apply,

@@ -9,6 +9,7 @@ import 'legacy_background.dart';
 import 'legacy_login.dart';
 import 'legacy_now_playing.dart';
 import 'legacy_pages.dart';
+import 'legacy_player_bar.dart';
 import 'legacy_theme.dart';
 import 'legacy_widgets.dart';
 
@@ -94,7 +95,9 @@ class _LegacyShellState extends State<LegacyShell> {
         final bool hasBackground =
             state.legacyBackground != LegacyBackgroundMode.off;
         return Scaffold(
-          backgroundColor: hasBackground ? Colors.transparent : scheme.surface,
+          backgroundColor: hasBackground
+              ? Colors.transparent
+              : legacyPageBackground(Theme.of(context).brightness),
           body: Stack(
             fit: StackFit.expand,
             children: [
@@ -122,10 +125,9 @@ class _LegacyShellState extends State<LegacyShell> {
                       ],
                     ),
                   ),
-                  _LegacyPlayerBar(
+                  LegacyPlayerBar(
                     state: state,
                     compact: compactBar,
-                    translucent: hasBackground,
                     onOpen: _openNowPlaying,
                   ),
                   if (!wide)
@@ -171,93 +173,122 @@ class _LegacyShellState extends State<LegacyShell> {
   // -- chrome ---------------------------------------------------------------
 
   Widget _rail(ColorScheme scheme, bool translucent) {
+    final double uiAlpha = state.legacyBackground == LegacyBackgroundMode.off
+        ? 1
+        : state.legacyUiAlpha;
     return Container(
       width: LegacyTokens.railWidth,
       decoration: BoxDecoration(
-        color: translucent
-            ? scheme.surface.withValues(alpha: 0.55)
-            : scheme.surface,
-        border: Border(
-          right: BorderSide(
-            color: scheme.outlineVariant.withValues(alpha: translucent ? 0.5 : 1),
-          ),
+        color: scheme.surface.withValues(alpha: 0.86 * uiAlpha),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.45),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
+            padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
             child: Row(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
                     color: scheme.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    Icons.graphic_eq_rounded,
-                    size: 22,
+                    Icons.library_music_rounded,
+                    size: 23,
                     color: scheme.onPrimaryContainer,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text('Lazer', style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(width: 10),
+                Text('Lazer', style: Theme.of(context).textTheme.titleLarge),
               ],
             ),
           ),
-          LegacyRailItem(
-            icon: Icons.home_outlined,
-            label: '主页',
-            selected: _section == _LegacySection.home && _playlist == null,
-            onTap: () => _select(_LegacySection.home),
+          const SizedBox(height: 28),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LegacyRailItem(
+                  icon: Icons.home_outlined,
+                  label: '主页',
+                  selected: _section == _LegacySection.home && _playlist == null,
+                  onTap: () => _select(_LegacySection.home),
+                ),
+                const SizedBox(height: 4),
+                LegacyRailItem(
+                  icon: Icons.library_music_outlined,
+                  label: '音乐库',
+                  selected: _section == _LegacySection.library,
+                  onTap: () => _select(_LegacySection.library),
+                ),
+                const SizedBox(height: 4),
+                LegacyRailItem(
+                  icon: Icons.favorite_border_rounded,
+                  label: '我喜欢',
+                  selected: _section == _LegacySection.likes,
+                  onTap: () => _select(_LegacySection.likes),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 2),
-          LegacyRailItem(
-            icon: Icons.library_music_outlined,
-            label: '音乐库',
-            selected: _section == _LegacySection.library,
-            onTap: () => _select(_LegacySection.library),
-          ),
-          const SizedBox(height: 2),
-          LegacyRailItem(
-            icon: Icons.favorite_border_rounded,
-            label: '我喜欢',
-            selected: _section == _LegacySection.likes,
-            onTap: () => _select(_LegacySection.likes),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 20, 24, 8),
-            child: Divider(height: 1),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Divider(
+              height: 1,
+              thickness: 1,
+              color: scheme.outlineVariant.withValues(alpha: 0.7),
+            ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 6, 12, 6),
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     '你的歌单',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                      color: scheme.onSurface,
                     ),
                   ),
                 ),
                 if (state.signedIn)
-                  IconButton(
-                    tooltip: '刷新歌单',
-                    iconSize: 18,
-                    onPressed: () =>
-                        unawaited(state.refreshCollections(force: true)),
-                    icon: const Icon(Icons.refresh_rounded),
+                  SizedBox.square(
+                    dimension: 28,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 28,
+                        height: 28,
+                      ),
+                      iconSize: 16,
+                      visualDensity: VisualDensity.compact,
+                      tooltip: '同步歌单',
+                      onPressed: () =>
+                          unawaited(state.refreshCollections(force: true)),
+                      icon: Icon(Icons.sync_rounded, color: scheme.primary),
+                    ),
                   ),
               ],
             ),
           ),
-          Expanded(child: _railPlaylists(scheme)),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: _railPlaylists(scheme),
+            ),
+          ),
+          const SizedBox(height: 8),
           Padding(
-            padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: LegacyRailItem(
               icon: Icons.settings_outlined,
               label: '设置',
@@ -265,6 +296,7 @@ class _LegacyShellState extends State<LegacyShell> {
               onTap: () => _select(_LegacySection.settings),
             ),
           ),
+          const SizedBox(height: 18),
         ],
       ),
     );
@@ -278,7 +310,7 @@ class _LegacyShellState extends State<LegacyShell> {
     ];
     if (playlists.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         child: Text(
           state.isGuest ? '登录后同步你的歌单' : '暂无歌单',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -288,14 +320,13 @@ class _LegacyShellState extends State<LegacyShell> {
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.zero,
       itemCount: playlists.length,
       itemBuilder: (BuildContext context, int index) {
         final Playlist playlist = playlists[index];
-        final bool selected = _playlist?.id == playlist.id;
         return _RailPlaylist(
           playlist: playlist,
-          selected: selected,
+          selected: _playlist?.id == playlist.id,
           onTap: () => _openPlaylist(playlist),
         );
       },
@@ -305,7 +336,7 @@ class _LegacyShellState extends State<LegacyShell> {
   Widget _topBar(BuildContext context, ColorScheme scheme, bool wide) {
     final ThemeData theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(wide ? 28 : 16, wide ? 14 : 10, 20, 12),
+      padding: EdgeInsets.fromLTRB(28, wide ? 16 : 12, 28, 10),
       child: Row(
         children: [
           if (_playlist != null) ...[
@@ -317,38 +348,25 @@ class _LegacyShellState extends State<LegacyShell> {
             const SizedBox(width: 4),
           ],
           if (!wide) ...[
-            Icon(Icons.graphic_eq_rounded, color: scheme.primary, size: 22),
+            Icon(Icons.library_music_rounded, color: scheme.primary, size: 22),
             const SizedBox(width: 10),
           ],
           Expanded(
-            child: SizedBox(
-              height: 46,
-              child: TextField(
-                controller: _search,
-                onChanged: _onQueryChanged,
-                textInputAction: TextInputAction.search,
-                style: theme.textTheme.bodyMedium,
-                decoration: InputDecoration(
-                  hintText: '搜索…',
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                  suffixIcon: _search.text.isEmpty
-                      ? null
-                      : IconButton(
-                          tooltip: '清除',
-                          iconSize: 18,
-                          onPressed: () {
-                            _search.clear();
-                            setState(() => _query = '');
-                          },
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                ),
+            flex: 100,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 650),
+                child: _searchField(theme, scheme),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          IconButton(
+          const Spacer(flex: 18),
+          _barIconButton(
+            scheme: scheme,
+            icon: theme.brightness == Brightness.dark
+                ? Icons.light_mode_outlined
+                : Icons.dark_mode_outlined,
             tooltip: theme.brightness == Brightness.dark ? '浅色' : '深色',
             onPressed: () => unawaited(
               state.setThemeMode(
@@ -357,20 +375,104 @@ class _LegacyShellState extends State<LegacyShell> {
                     : ThemeMode.dark,
               ),
             ),
-            icon: Icon(
-              theme.brightness == Brightness.dark
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
-              size: 20,
-            ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           _accountButton(scheme),
         ],
       ),
     );
   }
 
+  Widget _searchField(ThemeData theme, ColorScheme scheme) {
+    return SizedBox(
+      height: 50,
+      child: TextField(
+        controller: _search,
+        onChanged: _onQueryChanged,
+        textInputAction: TextInputAction.search,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: scheme.onSurface,
+          height: 22 / 14,
+        ),
+        cursorColor: scheme.primary,
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: scheme.surface.withValues(alpha: 0.86),
+          hintText: '搜索歌曲、歌手或歌单',
+          hintStyle: theme.textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 19,
+            color: scheme.primary,
+          ),
+          prefixIconConstraints: const BoxConstraints(minWidth: 40),
+          suffixIcon: _search.text.isEmpty
+              ? null
+              : SizedBox.square(
+                  dimension: 30,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 30,
+                      height: 30,
+                    ),
+                    iconSize: 16,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: '清除',
+                    onPressed: () {
+                      _search.clear();
+                      setState(() => _query = '');
+                    },
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 15),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide: BorderSide(color: scheme.outlineVariant),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide: BorderSide(color: scheme.outlineVariant),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide: BorderSide(color: scheme.primary, width: 1.2),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _barIconButton({
+    required ColorScheme scheme,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox.square(
+      dimension: 40,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+        iconSize: 18,
+        visualDensity: VisualDensity.compact,
+        tooltip: tooltip,
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          backgroundColor: scheme.surfaceContainerHighest,
+          foregroundColor: scheme.onSurface,
+        ),
+        icon: Icon(icon, size: 18),
+      ),
+    );
+  }
   Widget _accountButton(ColorScheme scheme) {
     final String initial = state.isGuest
         ? '游'
@@ -493,245 +595,6 @@ class _RailPlaylistState extends State<_RailPlaylist> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The bottom transport bar: cover and title on the left, transport and
-/// progress in the middle, volume and queue on the right.
-class _LegacyPlayerBar extends StatelessWidget {
-  const _LegacyPlayerBar({
-    required this.state,
-    required this.compact,
-    required this.onOpen,
-    this.translucent = false,
-  });
-
-  final AppState state;
-  final bool compact;
-  final VoidCallback onOpen;
-
-  /// Sits over the album canvas instead of an opaque surface.
-  final bool translucent;
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
-    return AnimatedBuilder(
-      animation: state,
-      builder: (BuildContext context, _) {
-        final Track? track = state.current;
-        final Widget leading = InkWell(
-          onTap: onOpen,
-          borderRadius: BorderRadius.circular(12),
-          child: Row(
-            children: [
-              LegacyCover(url: track?.coverUrl, size: compact ? 44 : 52, radius: 10),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: compact ? 130 : 180,
-                    child: Text(
-                      track?.title ?? '未选择曲目',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  SizedBox(
-                    width: compact ? 130 : 180,
-                    child: Text(
-                      track?.artist ?? 'Lazer',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-        return Container(
-          height: compact
-              ? LegacyTokens.compactPlayerBarHeight
-              : LegacyTokens.playerBarHeight,
-          decoration: BoxDecoration(
-            color: translucent
-                ? scheme.surface.withValues(alpha: 0.72)
-                : scheme.surface,
-            border: Border(
-              top: BorderSide(
-                color: scheme.outlineVariant.withValues(
-                  alpha: translucent ? 0.5 : 1,
-                ),
-              ),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: compact
-              ? Row(
-                  children: [
-                    Expanded(child: leading),
-                    IconButton(
-                      tooltip: state.playing ? '暂停' : '播放',
-                      onPressed: state.togglePlay,
-                      icon: Icon(
-                        state.playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        size: 28,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '下一首',
-                      onPressed: state.next,
-                      icon: const Icon(Icons.skip_next_rounded, size: 26),
-                    ),
-                    IconButton(
-                      tooltip: '播放队列',
-                      onPressed: () => _showQueue(context),
-                      icon: const Icon(Icons.queue_music_rounded, size: 22),
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(flex: 3, child: Align(alignment: Alignment.centerLeft, child: leading)),
-                    IconButton(
-                      tooltip: state.currentLiked ? '取消喜欢' : '喜欢',
-                      onPressed: state.current == null
-                          ? null
-                          : () => unawaited(state.toggleLikeCurrent()),
-                      icon: Icon(
-                        state.currentLiked
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        size: 20,
-                        color: state.currentLiked
-                            ? scheme.tertiary
-                            : scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    Expanded(
-                      flex: 5,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          LegacyTransportControls(state: state),
-                          const SizedBox(height: 2),
-                          LegacyProgressBar(state: state),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          IconButton(
-                            tooltip: state.volume > 0 ? '静音' : '取消静音',
-                            onPressed: () => unawaited(state.toggleMute()),
-                            icon: Icon(
-                              state.volume <= 0
-                                  ? Icons.volume_off_rounded
-                                  : Icons.volume_up_rounded,
-                              size: 20,
-                            ),
-                          ),
-                          SizedBox(
-                            width: 96,
-                            child: Slider(
-                              value: state.volume.clamp(0, 1),
-                              onChanged: (double value) =>
-                                  unawaited(state.setVolume(value)),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: '播放队列',
-                            onPressed: () => _showQueue(context),
-                            icon: const Icon(
-                              Icons.queue_music_rounded,
-                              size: 20,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-        );
-      },
-    );
-  }
-
-  void _showQueue(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (BuildContext context) => _LegacyQueueSheet(state: state),
-    );
-  }
-}
-
-class _LegacyQueueSheet extends StatelessWidget {
-  const _LegacyQueueSheet({required this.state});
-
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.6,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 18, 16, 8),
-              child: Row(
-                children: [
-                  Text('播放队列 · ${state.queue.length} 首', style: theme.textTheme.titleMedium),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '关闭',
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: state.queue.isEmpty
-                  ? const LegacyNotice(message: '队列还是空的。')
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: state.queue.length,
-                      itemBuilder: (BuildContext context, int index) {
-                        final Track track = state.queue[index];
-                        return LegacyTrackRow(
-                          track: track,
-                          index: index,
-                          current: state.queueIndex == index,
-                          playing: state.playing,
-                          onTap: () => state.playTrackAt(index),
-                        );
-                      },
-                    ),
-            ),
-          ],
         ),
       ),
     );
