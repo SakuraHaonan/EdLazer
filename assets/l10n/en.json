@@ -259,5 +259,18 @@
   "让音乐陪你慢慢走": "Let the music walk with you",
   "滚动加速度": "Scroll acceleration",
   "滚动加速度 · {percent}%": "Scroll acceleration · {percent}%",
-  "50–300%；数值越高，滚轮和连续甩动提速越明显。": "50–300%; higher values increase acceleration from the wheel and repeated flings."
+  "50–300%；数值越高，滚轮和连续甩动提速越明显。": "50–300%; higher values increase acceleration from the wheel and repeated flings.",
+  "界面": "Interface",
+  "界面布局": "Layout",
+  "自动选择": "Automatic",
+  "强制桌面端": "Desktop only",
+  "强制移动端": "Mobile only",
+  "按窗口宽度在桌面端和移动端之间切换": "Switch between the desktop and mobile shells with the window width",
+  "始终显示左侧导航栏和桌面播放条": "Always show the left rail and the desktop player bar",
+  "始终显示底部标签栏和紧凑播放条": "Always show the bottom tabs and the compact player bar",
+  "DPI 缩放": "DPI scale",
+  "DPI 缩放 · {percent}": "DPI scale · {percent}",
+  "80–175%；按比例放大整块界面，适合高分屏。": "80–175%. Scales the whole interface up, for high-density screens.",
+  "自动调节 DPI 缩放": "Automatic DPI scale",
+  "按窗口可用空间自动推算；拖动拉杆即改为手动": "Fits the scale to the window; dragging the slider switches to manual"
 }

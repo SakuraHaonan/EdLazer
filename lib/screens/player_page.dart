@@ -7,6 +7,7 @@ import '../widgets/scroll_acceleration_setting.dart';
 import '../widgets/lyric_typography_setting.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/square_switch_list_tile.dart';
+import '../widgets/interface_settings.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/haptic_seek_slider.dart';
 import '../widgets/volume_control.dart';
@@ -19,6 +20,7 @@ import 'package:flutter/foundation.dart'
 import '../data/catalog.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
+import '../state/ui_preferences.dart';
 import '../theme/design_tokens.dart';
 import '../theme/paper_widgets.dart';
 import '../widgets/plate_art.dart';
@@ -32,7 +34,11 @@ enum NavSection { home, search, likes, settings, user }
 void _openPlaylist(BuildContext context, AppState state, Playlist playlist) {
   unawaited(state.feedback());
   final shell = context.findAncestorStateOfType<_PlayerPageState>();
-  if (MediaQuery.sizeOf(context).width >= _compactBreakpoint && shell != null) {
+  final bool compact = useCompactLayout(
+    state.uiMode,
+    MediaQuery.sizeOf(context).width,
+  );
+  if (!compact && shell != null) {
     shell.openPlaylist(playlist);
     return;
   }
@@ -58,7 +64,10 @@ class PlayerControlsBar extends StatelessWidget {
   Widget build(BuildContext context) => _PlayerBar(
     state: state,
     onExpand: onExpand,
-    compact: MediaQuery.sizeOf(context).width < _compactBreakpoint,
+    compact: useCompactLayout(
+      state.uiMode,
+      MediaQuery.sizeOf(context).width,
+    ),
     includeBottomSafeArea: includeBottomSafeArea,
   );
 }
@@ -93,9 +102,9 @@ extension on NavSection {
 }
 
 /// Below this width the left rail collapses into a bottom tab bar and the
-/// player bar drops its secondary controls — the mobile shell.
-const double _compactBreakpoint = 720;
-
+/// player bar drops its secondary controls — the mobile shell. The same
+/// decision can be overridden from the settings sheet (`AppUiMode`).
+///
 /// Bottom padding handed to the scrolling page so the floating compact
 /// transport never covers the last row of content.
 
@@ -168,10 +177,13 @@ class _PlayerPageState extends State<PlayerPage> {
     return Scaffold(
       backgroundColor: context.colors.ivoryMedium,
       // One shell, two layouts: the width decides whether the rail lives on
-      // the left or along the bottom.
+      // the left or along the bottom, unless the settings sheet forces one.
       body: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
-          final bool compact = constraints.maxWidth < _compactBreakpoint;
+          final bool compact = useCompactLayout(
+            widget.state.uiMode,
+            constraints.maxWidth,
+          );
           final selectedPlaylist =
               _playlist ??
               (_section == NavSection.likes
@@ -1789,6 +1801,8 @@ class _SettingsView extends StatelessWidget {
           },
         ),
         const SizedBox(height: 24),
+        InterfaceSettings(state: state),
+        const SizedBox(height: 24),
         const SectionHeading('交互'),
         SquareSwitchListTile(
           title: const TrText('震动反馈'),
@@ -1942,7 +1956,10 @@ class _MeViewState extends State<_MeView> {
       children: [
         const SizedBox(height: AppSpacing.section * 0.5),
         _profileCard(user),
-        if (MediaQuery.sizeOf(context).width < _compactBreakpoint) ...[
+        if (useCompactLayout(
+          widget.state.uiMode,
+          MediaQuery.sizeOf(context).width,
+        )) ...[
           const SizedBox(height: AppSpacing.md),
           _likedEntry(),
         ],
@@ -2078,7 +2095,10 @@ class _MeViewState extends State<_MeView> {
     );
     return LayoutBuilder(
       builder: (context, box) {
-        final mobile = MediaQuery.sizeOf(context).width < 720;
+        final mobile = useCompactLayout(
+          widget.state.uiMode,
+          MediaQuery.sizeOf(context).width,
+        );
         final signOut = TextButton.icon(
           onPressed: widget.state.signOut,
           icon: const Icon(Icons.logout_rounded, size: 18),

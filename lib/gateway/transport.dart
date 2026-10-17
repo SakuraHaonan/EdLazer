@@ -41,12 +41,26 @@ class GatewayServiceException implements Exception {
   String toString() => 'Gateway request to $endpoint was rejected ($code).';
 }
 
+/// Cookies that make up a gateway session. The device/anonymous identifiers
+/// are kept because the QR flow hands the confirmed session back through them:
+/// `/login/qr/check` answers 803 with `MUSIC_U` plus whichever of these the
+/// server rotated while the phone confirmed, and every later request has to
+/// replay that exact set — api-enhanced passes the whole jar through the same
+/// way (`cookieToJson` has no whitelist).
 const Set<String> _sessionNames = <String>{
   'MUSIC_U',
   'MUSIC_A',
   'NMTID',
   'deviceId',
+  'sDeviceId',
   '__csrf',
+  // Older responses carry the CSRF value under this alias; api-enhanced's
+  // cookie jar keeps it, and weapi requests read it when `__csrf` is missing.
+  '__csrf_token',
+  '_ntes_nuid',
+  '_ntes_nnid',
+  'WNMCID',
+  'WEVNSM',
 };
 
 const Set<String> _cookieAttributeNames = <String>{
@@ -154,12 +168,10 @@ class NeteaseTransport {
     if (alias == '/login/qr/create') {
       final String key = parameters['key'] ?? '';
       if (key.trim().isEmpty) throw ArgumentError('key cannot be blank.');
+      final String qrUrl = _qrLoginUrl(key, parameters['platform'] ?? 'pc');
       return <String, dynamic>{
         'code': 200,
-        'data': <String, dynamic>{
-          'qrurl': 'https://music.163.com/login?codekey=$key',
-          'qrimg': '',
-        },
+        'data': <String, dynamic>{'qrurl': qrUrl, 'qrimg': ''},
       };
     }
     if (alias == '/playlist/track/all') return _playlistTracks(parameters);
@@ -193,16 +205,29 @@ class NeteaseTransport {
     final Map<String, dynamic> body = result.body;
     switch (alias) {
       case '/login/qr/key':
-        return <String, dynamic>{'code': 200, 'data': body};
+        // The unikey response seeds the QR session (NMTID/__csrf/sDeviceId).
+        // Every later /check poll must carry this cookie or the server treats
+        // each poll as a fresh anonymous visitor and never reports 803.
+        return <String, dynamic>{
+          'code': 200,
+          'data': body,
+          if (result.cookie != null) 'cookie': result.cookie,
+        };
       case '/login/status':
         return <String, dynamic>{'data': body};
       case '/login':
       case '/login/cellphone':
       case '/login/refresh':
-      case '/login/qr/check':
-        final int expected = alias == '/login/qr/check' ? 803 : 200;
-        final bool successful = body['code'] == expected;
+        final bool successful = body['code'] == 200;
         if (successful && result.cookie != null) {
+          return <String, dynamic>{...body, 'cookie': result.cookie};
+        }
+        return body;
+      case '/login/qr/check':
+        // api-enhanced forwards the response cookie on every poll code
+        // (801/802 included), not just on 803: the session rotates while the
+        // user scans and the next poll has to present the newest cookie.
+        if (result.cookie != null) {
           return <String, dynamic>{...body, 'cookie': result.cookie};
         }
         return body;
@@ -291,7 +316,10 @@ class NeteaseTransport {
             .trim();
       }
     }
-    final String csrf = cookies['__csrf'] ?? '';
+    // The QR confirmation can hand the CSRF value back under either name;
+    // api-enhanced accepts both and so do the upstream weapi endpoints.
+    final String csrf =
+        cookies['__csrf'] ?? cookies['__csrf_token'] ?? '';
     final bool web = route.encoding == NeteaseEncoding.weapi;
     final Map<String, Object?> payload = <String, Object?>{
       ...route.payload,
@@ -485,6 +513,40 @@ class NeteaseTransport {
 
   static List<int> _secureRandom(int size) {
     return List<int>.generate(size, (_) => _rng.nextInt(256));
+  }
+
+  /// Scan URL for the QR login, following the api-enhanced contract.
+  ///
+  /// The plain form is `https://music.163.com/login?codekey=<unikey>` — the
+  /// shape every client hands the phone app (api-enhanced's `login_qr_create`
+  /// defaults to `platform: 'pc'`, music-lib builds the same URL). The `web`
+  /// platform adds a `chainId` trace parameter
+  /// (`v1_{sDeviceId}_{platform}_{action}_{timestamp}`) that only means
+  /// something for a **real** `sDeviceId` of the session that minted the
+  /// unikey. A made-up `unknown-…` device id names no session the phone can
+  /// resolve, and a scan of such a QR leaves the poll at 801 forever. Only
+  /// append the parameter when the id is real, never fabricated.
+  String _qrLoginUrl(String key, String platform) {
+    final String base =
+        'https://music.163.com/login?codekey=${Uri.encodeQueryComponent(key)}';
+    if (platform != 'web') return base;
+    final String deviceId = _cookieValue(cookie, 'sDeviceId');
+    if (deviceId.isEmpty) return base;
+    final String chainId =
+        'v1_${deviceId}_web_login_${_clock().millisecondsSinceEpoch}';
+    return '$base&chainId=${Uri.encodeQueryComponent(chainId)}';
+  }
+
+  /// Reads a single cookie value out of a `Cookie` header, or ''.
+  static String _cookieValue(String? header, String name) {
+    for (final String segment in (header ?? '').split(';')) {
+      final int separator = segment.indexOf('=');
+      if (separator <= 0) continue;
+      if (segment.substring(0, separator).trim() == name) {
+        return segment.substring(separator + 1).trim();
+      }
+    }
+    return '';
   }
 
   static final math.Random _rng = math.Random.secure();

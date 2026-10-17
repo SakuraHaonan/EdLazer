@@ -14,6 +14,7 @@ import '../l10n/app_language.dart';
 import '../data/models.dart';
 import '../gateway/gateway.dart';
 import '../gateway/transport.dart';
+import 'ui_preferences.dart';
 
 /// How the session was authenticated.
 enum AuthMethod { qrcode, sms, password, cookie }
@@ -175,6 +176,61 @@ class AppState extends ChangeNotifier {
       'lazer_language',
       value.code,
     );
+  }
+
+  // -- interface ------------------------------------------------------------
+
+  /// Which presentation the shell forces; [AppUiMode.auto] follows the width.
+  AppUiMode uiMode = AppUiMode.auto;
+
+  /// Manual interface scale, used while [autoDpiScale] is off.
+  double dpiScale = kDpiScaleDefault;
+
+  /// Whether the interface scale is derived from the window instead of
+  /// [dpiScale].
+  bool autoDpiScale = true;
+
+  Future<void> setUiMode(AppUiMode value) async {
+    if (uiMode == value) return;
+    uiMode = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_ui_mode',
+      value.name,
+    );
+  }
+
+  /// Pins a manual scale. Dragging the slider is an explicit choice, so it
+  /// turns the automatic mode off; [setAutoDpiScale] can turn it back on.
+  Future<void> setDpiScale(double value) async {
+    final double next = normalizeDpiScale(value);
+    if (dpiScale == next && !autoDpiScale) return;
+    dpiScale = next;
+    autoDpiScale = false;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('lazer_dpi_scale', next);
+    await prefs.setBool('lazer_auto_dpi_scale', false);
+  }
+
+  Future<void> setAutoDpiScale(bool value) async {
+    if (autoDpiScale == value) return;
+    autoDpiScale = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setBool(
+      'lazer_auto_dpi_scale',
+      value,
+    );
+  }
+
+  /// Back to the shipped behaviour: automatic scale, 100% manual fallback.
+  Future<void> resetDpiScale() async {
+    autoDpiScale = true;
+    dpiScale = kDpiScaleDefault;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('lazer_auto_dpi_scale', true);
+    await prefs.setDouble('lazer_dpi_scale', kDpiScaleDefault);
   }
 
   double lyricControlsSeconds = 2.5;
@@ -353,6 +409,11 @@ class AppState extends ChangeNotifier {
         orElse: () => ThemeMode.system,
       );
       language = AppLanguage.parse(prefs.getString('lazer_language'));
+      uiMode = AppUiModeLabels.parse(prefs.getString('lazer_ui_mode'));
+      dpiScale = normalizeDpiScale(
+        prefs.getDouble('lazer_dpi_scale') ?? kDpiScaleDefault,
+      );
+      autoDpiScale = prefs.getBool('lazer_auto_dpi_scale') ?? true;
       _volume = (prefs.getDouble('lazer_volume') ?? 1).clamp(0, 1);
       _unmutedVolume =
           (prefs.getDouble('lazer_unmuted_volume') ??
@@ -485,6 +546,7 @@ class AppState extends ChangeNotifier {
 
   /// Starts a QR session and returns the scan URL, or null on failure.
   Future<String?> beginQrLogin() async {
+    _qrConfirmed = false;
     try {
       final String key = await gateway.createQrKey();
       if (key.isEmpty) return null;
@@ -495,28 +557,62 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Set once a poll answered 803. The account endpoint can trail the key
+  /// confirmation by a moment, so later polls re-check the account before
+  /// asking the key again (the key itself is spent after a confirmation).
+  bool _qrConfirmed = false;
+
   /// Polls a QR key: 800 expired, 801 waiting, 802 scanned, 803 confirmed.
+  ///
+  /// Only 803 means "this session is signed in": the scan URL was rejected by
+  /// the phone when the poll never leaves 801, and a not-yet-ready account
+  /// after 803 must not be mistaken for an expired key either.
   Future<int> pollQrLogin(String url) async {
     final Uri? uri = Uri.tryParse(url);
     final String? key = uri?.queryParameters['codekey'];
-    if (key == null) return 800;
+    if (key == null || key.isEmpty) return 800;
     try {
+      if (_qrConfirmed && await _adoptQrSession()) return 803;
       final GatewayQrCheck check = await gateway.checkQrCode(key);
       if (check.code == 803) {
-        final GatewayLoginStatus status = await gateway.loginStatus();
-        final GatewayUserProfile? profile = status.profile;
-        if (status.signedIn && profile != null) {
-          _adoptSession(profile, AuthMethod.qrcode, '扫码登录');
-        } else {
-          // Confirmation can precede the account response becoming ready.
-          // Keep polling instead of closing the dialog as a guest.
-          return 802;
-        }
+        _qrConfirmed = true;
+        if (await _adoptQrSession()) return 803;
+        // Confirmed, account still syncing: stay on the "scanned" state and
+        // let the next poll retry the account instead of dropping the login.
+        return 802;
+      }
+      if (check.code == 800 && _qrConfirmed) {
+        // A confirmed key is spent: later polls answer "expired" even though
+        // the login succeeded. Give the account one more chance first.
+        if (await _adoptQrSession()) return 803;
       }
       return check.code;
     } catch (_) {
       return 801;
     }
+  }
+
+  /// Reads the account behind the confirmed QR cookie, retrying briefly:
+  /// `MUSIC_U` is already installed by [pollQrLogin], but `/login/status`
+  /// can answer "not signed in" for a beat after the confirmation.
+  Future<bool> _adoptQrSession() async {
+    for (int attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+      try {
+        final GatewayLoginStatus status = await gateway.loginStatus();
+        final GatewayUserProfile? profile = status.profile;
+        if (status.signedIn && profile != null) {
+          _qrConfirmed = false;
+          _adoptSession(profile, AuthMethod.qrcode, '扫码登录');
+          return true;
+        }
+      } catch (_) {
+        // Keep retrying — the account endpoint lags the confirmation.
+      }
+    }
+    return false;
   }
 
   AuthOutcome _adoptLoginResult(
@@ -573,6 +669,7 @@ class AppState extends ChangeNotifier {
     _user = SessionUser.guest;
     _likedSongIds = <int>{};
     likeError = null;
+    _qrConfirmed = false;
     gateway.clearSession();
     unawaited(_forgetSession());
     unawaited(refreshHome());

@@ -17,6 +17,7 @@ import 'theme/app_theme.dart';
 import 'widgets/window_frame.dart';
 import 'widgets/interaction_feedback.dart';
 import 'widgets/app_scroll_behavior.dart';
+import 'widgets/ui_scaling.dart';
 
 /// Lines the media backend prints that we cannot silence upstream.
 ///
@@ -151,7 +152,12 @@ class _LazerAppState extends State<LazerApp> {
           retention: _state.scrollRetention,
           acceleration: _state.scrollAcceleration,
         ),
-        builder: (context, child) => WindowFrame(child: child!),
+        // The whole interface — custom title bar included — is drawn at the
+        // resolved DPI scale, so the window frame and the pages agree.
+        builder: (context, child) => UiScaling(
+          state: _state,
+          child: WindowFrame(child: child!),
+        ),
         // Structural rebuilds only: `setState` fires on sign-in/out, never on
         // the 100 ms position ticks (leaf transport widgets consume those).
         // Keep exactly one root subtree during auth changes. AnimatedSwitcher

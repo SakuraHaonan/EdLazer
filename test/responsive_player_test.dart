@@ -84,6 +84,13 @@ class _Catalog extends Catalog {
 }
 
 class _AuthGateway extends NeteaseGateway {
+  _AuthGateway({this.qrCompletes = false});
+
+  /// Whether the fake QR poll reports a confirmed scan. Widget tests that only
+  /// want the sign-in card to stay open leave it at "waiting" — the panel
+  /// polls immediately now, so a 803 would close the dialog on the first frame.
+  final bool qrCompletes;
+
   static const status = GatewayLoginStatus(
     profile: GatewayUserProfile(
       userId: 7,
@@ -106,6 +113,7 @@ class _AuthGateway extends NeteaseGateway {
   Future<String> createQrKey() async => 'fixture-key';
   @override
   Future<GatewayQrCheck> checkQrCode(String key) async {
+    if (!qrCompletes) return const GatewayQrCheck(code: 801);
     sessionCookie = 'MUSIC_U=fixture';
     return const GatewayQrCheck(code: 803, cookie: 'MUSIC_U=fixture');
   }
@@ -284,7 +292,9 @@ void main() {
   );
 
   test('confirmed QR adopts and persists a verified session', () async {
-    final state = AppState(catalog: _Catalog(gateway: _AuthGateway()));
+    final state = AppState(
+      catalog: _Catalog(gateway: _AuthGateway(qrCompletes: true)),
+    );
     addTearDown(state.dispose);
     final url = await state.beginQrLogin();
     expect(await state.pollQrLogin(url!), 803);

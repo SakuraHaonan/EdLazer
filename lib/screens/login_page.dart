@@ -472,6 +472,16 @@ class BusyRow extends StatelessWidget {
 
 enum _QrPhase { fresh, scanned, expired }
 
+/// How long a scan URL stays valid. The service expires the unikey itself
+/// (the poll then answers 800); this local bound only stops a dead QR from
+/// staying on screen forever.
+const int _qrLifetimeSeconds = 180;
+
+/// A poll every two seconds is what the reference implementation expects;
+/// the first one runs immediately so a scan during the key handshake is not
+/// missed for a whole tick.
+const Duration _qrPollInterval = Duration(seconds: 2);
+
 class QrPanel extends StatefulWidget {
   const QrPanel({super.key, required this.state});
 
@@ -483,13 +493,17 @@ class QrPanel extends StatefulWidget {
 
 class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
   _QrPhase _phase = _QrPhase.fresh;
-  int _secondsLeft = 60;
+  int _secondsLeft = _qrLifetimeSeconds;
   Timer? _timer;
 
   /// Scan URL issued by the gateway.
   String? _qrUrl;
   String? _qrError;
   Timer? _poll;
+
+  /// Guards against overlapping polls: a slow request must not let the next
+  /// tick race it and replay an older session cookie.
+  bool _polling = false;
 
   @override
   void initState() {
@@ -510,56 +524,70 @@ class _QrPanelState extends State<QrPanel> with SignInFlow<QrPanel> {
 
   void _startPolling() {
     _poll?.cancel();
-    _poll = Timer.periodic(const Duration(seconds: 2), (Timer _) {
+    _poll = Timer.periodic(_qrPollInterval, (Timer _) {
       unawaited(_pollOnce());
     });
+    // Don't make the first poll wait a full interval.
+    unawaited(_pollOnce());
   }
 
   Future<void> _pollOnce() async {
     final String? url = _qrUrl;
-    if (url == null || _phase == _QrPhase.expired) return;
-    final int code = await widget.state.pollQrLogin(url);
-    if (!mounted || _phase == _QrPhase.expired) return;
-    if (code == 803) {
-      _poll?.cancel();
-      Navigator.of(context).maybePop();
-    } else if (code == 802) {
-      setState(() => _phase = _QrPhase.scanned);
-    } else if (code == 800) {
-      _poll?.cancel();
-      setState(() => _phase = _QrPhase.expired);
+    if (_polling || !mounted || url == null || _phase == _QrPhase.expired) {
+      return;
+    }
+    _polling = true;
+    try {
+      final int code = await widget.state.pollQrLogin(url);
+      if (!mounted || _phase == _QrPhase.expired) return;
+      switch (code) {
+        case 803:
+          _poll?.cancel();
+          _timer?.cancel();
+          Navigator.of(context).maybePop();
+        case 802:
+          if (_phase != _QrPhase.scanned) {
+            setState(() => _phase = _QrPhase.scanned);
+          }
+        case 800:
+          _poll?.cancel();
+          setState(() => _phase = _QrPhase.expired);
+        default:
+          // 801 (waiting to be scanned) and transient network errors keep the
+          // QR alive; the poll just tries again on the next tick.
+          break;
+      }
+    } finally {
+      _polling = false;
     }
   }
 
   void _startCountdown() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (Timer t) {
-      if (!mounted) return;
-      if (_phase != _QrPhase.fresh) {
-        // Scanned or expired: nothing left to count — stop the idle wakeups.
+      if (!mounted || _phase == _QrPhase.expired) {
         t.cancel();
         return;
       }
       final int next = _secondsLeft - 1;
       if (next <= 0) {
-        _timer?.cancel();
-        if (mounted) {
-          setState(() => _phase = _QrPhase.expired);
-        }
+        t.cancel();
+        _poll?.cancel();
+        setState(() => _phase = _QrPhase.expired);
         return;
       }
-      setState(() {
-        _secondsLeft = next;
-      });
+      setState(() => _secondsLeft = next);
     });
   }
 
   void _refresh() {
+    _poll?.cancel();
     setState(() {
       _phase = _QrPhase.fresh;
-      _secondsLeft = 60;
+      _secondsLeft = _qrLifetimeSeconds;
       _qrUrl = null;
       _qrError = null;
+      _polling = false;
     });
     unawaited(_beginReal());
   }

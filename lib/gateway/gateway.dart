@@ -463,10 +463,18 @@ class NeteaseGateway {
   }
 
   Future<String> createQrKey() async {
+    // No `platform` parameter: the default `pc` QR points at
+    // `https://music.163.com/login?codekey=<unikey>`, the URL the phone app
+    // can confirm. Asking for `web` would attach a `chainId` derived from a
+    // device id this anonymous session does not have (see `_qrLoginUrl`).
     final Map<String, dynamic> body = await _transport.request(
       '/login/qr/key',
-      const <String, String>{'platform': 'web'},
+      const <String, String>{},
     );
+    // Persist the unikey session cookie up front: the check poll must replay
+    // this cookie, exactly like api-enhanced's query.cookie passthrough.
+    final String? keyCookie = body['cookie'] as String?;
+    if (keyCookie != null) sessionCookie = keyCookie;
     final dynamic data = body['data'];
     return data is Map<String, dynamic> ? data['unikey'] as String? ?? '' : '';
   }
@@ -476,7 +484,7 @@ class NeteaseGateway {
     if (key.trim().isEmpty) throw ArgumentError('key cannot be blank.');
     final Map<String, dynamic> body = await _transport.request(
       '/login/qr/create',
-      <String, String>{'key': key, 'qrimg': 'true', 'platform': 'web'},
+      <String, String>{'key': key, 'qrimg': 'true'},
     );
     final dynamic data = body['data'];
     return data is Map<String, dynamic> ? data['qrurl'] as String? ?? '' : '';
@@ -486,9 +494,11 @@ class NeteaseGateway {
     if (key.trim().isEmpty) throw ArgumentError('key cannot be blank.');
     final Map<String, dynamic> body = await _transport.request(
       '/login/qr/check',
-      <String, String>{'key': key, 'platform': 'web'},
+      <String, String>{'key': key},
     );
     final String? cookie = body['cookie'] as String?;
+    // Refresh on every code (801/802 included), not only on 803 — the QR
+    // session rotates while the user scans, mirroring api-enhanced.
     if (cookie != null) sessionCookie = cookie;
     return GatewayQrCheck(
       code: (body['code'] as num?)?.toInt() ?? 0,

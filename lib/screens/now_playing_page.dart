@@ -17,6 +17,7 @@ import '../navigation/pull_down_page_route.dart';
 import '../widgets/lyric_viewport.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
+import '../state/ui_preferences.dart';
 import '../theme/design_tokens.dart';
 import '../theme/paper_widgets.dart';
 import '../widgets/animated_notice.dart';
@@ -30,7 +31,7 @@ class NowPlayingRoute extends PullDownPageRoute<void> {
 
 /// Shared queue entry from the player header and desktop transport.
 Future<void> showPlaybackQueue(BuildContext context, AppState state) async {
-  if (MediaQuery.sizeOf(context).width >= 720) {
+  if (!useCompactLayout(state.uiMode, MediaQuery.sizeOf(context).width)) {
     await showDialog<void>(
       context: context,
       barrierColor: context.colors.slateDark.withValues(alpha: .2),
@@ -288,7 +289,10 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     label: context.tr('歌曲封面，长按保存'),
     child: GestureDetector(
       onTap: () {
-        if (MediaQuery.sizeOf(context).width < 720) {
+        if (useCompactLayout(
+          widget.state.uiMode,
+          MediaQuery.sizeOf(context).width,
+        )) {
           unawaited(widget.state.feedback());
           _toggleLyrics();
         }
@@ -359,7 +363,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
         }
         return LayoutBuilder(
           builder: (context, box) {
-            final compact = box.maxWidth < 720;
+            final compact = useCompactLayout(widget.state.uiMode, box.maxWidth);
             if (!compact) {
               return SafeArea(
                 child: DesktopNowPlaying(

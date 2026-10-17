@@ -108,6 +108,19 @@ void main() {
       expect(normalizeGatewaySessionCookie(null), isNull);
       expect(normalizeGatewaySessionCookie('   '), isNull);
     });
+
+    test('keeps the QR session identifiers and the csrf alias', () {
+      // `/login/qr/check` hands the confirmed session back with the device
+      // cookies it rotated while the phone scanned; dropping them loses the
+      // login exactly like api-enhanced's whitelist-free jar would.
+      expect(
+        normalizeGatewaySessionCookie(
+          'MUSIC_U=u; __csrf_token=ct; _ntes_nuid=nuid; WNMCID=w; '
+          'Path=/; Domain=.music.163.com; Secure',
+        ),
+        'MUSIC_U=u; __csrf_token=ct; _ntes_nuid=nuid; WNMCID=w',
+      );
+    });
   });
 
   group('buildNeteaseRequest', () {
@@ -194,6 +207,36 @@ void main() {
       await expectLater(
         transport.request('/login/qr/create', <String, String>{'key': ''}),
         throwsArgumentError,
+      );
+    });
+
+    test('never fabricates the web chainId device id', () async {
+      final NeteaseTransport transport = NeteaseTransport()
+        ..cookie = 'NMTID=abc';
+      // The session minted the unikey anonymously, so it has no sDeviceId:
+      // the phone still gets the plain codekey URL the app can confirm.
+      final Map<String, dynamic> body = await transport.request(
+        '/login/qr/create',
+        <String, String>{'key': 'k1', 'platform': 'web'},
+      );
+      expect(
+        (body['data'] as Map<String, dynamic>)['qrurl'],
+        'https://music.163.com/login?codekey=k1',
+      );
+    });
+
+    test('adds the web chainId only for a real sDeviceId', () async {
+      final NeteaseTransport transport = NeteaseTransport()
+        ..cookie = 'NMTID=abc; sDeviceId=DEV42';
+      final Map<String, dynamic> body = await transport.request(
+        '/login/qr/create',
+        <String, String>{'key': 'k1', 'platform': 'web'},
+      );
+      expect(
+        (body['data'] as Map<String, dynamic>)['qrurl'],
+        startsWith(
+          'https://music.163.com/login?codekey=k1&chainId=v1_DEV42_web_login_',
+        ),
       );
     });
   });
