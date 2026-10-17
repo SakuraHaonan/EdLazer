@@ -776,9 +776,9 @@ class _BigPlayPauseState extends State<_BigPlayPause> {
           duration: const Duration(milliseconds: 130),
           width: 68,
           height: 68,
-          // Ink disc with the paper knocked out of it; hover trades the two.
+          // Ink slab with the paper knocked out of it; hover trades the two.
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape: BoxShape.rectangle,
             color: _hovering
                 ? context.colors.manilla
                 : context.colors.slateDark,
