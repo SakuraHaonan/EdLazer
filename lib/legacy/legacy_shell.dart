@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
+import '../state/song_comments_controller.dart';
 import '../state/ui_preferences.dart';
+import '../widgets/song_comments_view.dart';
 import 'legacy_background.dart';
 import 'legacy_login.dart';
 import 'legacy_now_playing.dart';
@@ -34,6 +36,8 @@ class _LegacyShellState extends State<LegacyShell> {
   final TextEditingController _search = TextEditingController();
   String _query = '';
   Timer? _searchDebounce;
+  bool _comments = false;
+  SongCommentsController? _commentsController;
 
   AppState get state => widget.state;
 
@@ -41,6 +45,7 @@ class _LegacyShellState extends State<LegacyShell> {
   void dispose() {
     _searchDebounce?.cancel();
     _search.dispose();
+    _commentsController?.dispose();
     super.dispose();
   }
 
@@ -48,7 +53,10 @@ class _LegacyShellState extends State<LegacyShell> {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 350), () {
       if (!mounted) return;
-      setState(() => _query = value.trim());
+      setState(() {
+        _query = value.trim();
+        if (_query.isNotEmpty) _comments = false;
+      });
     });
   }
 
@@ -56,6 +64,7 @@ class _LegacyShellState extends State<LegacyShell> {
     setState(() {
       _section = section;
       _playlist = null;
+      _comments = false;
       if (section != _LegacySection.settings) _query = '';
       if (_query.isEmpty && _search.text.isNotEmpty) _search.clear();
     });
@@ -64,8 +73,18 @@ class _LegacyShellState extends State<LegacyShell> {
   void _openPlaylist(Playlist playlist) {
     setState(() {
       _playlist = playlist;
+      _comments = false;
       _query = '';
       _search.clear();
+    });
+  }
+
+  void _toggleComments() {
+    setState(() {
+      _comments = !_comments;
+      if (_comments) {
+        _commentsController ??= SongCommentsController(state.gateway);
+      }
     });
   }
 
@@ -94,19 +113,24 @@ class _LegacyShellState extends State<LegacyShell> {
         final bool compactBar = window.width < 1_000;
         final bool hasBackground =
             state.legacyBackground != LegacyBackgroundMode.off;
+        final bool needsSeed =
+            state.legacyPalette == LegacyPaletteMode.nowPlaying;
         return Scaffold(
           backgroundColor: hasBackground
               ? Colors.transparent
-              : legacyPageBackground(Theme.of(context).brightness),
+              : legacyPageBackgroundOf(scheme),
           body: Stack(
             fit: StackFit.expand,
             children: [
               // The album-coloured canvas the Lazer app floats its chrome over.
-              if (hasBackground)
+              if (hasBackground || needsSeed)
                 LegacyAlbumBackdrop(
                   track: state.current,
-                  mode: state.legacyBackground,
+                  mode: hasBackground
+                      ? state.legacyBackground
+                      : LegacyBackgroundMode.off,
                   uiAlpha: state.legacyUiAlpha,
+                  onSeed: state.setLegacySeed,
                 ),
               Column(
                 children: [
@@ -117,7 +141,10 @@ class _LegacyShellState extends State<LegacyShell> {
                         Expanded(
                           child: Column(
                             children: [
-                              _topBar(context, scheme, wide),
+                              // The legacy comments page replaces the whole
+                              // content column, search bar included.
+                              if (!_comments)
+                                _topBar(context, scheme, wide),
                               Expanded(child: _content()),
                             ],
                           ),
@@ -128,6 +155,8 @@ class _LegacyShellState extends State<LegacyShell> {
                   LegacyPlayerBar(
                     state: state,
                     compact: compactBar,
+                    comments: _comments,
+                    onComments: _toggleComments,
                     onOpen: _openNowPlaying,
                   ),
                   if (!wide)
@@ -514,6 +543,45 @@ class _LegacyShellState extends State<LegacyShell> {
   }
 
   Widget _content() {
+    if (_comments) {
+      final Track? track = state.current;
+      final SongCommentsController? controller = _commentsController;
+      if (track == null || controller == null) {
+        return const LegacyNotice(message: '还没有播放中的曲目。');
+      }
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: '返回',
+                  onPressed: () => setState(() => _comments = false),
+                  icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '评论 · ${track.title}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SongCommentsView(
+              state: state,
+              track: track,
+              controller: controller,
+            ),
+          ),
+        ],
+      );
+    }
     if (_query.isNotEmpty) {
       return LegacySearchPage(
         state: state,

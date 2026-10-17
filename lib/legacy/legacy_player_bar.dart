@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
 import '../state/ui_preferences.dart';
+import '../widgets/playback_queue_view.dart';
 import 'legacy_widgets.dart';
 
 /// The legacy transport bar, ported from `PlayerBar` in
@@ -23,7 +24,9 @@ class LegacyPlayerBar extends StatelessWidget {
     super.key,
     required this.state,
     this.compact = false,
+    this.comments = false,
     required this.onOpen,
+    this.onComments,
   });
 
   final AppState state;
@@ -31,7 +34,11 @@ class LegacyPlayerBar extends StatelessWidget {
   /// Phone presentation: cover, title and three buttons, 64 dp tall.
   final bool compact;
 
+  /// Whether the comments pane is open in the shell.
+  final bool comments;
+
   final VoidCallback onOpen;
+  final VoidCallback? onComments;
 
   @override
   Widget build(BuildContext context) {
@@ -80,11 +87,7 @@ class LegacyPlayerBar extends StatelessWidget {
                   iconSize: 26,
                   onPressed: track == null ? null : state.next,
                 ),
-                _CompactIcon(
-                  icon: Icons.queue_music_rounded,
-                  tooltip: '播放队列',
-                  onPressed: () => showLegacyQueueSheet(context, state),
-                ),
+                LegacyQueueButton(state: state),
               ],
             ),
           );
@@ -161,12 +164,17 @@ class LegacyPlayerBar extends StatelessWidget {
                   children: [
                     _VolumeButton(state: state),
                     const SizedBox(width: 2),
-                    _CompactIcon(
-                      icon: Icons.queue_music_rounded,
-                      tooltip: '播放队列',
-                      onPressed: () => showLegacyQueueSheet(context, state),
-                    ),
+                    LegacyQueueButton(state: state),
                     const SizedBox(width: 2),
+                    if (onComments != null) ...[
+                      _CompactIcon(
+                        icon: Icons.mode_comment_outlined,
+                        tooltip: '评论',
+                        selected: comments,
+                        onPressed: onComments,
+                      ),
+                      const SizedBox(width: 2),
+                    ],
                     _CompactIcon(
                       icon: Icons.lyrics_outlined,
                       tooltip: '歌词',
@@ -664,67 +672,93 @@ class _VolumeButtonState extends State<_VolumeButton> {
   }
 }
 
-/// The queue panel, restyled as the legacy floating card.
-Future<void> showLegacyQueueSheet(BuildContext context, AppState state) {
-  return showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-    ),
-    builder: (BuildContext context) => _LegacyQueuePanel(state: state),
-  );
-}
-
-class _LegacyQueuePanel extends StatelessWidget {
-  const _LegacyQueuePanel({required this.state});
+/// `PlayerPanelControl` + `PlayQueuePanel`: a floating queue card above the
+/// bar. The list itself is the Nextgen [PlaybackQueueView], so queue
+/// interaction stays one implementation.
+class LegacyQueueButton extends StatefulWidget {
+  const LegacyQueueButton({super.key, required this.state});
 
   final AppState state;
 
   @override
+  State<LegacyQueueButton> createState() => _LegacyQueueButtonState();
+}
+
+class _LegacyQueueButtonState extends State<LegacyQueueButton> {
+  final OverlayPortalController _portal = OverlayPortalController();
+  final LayerLink _link = LayerLink();
+
+  void _toggle() {
+    if (_portal.isShowing) {
+      _portal.hide();
+    } else {
+      _portal.show();
+    }
+    setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.6,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 18, 16, 8),
-              child: Row(
-                children: [
-                  Text(
-                    '播放队列 · ${state.queue.length} 首',
-                    style: theme.textTheme.titleMedium,
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final double height = math.min(
+      520,
+      MediaQuery.sizeOf(context).height * 0.6,
+    );
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: (BuildContext context) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _toggle,
+              child: const SizedBox.expand(),
+            ),
+          ),
+          CompositedTransformFollower(
+            link: _link,
+            showWhenUnlinked: false,
+            // Anchor the card's right edge to the button so it never runs off
+            // the window edge — the legacy popup opens towards the content.
+            targetAnchor: Alignment.topRight,
+            followerAnchor: Alignment.bottomRight,
+            offset: const Offset(8, -12),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 380,
+                height: height,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.98),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.85),
                   ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '关闭',
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                  ),
-                ],
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.32),
+                      blurRadius: 32,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: PlaybackQueueView(
+                  state: widget.state,
+                  onClose: _toggle,
+                ),
               ),
             ),
-            Expanded(
-              child: state.queue.isEmpty
-                  ? const LegacyNotice(message: '队列还是空的。')
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: state.queue.length,
-                      itemBuilder: (BuildContext context, int index) {
-                        final Track track = state.queue[index];
-                        return LegacyTrackRow(
-                          track: track,
-                          index: index,
-                          current: state.queueIndex == index,
-                          playing: state.playing,
-                          onTap: () => state.playTrackAt(index),
-                        );
-                      },
-                    ),
-            ),
-          ],
+          ),
+        ],
+      ),
+      child: CompositedTransformTarget(
+        link: _link,
+        child: _CompactIcon(
+          icon: Icons.queue_music_rounded,
+          tooltip: '播放队列',
+          selected: _portal.isShowing,
+          onPressed: _toggle,
         ),
       ),
     );

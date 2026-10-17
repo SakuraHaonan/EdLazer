@@ -23,6 +23,36 @@ enum AppUiStyle {
   legacy,
 }
 
+/// How the legacy shell picks its accent palette.
+///
+/// [fixed] is the Lazer blue-grey scheme. [nowPlaying] derives a Material 3
+/// scheme from the current cover — the legacy `LazerPalette.NowPlaying`.
+enum LegacyPaletteMode {
+  fixed,
+  nowPlaying,
+}
+
+extension LegacyPaletteModeLabels on LegacyPaletteMode {
+  /// Chinese source string, translated through `context.tr`.
+  String get label => switch (this) {
+    LegacyPaletteMode.fixed => '默认',
+    LegacyPaletteMode.nowPlaying => '跟随当前歌曲',
+  };
+
+  String get detail => switch (this) {
+    LegacyPaletteMode.fixed => 'Lazer 的蓝灰配色',
+    LegacyPaletteMode.nowPlaying => '由当前封面主色生成整套配色',
+  };
+
+  /// Parses a persisted [name]; unknown or missing values keep the fixed
+  /// scheme.
+  static LegacyPaletteMode parse(String? name) =>
+      LegacyPaletteMode.values.firstWhere(
+        (LegacyPaletteMode mode) => mode.name == name,
+        orElse: () => LegacyPaletteMode.fixed,
+      );
+}
+
 /// How the legacy shell paints its page backdrop.
 ///
 /// The flowing album-colour canvas is ported from the Lazer project's

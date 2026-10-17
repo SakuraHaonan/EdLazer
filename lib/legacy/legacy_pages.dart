@@ -516,6 +516,25 @@ class LegacySettingsPage extends StatelessWidget {
           ),
         ),
         _LegacySettingRow(
+          label: '配色',
+          subtitle: state.legacyPalette.detail,
+          trailing: DropdownButton<LegacyPaletteMode>(
+            value: state.legacyPalette,
+            underline: const SizedBox.shrink(),
+            borderRadius: BorderRadius.circular(16),
+            items: <DropdownMenuItem<LegacyPaletteMode>>[
+              for (final LegacyPaletteMode mode in LegacyPaletteMode.values)
+                DropdownMenuItem<LegacyPaletteMode>(
+                  value: mode,
+                  child: Text(mode.label),
+                ),
+            ],
+            onChanged: (LegacyPaletteMode? value) {
+              if (value != null) unawaited(state.setLegacyPalette(value));
+            },
+          ),
+        ),
+        _LegacySettingRow(
           label: '设备形态',
           subtitle: state.surface.detail,
           trailing: DropdownButton<AppSurface>(
@@ -692,13 +711,13 @@ class LegacySettingsPage extends StatelessWidget {
         const _LegacySectionLabel('歌词'),
         _LegacySliderRow(
           label: '歌词字号',
-          valueText: '${state.legacyLyricFontSize.round()}',
-          value: state.legacyLyricFontSize.clamp(22.0, 44.0),
-          min: 22,
-          max: 44,
-          divisions: 11,
+          valueText: '${state.lyricFontSize.round()}',
+          value: state.lyricFontSize.clamp(14.0, 40.0),
+          min: 14,
+          max: 40,
+          divisions: 26,
           onChanged: (double value) =>
-              unawaited(state.setLegacyLyricFontSize(value)),
+              unawaited(state.setLyricFontSize(value)),
         ),
         _LegacyChoiceRow(
           label: '歌词粗细',

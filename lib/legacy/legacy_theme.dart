@@ -45,6 +45,12 @@ Color legacyPageBackground(Brightness brightness) =>
     ? LegacyTokens.nightPaper
     : LegacyTokens.paper;
 
+/// The same page tone for whichever scheme is active — fixed or album-seeded.
+Color legacyPageBackgroundOf(ColorScheme scheme) => scheme.brightness ==
+        Brightness.dark
+    ? scheme.surfaceContainerLowest
+    : scheme.surfaceContainerLow;
+
 const ColorScheme _legacyLight = ColorScheme(
   brightness: Brightness.light,
   primary: LegacyTokens.lakeBlue,
@@ -65,6 +71,8 @@ const ColorScheme _legacyLight = ColorScheme(
   onSurface: LegacyTokens.ink,
   onSurfaceVariant: LegacyTokens.quietInk,
   surfaceContainerHighest: Color(0xFFE9EEED),
+  surfaceContainerLow: LegacyTokens.paper,
+  surfaceContainerLowest: Color(0xFFFFFFFF),
   outline: Color(0xFFA8B5B8),
   outlineVariant: Color(0xFFD7DEDD),
   inverseSurface: LegacyTokens.ink,
@@ -94,6 +102,8 @@ const ColorScheme _legacyDark = ColorScheme(
   onSurface: LegacyTokens.nightInk,
   onSurfaceVariant: LegacyTokens.nightQuietInk,
   surfaceContainerHighest: Color(0xFF314047),
+  surfaceContainerLow: Color(0xFF222E34),
+  surfaceContainerLowest: LegacyTokens.nightPaper,
   outline: Color(0xFF687A81),
   outlineVariant: Color(0xFF3B4B51),
   inverseSurface: LegacyTokens.nightInk,
@@ -183,9 +193,15 @@ const TextTheme legacyTextTheme = TextTheme(
 
 /// ThemeData for the legacy shell. The window itself paints the page colour,
 /// so `scaffoldBackgroundColor` follows the legacy background, not the raised
-/// surface.
-ThemeData buildLegacyTheme({Brightness brightness = Brightness.light}) {
-  final ColorScheme scheme = legacyColorScheme(brightness);
+/// surface. Pass [seed] to derive the accent palette from the current cover
+/// (the legacy `LazerPalette.NowPlaying`).
+ThemeData buildLegacyTheme({
+  Brightness brightness = Brightness.light,
+  Color? seed,
+}) {
+  final ColorScheme scheme = seed == null
+      ? legacyColorScheme(brightness)
+      : ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
   final bool dark = brightness == Brightness.dark;
   return ThemeData(
     useMaterial3: true,
@@ -197,7 +213,7 @@ ThemeData buildLegacyTheme({Brightness brightness = Brightness.light}) {
       bodyColor: scheme.onSurface,
       displayColor: scheme.onSurface,
     ),
-    scaffoldBackgroundColor: legacyPageBackground(brightness),
+    scaffoldBackgroundColor: legacyPageBackgroundOf(scheme),
     canvasColor: scheme.surface,
     dividerColor: scheme.outlineVariant,
     splashFactory: InkSparkle.splashFactory,

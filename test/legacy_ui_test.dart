@@ -231,6 +231,7 @@ void main() {
 
     for (final String label in <String>[
       '界面风格',
+      '配色',
       '设备形态',
       '界面布局',
       'DPI 缩放',
@@ -278,8 +279,7 @@ void main() {
     await tester.ensureVisible(lyricSize);
     await tester.drag(lyricSize, const Offset(200, 0));
     await tester.pumpAndSettle();
-    expect(state.legacyLyricFontSize, greaterThanOrEqualTo(36));
-    expect(state.legacyLyricFontSize % 2, 0);
+    expect(state.lyricFontSize, greaterThan(22));
     await tester.ensureVisible(find.text('粗体'));
     await tester.tap(find.text('粗体'));
     await tester.pumpAndSettle();

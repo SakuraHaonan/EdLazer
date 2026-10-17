@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show ThemeMode;
+import 'package:flutter/material.dart' show Color, ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../audio/audio_engine.dart';
@@ -295,23 +295,28 @@ class AppState extends ChangeNotifier {
   static int normalizeLyricWeight(int value) =>
       (value.clamp(400, 700) / 100).round() * 100;
 
-  /// The legacy shell's lyric size: the Lazer range (22–44, step 2) opening at
-  /// its 34 sp desktop default, independent of the Nextgen ramp.
-  double legacyLyricFontSize = 34;
+  /// The legacy shell's accent palette: the fixed Lazer scheme, or one seeded
+  /// from the current cover like the app's "follow the song" palette.
+  LegacyPaletteMode legacyPalette = LegacyPaletteMode.fixed;
 
-  static double normalizeLegacyLyricFontSize(double value) =>
-      ((value.clamp(22, 44) / 2).round() * 2).toDouble();
+  /// The last artwork seed the legacy backdrop extracted; only used while
+  /// [legacyPalette] is [LegacyPaletteMode.nowPlaying].
+  Color? legacySeed;
 
-  Future<void> setLegacyLyricFontSize(double value) async {
-    if (!value.isFinite) return;
-    final double next = normalizeLegacyLyricFontSize(value);
-    if (next == legacyLyricFontSize) return;
-    legacyLyricFontSize = next;
+  Future<void> setLegacyPalette(LegacyPaletteMode value) async {
+    if (legacyPalette == value) return;
+    legacyPalette = value;
     notifyListeners();
-    await (await SharedPreferences.getInstance()).setDouble(
-      'lazer_legacy_lyric_font_size',
-      next,
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_legacy_palette',
+      value.name,
     );
+  }
+
+  void setLegacySeed(Color? value) {
+    if (legacySeed == value) return;
+    legacySeed = value;
+    notifyListeners();
   }
 
   Future<void> setLyricFontSize(double value) async {
@@ -512,8 +517,8 @@ class AppState extends ChangeNotifier {
       lyricFontWeight = normalizeLyricWeight(
         prefs.getInt('lazer_lyric_font_weight') ?? 600,
       );
-      legacyLyricFontSize = normalizeLegacyLyricFontSize(
-        prefs.getDouble('lazer_legacy_lyric_font_size') ?? 34,
+      legacyPalette = LegacyPaletteModeLabels.parse(
+        prefs.getString('lazer_legacy_palette'),
       );
       scrollRetention =
           (prefs.getDouble('lazer_scroll_retention') ??

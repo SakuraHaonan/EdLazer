@@ -132,6 +132,11 @@ class _LazerAppState extends State<LazerApp> {
   @override
   Widget build(BuildContext context) {
     final bool legacy = _state.uiStyle == AppUiStyle.legacy;
+    // The legacy 配色 setting can seed the whole scheme from the current cover.
+    final Color? seed = legacy &&
+            _state.legacyPalette == LegacyPaletteMode.nowPlaying
+        ? _state.legacySeed
+        : null;
     // WindowFrame is a pass-through off desktop: the system frame (and the
     // plain MaterialApp) stays exactly as it was.
     return InteractionFeedback(
@@ -141,9 +146,9 @@ class _LazerAppState extends State<LazerApp> {
         debugShowCheckedModeBanner: false,
         // Legacy UI is the Material 3 shell ported from the Lazer project, so
         // it brings its own palette and type ramp instead of the paper theme.
-        theme: legacy ? buildLegacyTheme() : buildAppTheme(),
+        theme: legacy ? buildLegacyTheme(seed: seed) : buildAppTheme(),
         darkTheme: legacy
-            ? buildLegacyTheme(brightness: Brightness.dark)
+            ? buildLegacyTheme(brightness: Brightness.dark, seed: seed)
             : buildAppTheme(brightness: Brightness.dark),
         themeMode: _state.themeMode,
         locale: _state.language.locale,

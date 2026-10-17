@@ -500,6 +500,7 @@ class LegacyAlbumBackdrop extends StatefulWidget {
     required this.uiAlpha,
     this.veil,
     this.pageColor,
+    this.onSeed,
   });
 
   final Track? track;
@@ -515,6 +516,10 @@ class LegacyAlbumBackdrop extends StatefulWidget {
   /// Painted under the flow (legacy `colors.background`), and on its own when
   /// the backdrop is off.
   final Color? pageColor;
+
+  /// Reports the extracted artwork seed so the shell can seed its palette even
+  /// when the backdrop itself is off.
+  final ValueChanged<Color>? onSeed;
 
   @override
   State<LegacyAlbumBackdrop> createState() => _LegacyAlbumBackdropState();
@@ -544,6 +549,7 @@ class _LegacyAlbumBackdropState extends State<LegacyAlbumBackdrop> {
     final Color? seed = await albumSeedForCover(widget.track?.coverUrl);
     if (!mounted || generation != _generation) return;
     setState(() => _colors = albumFlowColors(seed ?? kAlbumDefaultSeed));
+    widget.onSeed?.call(seed ?? kAlbumDefaultSeed);
   }
 
   @override

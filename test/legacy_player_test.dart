@@ -10,6 +10,9 @@ import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:lazer_nextgen/state/ui_preferences.dart';
+import 'package:lazer_nextgen/widgets/playback_queue_view.dart';
+import 'package:lazer_nextgen/widgets/song_comments_view.dart';
 
 const Track _track = Track(
   id: '1939575649',
@@ -79,25 +82,37 @@ Future<AppState> _playing(WidgetTester tester) async {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test('the legacy lyric size starts at the Lazer default and persists', () async {
+  test('the legacy palette follows the song only when asked to', () async {
     final AppState state = AppState(catalog: _Catalog());
     addTearDown(state.dispose);
-    expect(state.legacyLyricFontSize, 34);
-    await state.setLegacyLyricFontSize(41);
-    expect(state.legacyLyricFontSize, 42, reason: 'snaps to the 2 sp ladder');
+    expect(state.legacyPalette, LegacyPaletteMode.fixed);
+    expect(state.legacySeed, isNull);
+
+    await state.setLegacyPalette(LegacyPaletteMode.nowPlaying);
+    state.setLegacySeed(const Color(0xFFB23A48));
+    expect(state.legacySeed, const Color(0xFFB23A48));
     expect(
-      (await SharedPreferences.getInstance()).getDouble(
-        'lazer_legacy_lyric_font_size',
-      ),
-      42,
+      (await SharedPreferences.getInstance()).getString('lazer_legacy_palette'),
+      'nowPlaying',
     );
-    await state.setLegacyLyricFontSize(10);
-    expect(state.legacyLyricFontSize, 22);
+
+    // The seeded scheme and the fixed scheme must differ in accent.
+    final ThemeData fixed = buildLegacyTheme(brightness: Brightness.dark);
+    final ThemeData seeded = buildLegacyTheme(
+      brightness: Brightness.dark,
+      seed: const Color(0xFFB23A48),
+    );
+    expect(seeded.colorScheme.primary, isNot(fixed.colorScheme.primary));
+    expect(seeded.textTheme.bodyMedium?.fontSize, 14);
 
     final AppState restarted = AppState(catalog: _Catalog());
     addTearDown(restarted.dispose);
     await restarted.bootstrap();
-    expect(restarted.legacyLyricFontSize, 22);
+    expect(restarted.legacyPalette, LegacyPaletteMode.nowPlaying);
+    expect(
+      LegacyPaletteModeLabels.parse('nope'),
+      LegacyPaletteMode.fixed,
+    );
   });
 
   testWidgets('the legacy player bar fits its 84 dp rule', (tester) async {
@@ -130,7 +145,10 @@ void main() {
     addTearDown(tester.view.reset);
     final AppState state = await _playing(tester);
     await tester.pumpWidget(_app(LegacyNowPlayingPage(state: state)));
-    await tester.pump(const Duration(milliseconds: 120));
+    // The shared lyric viewport springs its rows into place.
+    for (int i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(find.text('パベル'), findsWidgets);
     expect(find.text('巴别塔'), findsOneWidget);
@@ -143,6 +161,33 @@ void main() {
     await tester.tap(find.text('未開の塔で答えを考え中'));
     await tester.pump(const Duration(milliseconds: 120));
     expect(state.precisePosition.inSeconds, greaterThanOrEqualTo(12));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the legacy shell hosts the queue card and the comments page', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final AppState state = await _playing(tester);
+    await tester.pumpWidget(_app(LegacyShell(state: state)));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.byTooltip('播放队列'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(PlaybackQueueView), findsOneWidget);
+    // Tapping the barrier closes the card again.
+    await tester.tapAt(const Offset(60, 400));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(PlaybackQueueView), findsNothing);
+
+    await tester.tap(find.byTooltip('评论'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(SongCommentsView), findsOneWidget);
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(SongCommentsView), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
