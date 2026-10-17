@@ -47,7 +47,12 @@ its 34 → 11 sp Material ramp, not the Nextgen editorial scale.
   compact form so the transport never overflows.
 - **Login** — QR card with the same gateway calls as the Nextgen card, plus the
   cookie paste field. 8821 (risk control) reads as "scanned, waiting".
-- **Settings** — interface style, theme, language, account and the port note.
+- **Settings** — every preference the Nextgen shell exposes, in the legacy row
+  style: interface style, device form, layout mode, DPI scale (with reset and
+  the automatic switch), the album backdrop and its opacity, theme, language,
+  haptics, lyric controls, lyric size/weight/blur, follow delay, scroll inertia
+  and acceleration, the account, a catalogue refresh and the port note. Rows
+  stack label-over-control under 560 dp.
 
 Everything above the pixels is shared with Nextgen: `AppState`, the catalogue,
 playback, artwork loading and the DPI / car display profiles all still apply,

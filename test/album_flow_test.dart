@@ -219,7 +219,7 @@ void main() {
   });
 
   testWidgets('the legacy settings drive the backdrop', (tester) async {
-    tester.view.physicalSize = const Size(1280, 1100);
+    tester.view.physicalSize = const Size(1280, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final AppState state = AppState(catalog: _Catalog());
@@ -235,6 +235,7 @@ void main() {
     expect(find.text('内容不透明度'), findsOneWidget);
     expect(find.text('70%'), findsOneWidget);
 
+    await tester.ensureVisible(find.byType(DropdownButton<LegacyBackgroundMode>));
     await tester.tap(find.byType(DropdownButton<LegacyBackgroundMode>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('不使用').last);
@@ -248,8 +249,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(state.legacyBackground, LegacyBackgroundMode.nowPlayingStatic);
 
-    final Finder slider = find.byType(Slider).first;
-    await tester.drag(slider, const Offset(-120, 0));
+    final Finder alpha = find.descendant(
+      of: find.byKey(const ValueKey('legacy-ui-alpha')),
+      matching: find.byType(Slider),
+    );
+    await tester.ensureVisible(alpha);
+    await tester.drag(alpha, const Offset(-120, 0));
     await tester.pumpAndSettle();
     expect(state.legacyUiAlpha, lessThan(0.7));
     expect(tester.takeException(), isNull);

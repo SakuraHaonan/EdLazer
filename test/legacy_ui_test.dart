@@ -218,6 +218,89 @@ void main() {
     }
   });
 
+  testWidgets('the legacy settings expose every preference', (tester) async {
+    tester.view.physicalSize = const Size(1280, 2600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final AppState state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    await tester.pumpWidget(_legacyApp(state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置').first);
+    await tester.pumpAndSettle();
+
+    for (final String label in <String>[
+      '界面风格',
+      '设备形态',
+      '界面布局',
+      'DPI 缩放',
+      '自动调节 DPI 缩放',
+      '背景',
+      '内容不透明度',
+      '主题',
+      '语言',
+      '震动反馈',
+      '歌词控件自动隐藏',
+      '歌词字号',
+      '歌词粗细',
+      '歌词模糊',
+      '手动浏览后恢复跟随',
+      '滚动惯性',
+      '滚动加速度',
+      '刷新曲库',
+    ]) {
+      expect(find.text(label), findsOneWidget, reason: 'missing $label');
+    }
+    expect(find.text('70%'), findsOneWidget);
+    // DPI 100% and the default scroll acceleration both read 100%.
+    expect(find.text('100%'), findsWidgets);
+
+    Finder controlFor<T extends Widget>(String label) => find.descendant(
+      of: find.ancestor(of: find.text(label), matching: find.byType(Container)).first,
+      matching: find.byType(T),
+    );
+
+    // The automatic scale switch is on out of the box, and turning it off
+    // leaves the manual scale in place.
+    await tester.tap(controlFor<Switch>('自动调节 DPI 缩放'));
+    await tester.pumpAndSettle();
+    expect(state.autoDpiScale, isFalse);
+
+    // The DPI slider writes a manual scale.
+    final Finder dpi = controlFor<Slider>('DPI 缩放');
+    await tester.ensureVisible(dpi);
+    await tester.drag(dpi, const Offset(120, 0));
+    await tester.pumpAndSettle();
+    expect(state.dpiScale, greaterThan(1.0));
+
+    // Lyrics: size slider, weight chips and the blur switch.
+    final Finder lyricSize = controlFor<Slider>('歌词字号');
+    await tester.ensureVisible(lyricSize);
+    await tester.drag(lyricSize, const Offset(60, 0));
+    await tester.pumpAndSettle();
+    expect(state.lyricFontSize, greaterThan(22));
+    await tester.ensureVisible(find.text('粗体'));
+    await tester.tap(find.text('粗体'));
+    await tester.pumpAndSettle();
+    expect(state.lyricFontWeight, 700);
+    await tester.ensureVisible(find.text('歌词模糊'));
+    await tester.tap(controlFor<Switch>('歌词模糊'));
+    await tester.pumpAndSettle();
+    expect(state.lyricBlurEnabled, isFalse);
+
+    // Haptics and the scroll sliders.
+    await tester.ensureVisible(find.text('震动反馈'));
+    await tester.tap(controlFor<Switch>('震动反馈'));
+    await tester.pumpAndSettle();
+    expect(state.hapticsEnabled, isFalse);
+    final Finder inertia = controlFor<Slider>('滚动惯性');
+    await tester.ensureVisible(inertia);
+    await tester.drag(inertia, const Offset(-800, 0));
+    await tester.pumpAndSettle();
+    expect(state.scrollRetention, lessThan(0.90));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the legacy top bar searches and lists the results', (
     tester,
   ) async {
