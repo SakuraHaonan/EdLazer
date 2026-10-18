@@ -1,3 +1,16 @@
+> [!IMPORTANT]
+> **1.x 系列最后一个正式版 / Final 1.x release**
+>
+> Lazer **__VERSION__** 是 1.x 系列的最后一个正式版本。`master` 分支随本次发布冻结，不再接受功能更新或问题修复；后续版本在 `nextgen` 分支继续。
+>
+> Lazer **__VERSION__** is the final official 1.x release. The `master` branch is frozen after this release and receives no further features or fixes; development continues on the `nextgen` branch.
+
+### 📝 __VERSION__ 更新 / What's new in __VERSION__
+
+- **英文成为默认语言 / English by default** —— 全新安装以英文界面打开，设置里仍可切换 English、简体中文、繁體中文、日本語，选择会保存到下次启动；iOS 的相机与相册权限说明同步为英文。Fresh installs open in English; the other three languages stay one switch away in Settings, the choice is remembered, and the iOS permission prompts are English too.
+- **扫码登录 / Scan sign-in** —— 二维码改走官方桌面客户端的纯接口，每秒轮询一次，并在 Android 与桌面端本地绘制；遇到风控回执时按“等待手机确认”处理。The QR now comes from the same plain endpoint the official desktop client uses, polls once a second, is drawn locally on Android and desktop, and treats a risk-control reply as “waiting for confirmation”.
+- **完整更新日志 / Full changelog** — [`CHANGELOG.md`](https://github.com/__REPO__/blob/__TAG__/CHANGELOG.md)
+
 <div align="center">
 
 [![Downloads](https://img.shields.io/github/downloads/__REPO__/__TAG__/total?style=flat-square&logo=github)](https://github.com/__REPO__/releases/tag/__TAG__)

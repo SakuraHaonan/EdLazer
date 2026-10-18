@@ -3,6 +3,11 @@
 Lazer is a calm, intent-driven music space. Any new screen or component must feel like a quiet
 sheet of listening notes rather than a technical dashboard.
 
+## 分支状态
+
+1.x（`master`）已随 1.5 发布冻结：不再接受功能更新或问题修复，`master` 的推送也不再触发构建。
+新工作请开在 `nextgen` 分支；本文件描述的界面与网关约定仍然适用于 1.x。
+
 ## Gateway 协议
 
 - API Gateway 已内置于 `shared` 模块：`NeteaseMusicGateway` + `NeteaseTransport` 直接与音乐服务通信，应用不再依赖云端 Gateway Wrapper。

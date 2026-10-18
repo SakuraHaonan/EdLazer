@@ -10,7 +10,13 @@ class LazerI18nTest {
     fun parsesPersistedNamesAndLanguageCodes() {
         assertEquals(LazerLanguage.ENGLISH, parseLazerLanguage("ENGLISH"))
         assertEquals(LazerLanguage.TRADITIONAL_CHINESE, parseLazerLanguage("zh-Hant"))
-        assertEquals(LazerLanguage.SIMPLIFIED_CHINESE, parseLazerLanguage("unknown"))
+        assertEquals(LazerLanguage.SIMPLIFIED_CHINESE, parseLazerLanguage("zh-Hans"))
+    }
+
+    @Test
+    fun defaultsToEnglishWhenNothingIsPersisted() {
+        assertEquals(LazerLanguage.ENGLISH, parseLazerLanguage(null))
+        assertEquals(LazerLanguage.ENGLISH, parseLazerLanguage("unknown"))
     }
 
     @Test
@@ -30,7 +36,7 @@ class LazerI18nTest {
 
             assertEquals("Fallback", tr("fallback"))
         } finally {
-            LazerI18n.switchLanguage(LazerLanguage.SIMPLIFIED_CHINESE)
+            LazerI18n.switchLanguage(LazerLanguage.ENGLISH)
         }
     }
 

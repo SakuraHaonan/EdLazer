@@ -1,8 +1,10 @@
 name: Build
 
 on:
+  # 1.x is frozen with the 1.5 release: master no longer triggers builds. Tag builds still
+  # publish the deliverables, and workflow_dispatch stays available for an emergency rebuild.
   push:
-    branches: [master, main, "feat/**", "fix/**", "ci/**", "codex/**"]
+    branches: [main, "feat/**", "fix/**", "ci/**", "codex/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -972,7 +974,7 @@ jobs:
           fi
           ls -l release
           sha256sum release/*
-      - name: Record the commit every package carries
+      - name: Compose the release body
         run: |
           short_sha="${GITHUB_SHA::7}"
           version="${GITHUB_REF_NAME#v}"
@@ -987,18 +989,26 @@ jobs:
                 .github/release-template.md >> release-note.md
           fi
           cat release-note.md >> "$GITHUB_STEP_SUMMARY"
-      # Release titles use "Release X.Y", dropping the leading "v" from the tag.
+      # Release titles use "Release X.Y", dropping the leading "v" from the tag. 1.5 closes the
+      # 1.x line, so the title says so; no later 1.x tag is planned and master is frozen.
       - name: Resolve release title
         id: title
-        run: echo "value=Release ${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          title="Release ${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_NAME" = "v1.5" ]; then
+            title="$title — 1.x 最后一个正式版 (final 1.x)"
+          fi
+          echo "value=$title" >> "$GITHUB_OUTPUT"
+      # GitHub ignores the body whenever it generates release notes itself, which is why the
+      # download table and the 1.x notice never reached earlier release pages. Compose the whole
+      # body here instead, and make the final 1.x release the one the repository advertises.
       # overwrite_files keeps a re-run of this job repairing one release instead of stacking
       # duplicate assets onto it.
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.title.outputs.value }}
-          generate_release_notes: true
-          append_body: true
           body_path: release-note.md
+          make_latest: true
           fail_on_unmatched_files: true
           overwrite_files: true
           files: |

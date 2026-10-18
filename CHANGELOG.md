@@ -1,5 +1,79 @@
 # Changelog / 更新日志
 
+## v1.5 — 2026-10-18 · 1.x 系列的最后一个正式版 / final 1.x release
+
+### English
+
+**Highlights**
+
+- **English is the default language** — a fresh install opens in English, and Settings still switches between English, Simplified Chinese, Traditional Chinese and Japanese; the choice survives a restart. The iOS camera and photo-library permission prompts are English as well.
+- **Scan sign-in follows the plain music-service surface** — the login QR is minted against the same endpoint the official desktop client uses, polled once a second, and drawn locally on Android and desktop, so an empty image from the service no longer stops the flow. A risk-control reply now reads as "waiting for confirmation on your phone" instead of an error.
+- **The 1.x line ends here** — 1.5 is the last official 1.x release. `master` is frozen after this release and no longer receives features or fixes; development continues on the `nextgen` branch.
+
+**Interface and fixes**
+
+- The About page and every package report 1.5 (build 7).
+- The Windows installer keeps registering as **Lazer**, while Linux packages keep the lowercase reverse-DNS id.
+- The release page carries the download table and the iOS sideloading guide directly; the publish job writes them into the release body instead of stopping at the workflow summary.
+
+---
+
+### 中文
+
+**重点更新**
+
+- **默认语言改为英文** —— 全新安装直接是英文界面;设置里仍可在 English、简体中文、繁體中文、日本語之间切换,选择会保存到下次启动。iOS 的相机与相册权限说明也改成英文。
+- **扫码登录走纯接口** —— 登录二维码改用官方桌面客户端同一条接口生成,每秒轮询一次,并在 Android 与桌面端本地绘制,不再依赖服务返回图片;遇到风控回执时显示"等待手机确认",而不是直接报错。
+- **1.x 到此为止** —— 1.5 是 1.x 系列的最后一个正式版本。`master` 分支随本次发布冻结,不再接受功能更新或问题修复;后续开发在 `nextgen` 分支继续。
+
+**界面与修复**
+
+- 关于页与所有安装包统一显示 1.5(build 7)。
+- Windows 安装器仍注册为 **Lazer**,Linux 包继续使用小写的反向域名包名。
+- Release 页面直接包含下载表格和 iOS 侧载指引;发布任务把内容写进 release body,而不是只留在 workflow 摘要里。
+
+---
+
+## v1.4 — 2026-10-11
+
+### English
+
+**Highlights**
+
+- **iOS is a release now** — the whole interface renders from the shared module inside a Swift shell, playback is carried by an `MPNowPlayingSession` so the lock screen and Control Center drive the transport the platform actually offers, the queue survives an app restart, and an unsigned IPA joins every release.
+- **One native engine behind every desktop output** — WASAPI, CoreAudio and ALSA now sit behind a single audio engine with Native DSD and DoP, multi-file CUE and gapless passage between tracks. CI builds and validates it in its per-platform test packages; the tagged DEB/RPM still leave it out until a clean-system install passes, so this release's Linux installer plays through the existing path.
+- **Android USB DAC output** — direct UAC2 PCM, clock selection, the DAC's own Feature Unit volume, DoP carriers kept intact through Media3's float output, and local DSD files decoded natively.
+- **Android local library** — a folder-backed library streams its scan instead of blocking, keeps embedded album artwork and extended tags (APEv2 and unsynchronised ID3), reads ReplayGain out of DSD tags, and gained an equalizer editor.
+- **AMLL's lyric motion** — per-character emphasis drives the whole draw pass, a rising word flicks and settles instead of gliding, the mask sweep finishes across the line, one lit edge crosses it, and the translation lifts out of the wallpaper. No line is painted twice.
+- **Every page owns its background** — a page paints its own paper, and the page being covered is hidden and faded out rather than left as a shared canvas underneath, which is what made one screen show through another. The liquid glass style is gone.
+
+**Interface and fixes**
+
+- The Windows installer registers as **Lazer** instead of `dev.naominet.lazer`, and the program folder, the executable and the portable zip's top-level folder follow it. Linux keeps the reverse-DNS id, since Debian package names must be lowercase.
+- Desktop keeps the volume between launches and moves song comments out of a pop-up panel into their own page; Linux packages carry the application icon.
+- A tap anywhere puts the keyboard down, iOS colours the status bar from the app's theme rather than the system appearance, and the "unknown artist" string is one shared phrase.
+
+---
+
+### 中文
+
+**重点更新**
+
+- **iOS 正式可用** —— 界面整体由 shared 模块渲染,外面套一层 Swift 容器;播放由 `MPNowPlayingSession` 承载,锁屏和控制中心控制的正是当前这条播放通道;播放队列在应用重启后仍然在;每次发布都附带一个未签名 IPA。
+- **桌面端共用一套原生音频引擎** —— WASAPI、CoreAudio、ALSA 都接进同一个引擎,支持 Native DSD 与 DoP、多文件 CUE、曲目之间无缝衔接。引擎在 CI 的各平台测试包里构建并验证;带 tag 的 DEB/RPM 暂时不带它,要等干净环境的安装验证通过,所以这一版 Linux 安装包装好后仍走原来的播放路径。
+- **Android USB 声卡输出** —— UAC2 直接 PCM 输出、时钟选择、沿用 DAC 自己的 Feature Unit 音量;DoP 载波在 Media3 浮点输出中保持完整,本地 DSD 文件走原生解码。
+- **Android 本地音乐库** —— 按文件夹建库,扫描改成流式,不再卡住界面;保留内嵌专辑封面和扩展标签(APEv2、带 unsynchronisation 的 ID3),DSD 标签里能读出 ReplayGain,并新增均衡器编辑。
+- **歌词动效对齐 AMLL** —— 逐字符重音驱动整遍绘制,升起的那个字是闪动后落定而不是平滑滑行,遮罩扫过整行收尾完整,一整行只有一条亮边推进,译文从背景图上抬起来。同一笔墨不会被画两遍。
+- **每一页都自己铺背景** —— 页面自己画纸面,被盖住的那页直接隐藏并淡出,不再在底下共用一块画布——之前“上一层页面透出来”就是这么来的。液态玻璃风格已移除。
+
+**界面与修复**
+
+- Windows 安装器在“应用和功能”里显示为 **Lazer**,不再是 `dev.naominet.lazer`;安装目录、可执行文件名和便携包顶层目录一起跟着改。Linux 仍用反向域名包名,因为 Debian 包名必须小写。
+- 桌面端音量在两次启动之间保留,歌曲评论从弹出面板改成独立一页;Linux 分发包带上应用图标。
+- 任意处点击即可收起键盘;iOS 状态栏颜色跟随应用主题而不是系统外观;“未知歌手”在各平台统一成同一个说法。
+
+---
+
 ## v1.3.1 — 2026-09-27
 
 ### English

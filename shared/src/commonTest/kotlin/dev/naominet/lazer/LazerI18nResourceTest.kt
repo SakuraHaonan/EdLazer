@@ -19,7 +19,7 @@ class LazerI18nResourceTest {
                 assertTrue(tr("player.play") != "player.play")
             }
         } finally {
-            LazerI18n.switchLanguage(LazerLanguage.SIMPLIFIED_CHINESE)
+            LazerI18n.switchLanguage(LazerLanguage.ENGLISH)
         }
     }
 }

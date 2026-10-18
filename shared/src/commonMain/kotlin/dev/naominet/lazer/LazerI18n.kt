@@ -18,16 +18,18 @@ enum class LazerLanguage(val code: String, private val displayNameKey: String) {
     val displayName: String get() = tr(displayNameKey)
 }
 
+/** Resolves a persisted language, or English when the device has never picked one. */
 fun parseLazerLanguage(value: String?): LazerLanguage =
     LazerLanguage.entries.firstOrNull { it.name == value || it.code == value }
-        ?: LazerLanguage.SIMPLIFIED_CHINESE
+        ?: LazerLanguage.ENGLISH
 
 /**
  * Holds the active language and the loaded translation tables. Reading [get] inside a composable
  * observes the [language] state, so the whole UI recomposes when the language changes.
  */
 object LazerI18n {
-    var language by mutableStateOf(LazerLanguage.SIMPLIFIED_CHINESE)
+    /** English is the default a fresh install opens in; Settings persists any other choice. */
+    var language by mutableStateOf(LazerLanguage.ENGLISH)
         private set
     private var translations by mutableStateOf<Map<LazerLanguage, Map<String, String>>>(emptyMap())
 
@@ -45,7 +47,7 @@ object LazerI18n {
 
     operator fun get(key: String): String =
         translations[language]?.get(key)
-            ?: translations[LazerLanguage.SIMPLIFIED_CHINESE]?.get(key)
+            ?: translations[LazerLanguage.ENGLISH]?.get(key)
             ?: key
 }
 
@@ -69,7 +71,10 @@ suspend fun loadLazerTranslations() {
     LazerI18n.install(maps)
 }
 
-/** Keeps built-in JSON catalogs complete and interpolation-compatible with Simplified Chinese. */
+/**
+ * Keeps built-in JSON catalogs complete and interpolation-compatible with the Simplified Chinese
+ * catalog, which stays the reference key set even though English is the default language.
+ */
 internal fun validateTranslationMaps(maps: Map<LazerLanguage, Map<String, String>>) {
     val fallback = requireNotNull(maps[LazerLanguage.SIMPLIFIED_CHINESE]) {
         "The Simplified Chinese translation catalog is missing."

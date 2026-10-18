@@ -29,6 +29,6 @@ class LyricFollowSettingsTest {
         LazerI18n.switchLanguage(LazerLanguage.ENGLISH)
         assertEquals("0.5 sec", lyricFollowDelayLabel(500L))
         assertEquals("5 sec", lyricFollowDelayLabel(5_000L))
-        LazerI18n.switchLanguage(LazerLanguage.SIMPLIFIED_CHINESE)
+        LazerI18n.switchLanguage(LazerLanguage.ENGLISH)
     }
 }

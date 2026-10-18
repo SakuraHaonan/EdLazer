@@ -10,6 +10,13 @@
   <strong>Android</strong> · <strong>iOS</strong> · <strong>Desktop</strong>
 </p>
 
+> [!IMPORTANT]
+> **1.x 系列已终结 / 1.x is end-of-life**
+>
+> Lazer **1.5** 是 1.x 系列的最后一个正式版本（[下载](https://github.com/chuxuehaocai/Lazer/releases/tag/v1.5)）。`master` 分支随本次发布冻结，不再接受功能更新或问题修复；开发已在 [`nextgen`](https://github.com/chuxuehaocai/Lazer/tree/nextgen) 分支继续。
+>
+> Lazer **1.5** is the final official 1.x release ([download](https://github.com/chuxuehaocai/Lazer/releases/tag/v1.5)). The `master` branch is frozen after this release and receives no further features or fixes; development continues on the [`nextgen`](https://github.com/chuxuehaocai/Lazer/tree/nextgen) branch.
+
 ## 项目简介
 
 Lazer 是一个基于 Kotlin Multiplatform 和 Compose Multiplatform 构建的音乐客户端。项目将界面与核心 Gateway 数据模型放在共享模块中，再通过 Android、iOS 和 JVM Desktop 平台实现播放、持久化和系统集成。
