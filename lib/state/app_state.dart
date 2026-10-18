@@ -107,11 +107,25 @@ class AuthOutcome {
 ///
 /// Playback uses a real [AudioEngine] and stream URL from the gateway.
 class AppState extends ChangeNotifier {
-  AppState({Catalog? catalog, this.audioEngine})
-    : catalog = catalog ?? Catalog() {
+  AppState({
+    Catalog? catalog,
+    this.audioEngine,
+    this._independentPlayback = false,
+  }) : catalog = catalog ?? Catalog() {
     _completionSubscription = audioEngine?.completed.listen(
       (_) => _onEngineCompleted(),
     );
+  }
+
+  bool _independentPlayback;
+  bool get independentPlayback => _independentPlayback;
+
+  Future<void> setIndependentPlayback(bool value) async {
+    if (_independentPlayback == value) return;
+    _independentPlayback = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('lazer_independent_playback', _independentPlayback);
   }
 
   static const String _sessionKey = 'lazer_gateway_cookie';
@@ -219,7 +233,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// Legacy shell backdrop: the album-coloured flowing canvas, or off.
-  LegacyBackgroundMode legacyBackground = LegacyBackgroundMode.nowPlayingDynamic;
+  LegacyBackgroundMode legacyBackground =
+      LegacyBackgroundMode.nowPlayingDynamic;
 
   /// `内容不透明度` of the legacy shell — how much of the backdrop the content
   /// veil hides.
@@ -480,6 +495,8 @@ class AppState extends ChangeNotifier {
   Future<void> bootstrap() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _independentPlayback =
+          prefs.getBool('lazer_independent_playback') ?? _independentPlayback;
       hapticsEnabled = prefs.getBool('lazer_haptics') ?? true;
       hapticIntensity = (prefs.getDouble('lazer_haptic_intensity') ?? 0.5)
           .clamp(0, 1);

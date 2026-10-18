@@ -118,6 +118,139 @@ class _Callbacks extends platform.AudioHandlerCallbacks {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets(
+    'independent mode keeps playback and ignores every remote command',
+    (tester) async {
+      final engine = _Engine();
+      final state = AppState(catalog: _Catalog(), audioEngine: engine);
+      state.playQueue(_tracks);
+      await tester.pump();
+      final artwork = Completer<Uri?>();
+      final handler = LazerMediaHandler(state, artwork: (_) => artwork.future);
+      engine.position = const Duration(seconds: 2);
+      state.seek(0.5);
+      state.toggleShuffle();
+      state.cycleRepeat();
+      await state.setIndependentPlayback(true);
+      expect(
+        handler.playbackState.value.processingState,
+        AudioProcessingState.idle,
+      );
+      expect(handler.playbackState.value.playing, false);
+      expect(handler.mediaItem.value, isNull);
+      expect(state.playing, true);
+      expect(state.audioReady, true);
+      expect(state.precisePosition, const Duration(seconds: 2));
+      await handler.pause();
+      await handler.stop();
+      await handler.skipToNext();
+      await handler.skipToPrevious();
+      await handler.skipToQueueItem(2);
+      await handler.seek(Duration.zero);
+      await handler.setRepeatMode(AudioServiceRepeatMode.one);
+      await handler.setShuffleMode(AudioServiceShuffleMode.none);
+      await handler.onTaskRemoved();
+      expect(state.current?.id, '1');
+      expect(state.playing, true);
+      expect(state.precisePosition, const Duration(seconds: 2));
+      expect(state.shuffle, true);
+      expect(state.repeat, LoopMode.all);
+      artwork.complete(Uri.file('late-cover.jpg'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(handler.mediaItem.value, isNull);
+      state.pause();
+      await handler.play();
+      expect(state.playing, false);
+      state.toggleShuffle();
+      state.next();
+      await state.setIndependentPlayback(false);
+      handler.setEnabled(true);
+      expect(handler.mediaItem.value?.id, '2');
+      expect(handler.queue.value, hasLength(3));
+      expect(handler.playbackState.value.playing, false);
+      expect(engine.loaded, ['1']);
+      handler.close();
+      state.dispose();
+      engine.dispose();
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'cold independent startup skips media initialization and initializes once on demand',
+    (tester) async {
+      final state = AppState(catalog: _Catalog(), independentPlayback: true);
+      var initializations = 0;
+      final toggles = <bool>[];
+      final controller = SystemMediaController(
+        state,
+        initialize: () async {
+          initializations++;
+          return LazerMediaHandler(
+            state,
+            enabled: false,
+            artwork: (_) async => null,
+          );
+        },
+        togglePlatform: (enabled) async => toggles.add(enabled),
+      );
+      await controller.settled;
+      expect(initializations, 0);
+      expect(toggles, isEmpty);
+      await state.setIndependentPlayback(false);
+      await controller.settled;
+      expect(initializations, 1);
+      expect(toggles, [true]);
+      await state.setIndependentPlayback(true);
+      await controller.settled;
+      await state.setIndependentPlayback(false);
+      await controller.settled;
+      expect(initializations, 1);
+      expect(toggles, [true, false, true]);
+      expect(
+        (await SharedPreferences.getInstance()).getBool(
+          'lazer_independent_playback',
+        ),
+        false,
+      );
+      controller.close();
+      await controller.settled;
+      state.dispose();
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'pending initialization cannot publish after switching to independent playback',
+    (tester) async {
+      final state = AppState(catalog: _Catalog());
+      final pending = Completer<LazerMediaHandler>();
+      final toggles = <bool>[];
+      final controller = SystemMediaController(
+        state,
+        initialize: () => pending.future,
+        togglePlatform: (enabled) async => toggles.add(enabled),
+      );
+      await tester.pump();
+      await state.setIndependentPlayback(true);
+      final handler = LazerMediaHandler(
+        state,
+        enabled: false,
+        artwork: (_) async => null,
+      );
+      pending.complete(handler);
+      await controller.settled;
+      expect(toggles, isNot(contains(true)));
+      await handler.play();
+      expect(state.playing, false);
+      controller.close();
+      await controller.settled;
+      state.dispose();
+      await tester.pump();
+    },
+  );
+
   testWidgets(
     'native completion advances, interrupted old play cannot fail the new song, loop one restarts',
     (tester) async {

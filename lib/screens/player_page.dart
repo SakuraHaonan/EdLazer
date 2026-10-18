@@ -1803,6 +1803,14 @@ class _SettingsView extends StatelessWidget {
         const SizedBox(height: 24),
         InterfaceSettings(state: state),
         const SizedBox(height: 24),
+        const SectionHeading('播放'),
+        SquareSwitchListTile(
+          title: const TrText('独立播放'),
+          subtitle: const TrText('不接入系统媒体控制'),
+          value: state.independentPlayback,
+          onChanged: (value) => unawaited(state.setIndependentPlayback(value)),
+        ),
+        const SizedBox(height: 24),
         const SectionHeading('交互'),
         SquareSwitchListTile(
           title: const TrText('震动反馈'),

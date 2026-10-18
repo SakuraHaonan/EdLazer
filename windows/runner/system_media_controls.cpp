@@ -12,12 +12,26 @@
 
 namespace {
 constexpr UINT kMediaEvent = WM_APP + 0x4c;
-struct MediaEvent { std::string method; int64_t position = 0; };
-struct EventTarget { std::mutex mutex; HWND window = nullptr; };
-void Post(const std::weak_ptr<EventTarget>& weak, MediaEvent event) {
+struct MediaEvent {
+  std::string method;
+  int64_t position = 0;
+  uint64_t epoch = 0;
+};
+struct EventTarget {
+  std::mutex mutex;
+  HWND window = nullptr;
+  uint64_t epoch = 0;
+};
+uint64_t CurrentEpoch(const std::shared_ptr<EventTarget>& target) {
+  const std::lock_guard<std::mutex> lock(target->mutex);
+  return target->epoch;
+}
+void Post(const std::weak_ptr<EventTarget>& weak, uint64_t epoch,
+          MediaEvent event) {
   if (const auto target = weak.lock()) {
     const std::lock_guard<std::mutex> lock(target->mutex);
-    if (!target->window) return;
+    if (!target->window || target->epoch != epoch) return;
+    event.epoch = epoch;
     auto message = std::make_unique<MediaEvent>(std::move(event));
     if (::PostMessage(target->window, kMediaEvent, 0,
                       reinterpret_cast<LPARAM>(message.get()))) message.release();
@@ -60,9 +74,16 @@ struct SystemMediaControls::Impl {
     channel->SetMethodCallHandler([this](const auto& call, auto result) {
       try {
         if (call.method_name() == "initialize") Initialize();
-        else if (call.method_name() == "clear") { if (controls) controls.IsEnabled(false); }
-        else if (const auto args = std::get_if<flutter::EncodableMap>(call.arguments())) {
-          Initialize();
+        else if (call.method_name() == "deinitialize") Deinitialize();
+        else if (call.method_name() == "clear") {
+          if (controls) controls.IsEnabled(false);
+        } else if (const auto args = std::get_if<flutter::EncodableMap>(call.arguments())) {
+          // Metadata/state arriving after independent disable must be ignored;
+          // only the explicit initialize method may recreate native controls.
+          if (!controls) {
+            result->Success();
+            return;
+          }
           if (call.method_name() == "metadata") Metadata(*args);
           else if (call.method_name() == "state") State(*args);
           else { result->NotImplemented(); return; }
@@ -74,24 +95,43 @@ struct SystemMediaControls::Impl {
     });
   }
   ~Impl() {
-    HWND window;
+    const HWND window = target->window;
+    Deinitialize();
     {
       const std::lock_guard<std::mutex> lock(target->mutex);
-      window = target->window; target->window = nullptr;
+      target->window = nullptr;
+      ++target->epoch;
     }
-    buttons.revoke(); seeks.revoke();
     channel->SetMethodCallHandler(nullptr);
     MSG message;
     while (::PeekMessage(&message, window, kMediaEvent, kMediaEvent, PM_REMOVE)) {
       delete reinterpret_cast<MediaEvent*>(message.lParam);
     }
+  }
+  void Deinitialize() {
+    {
+      const std::lock_guard<std::mutex> lock(target->mutex);
+      ++target->epoch;
+    }
+    buttons.revoke();
+    seeks.revoke();
     try {
-      if (controls) controls.IsEnabled(false);
+      if (controls) {
+        controls.IsEnabled(false);
+        controls.DisplayUpdater().ClearAll();
+        controls.DisplayUpdater().Update();
+      }
       if (player) player.Close();
     } catch (...) {}
+    controls = nullptr;
+    player = nullptr;
   }
   void Initialize() {
     if (controls) return;
+    const auto epoch = [&] {
+      const std::lock_guard<std::mutex> lock(target->mutex);
+      return target->epoch;
+    }();
     player = winrt::Windows::Media::Playback::MediaPlayer();
     player.CommandManager().IsEnabled(false);
     controls = player.SystemMediaTransportControls();
@@ -100,20 +140,20 @@ struct SystemMediaControls::Impl {
     controls.IsStopEnabled(true);
     controls.IsFastForwardEnabled(false); controls.IsRewindEnabled(false);
     const std::weak_ptr<EventTarget> weak = target;
-    buttons = controls.ButtonPressed(winrt::auto_revoke, [weak](const auto&, const auto& args) {
+    buttons = controls.ButtonPressed(winrt::auto_revoke, [weak, epoch](const auto&, const auto& args) {
       using Button = winrt::Windows::Media::SystemMediaTransportControlsButton;
       switch (args.Button()) {
-        case Button::Play: Post(weak, {"play"}); break;
-        case Button::Pause: Post(weak, {"pause"}); break;
-        case Button::Next: Post(weak, {"next"}); break;
-        case Button::Previous: Post(weak, {"previous"}); break;
-        case Button::Stop: Post(weak, {"stop"}); break;
+        case Button::Play: Post(weak, epoch, {"play"}); break;
+        case Button::Pause: Post(weak, epoch, {"pause"}); break;
+        case Button::Next: Post(weak, epoch, {"next"}); break;
+        case Button::Previous: Post(weak, epoch, {"previous"}); break;
+        case Button::Stop: Post(weak, epoch, {"stop"}); break;
         default: break;
       }
     });
     seeks = controls.PlaybackPositionChangeRequested(winrt::auto_revoke,
-      [weak](const auto&, const auto& args) {
-        Post(weak, {"seek", args.RequestedPlaybackPosition().count() / 10000});
+      [weak, epoch](const auto&, const auto& args) {
+        Post(weak, epoch, {"seek", args.RequestedPlaybackPosition().count() / 10000});
       });
   }
   void Metadata(const flutter::EncodableMap& args) {
@@ -165,6 +205,7 @@ SystemMediaControls::~SystemMediaControls() = default;
 bool SystemMediaControls::HandleWindowMessage(UINT message, LPARAM parameter) {
   if (message != kMediaEvent) return false;
   const std::unique_ptr<MediaEvent> event(reinterpret_cast<MediaEvent*>(parameter));
+  if (CurrentEpoch(impl_->target) != event->epoch) return true;
   impl_->channel->InvokeMethod(event->method, event->method == "seek"
     ? std::make_unique<flutter::EncodableValue>(event->position) : nullptr);
   return true;

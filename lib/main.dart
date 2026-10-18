@@ -7,10 +7,11 @@ import 'package:flutter/foundation.dart'
     show LicenseRegistry, LicenseEntryWithLineBreaks;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
-import 'package:audio_session/audio_session.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'audio/audio_engine.dart';
 import 'audio/system_media_handler.dart';
+import 'audio/playback_session.dart';
 import 'legacy/legacy_shell.dart';
 import 'legacy/legacy_theme.dart';
 import 'screens/player_page.dart';
@@ -69,12 +70,18 @@ Future<void> main() async {
       // frame; must run before the first frame, which is also when the
       // runner decides to show the window.
       await initWindowFrame();
+      final prefs = await SharedPreferences.getInstance();
       final audio = JustAudioEngine();
-      final state = AppState(audioEngine: audio);
-      final media = await initializeSystemMedia(state);
-      final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.music());
-      runApp(LazerApp(state: state, audio: audio, media: media));
+      final state = AppState(
+        audioEngine: audio,
+        independentPlayback:
+            prefs.getBool('lazer_independent_playback') ?? false,
+      );
+      final session = PlaybackSession(state, audio);
+      final media = SystemMediaController(state);
+      runApp(
+        LazerApp(state: state, audio: audio, media: media, session: session),
+      );
     },
     zoneSpecification: ZoneSpecification(
       print: (Zone self, ZoneDelegate parent, Zone zone, String line) {
@@ -92,10 +99,12 @@ class LazerApp extends StatefulWidget {
     required this.state,
     required this.audio,
     required this.media,
+    this.session,
   });
   final AppState state;
   final JustAudioEngine audio;
-  final LazerMediaHandler media;
+  final SystemMediaController media;
+  final PlaybackSession? session;
 
   @override
   State<LazerApp> createState() => _LazerAppState();
@@ -124,6 +133,7 @@ class _LazerAppState extends State<LazerApp> {
   void dispose() {
     _state.removeListener(_onSessionChanged);
     widget.media.close();
+    widget.session?.close();
     _state.dispose();
     widget.audio.dispose();
     super.dispose();
@@ -133,8 +143,8 @@ class _LazerAppState extends State<LazerApp> {
   Widget build(BuildContext context) {
     final bool legacy = _state.uiStyle == AppUiStyle.legacy;
     // The legacy 配色 setting can seed the whole scheme from the current cover.
-    final Color? seed = legacy &&
-            _state.legacyPalette == LegacyPaletteMode.nowPlaying
+    final Color? seed =
+        legacy && _state.legacyPalette == LegacyPaletteMode.nowPlaying
         ? _state.legacySeed
         : null;
     // WindowFrame is a pass-through off desktop: the system frame (and the
@@ -170,7 +180,9 @@ class _LazerAppState extends State<LazerApp> {
         // profile additionally rooms out the framework's own tap targets.
         builder: (context, child) => UiScaling(
           state: _state,
-          child: CarMetrics(child: WindowFrame(legacy: legacy, child: child!)),
+          child: CarMetrics(
+            child: WindowFrame(legacy: legacy, child: child!),
+          ),
         ),
         // Structural rebuilds only: `setState` fires on sign-in/out, never on
         // the 100 ms position ticks (leaf transport widgets consume those).

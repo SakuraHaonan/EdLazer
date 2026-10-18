@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
 /// Playback surface used for stream URLs returned by the gateway.
@@ -25,12 +26,25 @@ abstract class AudioEngine {
 
 /// just_audio-backed engine used by the real app.
 class JustAudioEngine implements AudioEngine {
-  JustAudioEngine({AudioPlayer? player}) : _player = player ?? AudioPlayer() {
+  JustAudioEngine({AudioPlayer? player, this.activateSession})
+    : _player =
+          player ??
+          AudioPlayer(
+            handleInterruptions: false,
+            handleAudioSessionActivation: false,
+            androidApplyAudioAttributes: false,
+          ) {
     _completionSubscription = _player.processingStateStream.listen((state) {
       if (state != ProcessingState.completed) _completionSent = false;
       if (state == ProcessingState.completed) _emitCompletion();
     });
   }
+
+  /// Optional application-owned focus policy; absent in independent playback.
+  Future<bool> Function()? activateSession;
+
+  Future<void> applyAudioAttributes(AndroidAudioAttributes attributes) =>
+      _player.setAndroidAudioAttributes(attributes);
 
   final AudioPlayer _player;
   final StreamController<void> _completed = StreamController<void>.broadcast();
@@ -38,6 +52,7 @@ class JustAudioEngine implements AudioEngine {
   bool _hadSource = false;
   bool _completionSent = false;
   int _generation = 0;
+  int _playGeneration = 0;
   void _emitCompletion() {
     if (!_hadSource || _completionSent || _completed.isClosed) return;
     _completionSent = true;
@@ -73,10 +88,26 @@ class JustAudioEngine implements AudioEngine {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    final generation = _generation;
+    final playGeneration = ++_playGeneration;
+    if (activateSession != null && !await activateSession!()) {
+      if (playGeneration != _playGeneration) return;
+      throw StateError('Audio session activation denied');
+    }
+    if (generation != _generation ||
+        playGeneration != _playGeneration ||
+        !_hadSource) {
+      return;
+    }
+    await _player.play();
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() {
+    ++_playGeneration;
+    return _player.pause();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
@@ -87,6 +118,7 @@ class JustAudioEngine implements AudioEngine {
 
   @override
   Future<void> stop() async {
+    ++_playGeneration;
     ++_generation;
     _hadSource = false;
     await _player.stop();
@@ -94,6 +126,9 @@ class JustAudioEngine implements AudioEngine {
 
   @override
   void dispose() {
+    ++_generation;
+    ++_playGeneration;
+    _hadSource = false;
     _completionSubscription.cancel();
     _completed.close();
     _player.dispose();

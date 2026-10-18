@@ -678,6 +678,14 @@ class LegacySettingsPage extends StatelessWidget {
             },
           ),
         ),
+        const _LegacySectionLabel('播放'),
+        _LegacySwitchRow(
+          label: '独立播放',
+          subtitle: '不接入系统媒体控制',
+          value: state.independentPlayback,
+          onChanged: (bool value) =>
+              unawaited(state.setIndependentPlayback(value)),
+        ),
         const _LegacySectionLabel('交互'),
         _LegacySwitchRow(
           label: '震动反馈',

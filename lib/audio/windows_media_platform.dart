@@ -7,12 +7,14 @@ class WindowsMediaPlatform extends AudioServicePlatform {
   static const channel = MethodChannel('dev.naominet.lazer/system_media');
   AudioHandlerCallbacks? _callbacks;
   Duration _duration = Duration.zero;
+  bool _enabled = true;
   @override
   void setHandlerCallbacks(AudioHandlerCallbacks callbacks) =>
       _callbacks = callbacks;
   @override
   Future<void> configure(ConfigureRequest request) async {
     channel.setMethodCallHandler((call) async {
+      if (!_enabled) return;
       final handler = _callbacks;
       if (handler == null) return;
       switch (call.method) {
@@ -34,11 +36,18 @@ class WindowsMediaPlatform extends AudioServicePlatform {
           );
       }
     });
-    await channel.invokeMethod<void>('initialize');
+    if (_enabled) await channel.invokeMethod<void>('initialize');
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    if (_enabled == enabled) return;
+    _enabled = enabled;
+    await channel.invokeMethod<void>(enabled ? 'initialize' : 'deinitialize');
   }
 
   @override
   Future<void> setMediaItem(SetMediaItemRequest request) async {
+    if (!_enabled) return;
     final item = request.mediaItem;
     _duration = item.duration ?? Duration.zero;
     await channel.invokeMethod<void>('metadata', {
@@ -53,6 +62,7 @@ class WindowsMediaPlatform extends AudioServicePlatform {
 
   @override
   Future<void> setState(SetStateRequest request) async {
+    if (!_enabled) return;
     final state = request.state;
     final actions = state.controls.map((control) => control.action).toSet();
     await channel.invokeMethod<void>('state', {
@@ -72,6 +82,7 @@ class WindowsMediaPlatform extends AudioServicePlatform {
     NotifyChildrenChangedRequest request,
   ) async {}
   @override
-  Future<void> stopService(StopServiceRequest request) =>
-      channel.invokeMethod<void>('clear');
+  Future<void> stopService(StopServiceRequest request) async {
+    if (_enabled) await channel.invokeMethod<void>('clear');
+  }
 }

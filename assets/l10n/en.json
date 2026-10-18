@@ -31,6 +31,8 @@
   "关闭提示": "Dismiss",
   "账户": "Account",
   "管理登录账户和曲库同步。": "Manage your account and library sync.",
+  "独立播放": "Independent playback",
+  "不接入系统媒体控制": "Do not use system media controls",
   "交互": "Interaction",
   "震动反馈": "Haptic feedback",
   "触摸界面时提供轻微反馈": "Gentle feedback when using touch controls",
