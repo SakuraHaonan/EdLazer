@@ -276,13 +276,11 @@ ThemeData buildLegacyTheme({
       style: FilledButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-        textStyle: legacyTextTheme.labelLarge,
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-        textStyle: legacyTextTheme.labelLarge,
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
@@ -302,7 +300,6 @@ ThemeData buildLegacyTheme({
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      textStyle: legacyTextTheme.bodyMedium,
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: dark ? const Color(0xFF35464D) : LegacyTokens.ink,
