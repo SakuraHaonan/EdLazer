@@ -872,10 +872,33 @@ class AppState extends ChangeNotifier {
   bool get shuffle => _shuffle;
   LoopMode get repeat => _repeat;
 
+  /// Whether the lyric request for the current track has finished (or failed).
+  ///
+  /// The now-playing page uses this instead of [lyricsLoading] alone so an
+  /// empty list before the request starts cannot open the artwork by mistake.
+  bool get currentLyricsSettled =>
+      current != null && _lyricsTrackId == current!.id && !lyricsLoading;
+
   double get progress {
     final Track? t = current;
     if (t == null || t.duration.inMilliseconds == 0) return 0;
     return (_position.inMilliseconds / t.duration.inMilliseconds).clamp(0, 1);
+  }
+
+  /// How much of the current track the engine has buffered, 0…1.
+  ///
+  /// The now-playing seek rail paints this behind the played fraction. The
+  /// plain [AudioEngine] contract carries no buffer information, so engines
+  /// without [BufferedAudioEngine] fall back to the playhead.
+  double get bufferedFraction {
+    final Track? t = current;
+    final int duration = t?.duration.inMilliseconds ?? 0;
+    if (duration <= 0) return 0;
+    final AudioEngine? engine = audioEngine;
+    final Duration buffered = engine is BufferedAudioEngine
+        ? (engine as BufferedAudioEngine).bufferedPosition
+        : _position;
+    return (buffered.inMilliseconds / duration).clamp(0.0, 1.0);
   }
 
   void playQueue(List<Track> tracks, {int startIndex = 0}) {

@@ -146,7 +146,8 @@ class LegacyPlayerBar extends StatelessWidget {
                           _CompactIcon(
                             icon: _playModeIcon(state),
                             tooltip: _playModeLabel(state),
-                            selected: state.shuffle || state.repeat != LoopMode.off,
+                            selected:
+                                state.shuffle || state.repeat != LoopMode.off,
                             onPressed: state.cyclePlayMode,
                           ),
                         ],
@@ -396,8 +397,8 @@ class _SeekRowState extends State<_SeekRow> {
     final double duration = (track?.duration.inMilliseconds ?? 0).toDouble();
     final double position = widget.state.precisePosition.inMilliseconds
         .toDouble();
-    final double fraction = _drag ??
-        (duration > 0 ? (position / duration).clamp(0.0, 1.0) : 0.0);
+    final double fraction =
+        _drag ?? (duration > 0 ? (position / duration).clamp(0.0, 1.0) : 0.0);
     final Duration elapsed = Duration(
       milliseconds: (fraction * duration).round(),
     );
@@ -409,6 +410,7 @@ class _SeekRowState extends State<_SeekRow> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: LegacyThinSeekBar(
               progress: fraction,
+              semanticLabel: '播放进度',
               onSeek: duration <= 0
                   ? null
                   : (double value) {
@@ -427,28 +429,48 @@ class _SeekRowState extends State<_SeekRow> {
   }
 }
 
-/// `ThinSeekBar`: a 14 dp hit strip over a 3 dp rounded track with a 10 dp
-/// thumb.
+/// `ThinSeekBar`: a 3 dp rounded track with a 10 dp thumb over a hit strip.
+///
+/// The bar measures 14 dp in the transport bar. The mobile now-playing page
+/// passes [height] 48, matching the legacy rail's generous drag target.
+///
+/// [onSeek] reports every preview position while a gesture is in flight.
+/// When [onSeekCommit] is supplied the gesture is treated like the mobile
+/// player: dragging only moves the rail and the label, and the seek lands on
+/// release. Without it the caller keeps the bar's historical continuous-seek
+/// behaviour.
 class LegacyThinSeekBar extends StatefulWidget {
   const LegacyThinSeekBar({
     super.key,
     required this.progress,
+    this.bufferedProgress,
     this.onSeek,
     this.onSeekFinished,
+    this.onSeekCommit,
+    this.height = 14,
+    this.semanticLabel,
   });
 
   final double progress;
+
+  /// Muted lead-in painted behind the played fraction, as on the mobile rail.
+  final double? bufferedProgress;
   final ValueChanged<double>? onSeek;
   final VoidCallback? onSeekFinished;
+  final ValueChanged<double>? onSeekCommit;
+
+  /// Height of the transparent hit strip around the 3 dp track.
+  final double height;
+
+  /// Spoken purpose of this rail; null leaves only the percentage value.
+  final String? semanticLabel;
 
   @override
   State<LegacyThinSeekBar> createState() => _LegacyThinSeekBarState();
 }
 
 class _LegacyThinSeekBarState extends State<LegacyThinSeekBar> {
-  static const double _height = 14;
   double? _drag;
-  bool _dragging = false;
 
   void _seekTo(double dx, double width) {
     if (widget.onSeek == null || width <= 0) return;
@@ -458,18 +480,24 @@ class _LegacyThinSeekBarState extends State<LegacyThinSeekBar> {
   }
 
   void _finish() {
-    if (!_dragging) return;
-    _dragging = false;
-    setState(() => _drag = null);
+    final double? fraction = _drag;
+    if (fraction == null) return;
+    widget.onSeekCommit?.call(fraction);
     widget.onSeekFinished?.call();
+    if (mounted) setState(() => _drag = null);
   }
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
+    final double height = widget.height;
     final double fraction = (_drag ?? widget.progress).clamp(0.0, 1.0);
+    final double buffered = math.max(
+      fraction,
+      (widget.bufferedProgress ?? fraction).clamp(0.0, 1.0),
+    );
     return SizedBox(
-      height: _height,
+      height: height,
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           final double width = constraints.maxWidth;
@@ -477,69 +505,94 @@ class _LegacyThinSeekBarState extends State<LegacyThinSeekBar> {
           final Color track = scheme.surfaceContainerHighest.withValues(
             alpha: 0.95,
           );
-          return MouseRegion(
-            cursor: widget.onSeek == null
-                ? SystemMouseCursors.basic
-                : SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: widget.onSeek == null
-                  ? null
-                  : (TapDownDetails details) =>
-                        _seekTo(details.localPosition.dx, width),
-              onHorizontalDragStart: widget.onSeek == null
-                  ? null
-                  : (DragStartDetails details) {
-                      _dragging = true;
-                      _seekTo(details.localPosition.dx, width);
-                    },
-              onHorizontalDragUpdate: widget.onSeek == null
-                  ? null
-                  : (DragUpdateDetails details) =>
-                        _seekTo(details.localPosition.dx, width),
-              onHorizontalDragEnd: widget.onSeek == null
-                  ? null
-                  : (DragEndDetails details) => _finish(),
-              onHorizontalDragCancel: widget.onSeek == null ? null : _finish,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: (_height - 3) / 2,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: track,
-                        borderRadius: BorderRadius.circular(999),
+          return Semantics(
+            label: widget.semanticLabel,
+            value: '${(fraction * 100).round()}%',
+            child: MouseRegion(
+              cursor: widget.onSeek == null
+                  ? SystemMouseCursors.basic
+                  : SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: widget.onSeek == null
+                    ? null
+                    : (TapDownDetails details) =>
+                          _seekTo(details.localPosition.dx, width),
+                onTapUp: widget.onSeek == null
+                    ? null
+                    : (TapUpDetails details) => _finish(),
+                onTapCancel: widget.onSeek == null
+                    ? null
+                    : () {
+                        widget.onSeekFinished?.call();
+                        setState(() => _drag = null);
+                      },
+                onHorizontalDragStart: widget.onSeek == null
+                    ? null
+                    : (DragStartDetails details) =>
+                          _seekTo(details.localPosition.dx, width),
+                onHorizontalDragUpdate: widget.onSeek == null
+                    ? null
+                    : (DragUpdateDetails details) =>
+                          _seekTo(details.localPosition.dx, width),
+                onHorizontalDragEnd: widget.onSeek == null
+                    ? null
+                    : (DragEndDetails details) => _finish(),
+                onHorizontalDragCancel: widget.onSeek == null ? null : _finish,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: (height - 3) / 2,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: track,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const SizedBox(height: 3),
                       ),
-                      child: const SizedBox(height: 3),
                     ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    top: (_height - 3) / 2,
-                    width: width * fraction,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        borderRadius: BorderRadius.circular(999),
+                    Positioned(
+                      left: 0,
+                      top: (height - 3) / 2,
+                      width: width * buffered,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: scheme.onSurfaceVariant.withValues(
+                            alpha: 0.34,
+                          ),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const SizedBox(height: 3),
                       ),
-                      child: const SizedBox(height: 3),
                     ),
-                  ),
-                  Positioned(
-                    left: thumbTravel * fraction,
-                    top: (_height - 10) / 2,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        shape: BoxShape.circle,
+                    Positioned(
+                      left: 0,
+                      top: (height - 3) / 2,
+                      width: width * fraction,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const SizedBox(height: 3),
                       ),
-                      child: const SizedBox.square(dimension: 10),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      left: thumbTravel * fraction,
+                      top: (height - 10) / 2,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const SizedBox.square(dimension: 10),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -593,59 +646,64 @@ class _VolumeButtonState extends State<_VolumeButton> {
     final double volume = widget.state.volume.clamp(0.0, 1.0);
     return OverlayPortal(
       controller: _portal,
-      overlayChildBuilder: (BuildContext context) => CompositedTransformFollower(
-        link: _link,
-        showWhenUnlinked: false,
-        targetAnchor: Alignment.topCenter,
-        followerAnchor: Alignment.bottomCenter,
-        offset: const Offset(0, -12),
-        child: MouseRegion(
-            onEnter: (_) {
-              _panelHovered = true;
-              _sync();
-            },
-            onExit: (_) {
-              _panelHovered = false;
-              _sync();
-            },
-            child: Container(
-              width: 196,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: scheme.surface.withValues(alpha: 0.98),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: scheme.outlineVariant.withValues(alpha: 0.85),
+      overlayChildBuilder: (BuildContext context) =>
+          CompositedTransformFollower(
+            link: _link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.topCenter,
+            followerAnchor: Alignment.bottomCenter,
+            offset: const Offset(0, -12),
+            child: MouseRegion(
+              onEnter: (_) {
+                _panelHovered = true;
+                _sync();
+              },
+              onExit: (_) {
+                _panelHovered = false;
+                _sync();
+              },
+              child: Container(
+                width: 196,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
                 ),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.28),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.98),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.85),
                   ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '音量 ${(volume * 100).round()}%',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.28),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  LegacyThinSeekBar(
-                    progress: volume,
-                    onSeek: (double value) =>
-                        unawaited(widget.state.setVolume(value)),
-                  ),
-                ],
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '音量 ${(volume * 100).round()}%',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    LegacyThinSeekBar(
+                      progress: volume,
+                      semanticLabel: '音量',
+                      onSeek: (double value) =>
+                          unawaited(widget.state.setVolume(value)),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
       child: CompositedTransformTarget(
         link: _link,
         child: MouseRegion(
@@ -743,10 +801,7 @@ class _LegacyQueueButtonState extends State<LegacyQueueButton> {
                     ),
                   ],
                 ),
-                child: PlaybackQueueView(
-                  state: widget.state,
-                  onClose: _toggle,
-                ),
+                child: PlaybackQueueView(state: widget.state, onClose: _toggle),
               ),
             ),
           ),

@@ -3,6 +3,15 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
+/// Optional engine capability: how far the current source has buffered.
+///
+/// Kept separate from [AudioEngine] so engines that cannot answer (and the
+/// test doubles that only need transport) stay valid. The now-playing seek
+/// rail paints this as the muted lead-in behind the played fraction.
+abstract interface class BufferedAudioEngine {
+  Duration get bufferedPosition;
+}
+
 /// Playback surface used for stream URLs returned by the gateway.
 abstract class AudioEngine {
   /// Whether a source is currently loaded.
@@ -25,7 +34,7 @@ abstract class AudioEngine {
 }
 
 /// just_audio-backed engine used by the real app.
-class JustAudioEngine implements AudioEngine {
+class JustAudioEngine implements AudioEngine, BufferedAudioEngine {
   JustAudioEngine({AudioPlayer? player, this.activateSession})
     : _player =
           player ??
@@ -67,6 +76,9 @@ class JustAudioEngine implements AudioEngine {
 
   @override
   Duration? get duration => _player.duration;
+
+  @override
+  Duration get bufferedPosition => _player.bufferedPosition;
 
   @override
   Stream<void> get completed => _completed.stream;

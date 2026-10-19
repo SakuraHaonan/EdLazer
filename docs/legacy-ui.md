@@ -40,12 +40,28 @@ its 34 → 11 sp Material ramp, not the Nextgen editorial scale.
 - **音乐库** — liked / created / subscribed playlists and the recommended ones.
 - **我喜欢** and any playlist page with a play-all header.
 - **搜索** — tracks, playlists and albums for the query.
-- **正在播放** — the legacy two-pane page: 44% hero (cover with the 26 dp drop
-  shadow, title, translation, artist) over the rounded transport card, 56% the
-  **shared Nextgen `LyricViewport`** — word-level sweep, distance blur, lyric
-  selection with copy / image export, wheel and drag with the follow delay all
-  come from the one implementation the app already ships, so the lyric
-  behaviour never forks.
+- **正在播放** — the Lazer mobile page (`NowPlayingPage` in `LazerApp.kt`),
+  not the desktop spread:
+  - **Landscape** (width > height) keeps the 44 / 56 split: close and like,
+    a 25%-height artwork, title / translation / artist, the queue and comment
+    actions, the buffered thin seek rail and the previous / 52 dp play / next
+    row in the information column, beside the lyric sheet.
+  - **Portrait** puts close and like in the header, the title beside the
+    resting 52 dp artwork, the lyric sheet in the middle, and the actions plus
+    the 64 dp transport at the bottom. A song without lyrics opens its artwork
+    instead of leaving an empty pane.
+  - The artwork is one node. Tapping flies it between the header slot and a
+    320 dp centre over 420 ms with the legacy page easing; tapping the open
+    artwork returns to the lyrics. Long-pressing it saves the cover, and
+    long-pressing the title or artist asks before copying.
+  - The lyric sheet is the **shared Nextgen `LyricViewport`** — word-level
+    sweep, distance blur, lyric selection with copy / image export, wheel and
+    drag with the follow delay all come from the one implementation the app
+    already ships, so the lyric behaviour never forks.
+  - Queue and comments are the shared `PlaybackQueueView` / `SongCommentsView`
+    in legacy-toned bottom sheets. Seeking previews while dragging, lands on
+    release, ticks haptically at 2.5% steps and paints the buffered lead-in.
+    A guest who taps like is offered the legacy sign-in card.
 - **Player bar** — the 84 dp `PlayerBar`: a 250 dp now-playing tile (cover 50,
   title, translation, artist) that opens the lyrics page, the centred transport
   (like, previous, 38 dp play, next, one play-mode cycle) over the thin seek
