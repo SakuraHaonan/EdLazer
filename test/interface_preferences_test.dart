@@ -5,11 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/screens/player_page.dart';
+import 'package:lazer_nextgen/legacy/legacy_pages.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/ui_preferences.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
-import 'package:lazer_nextgen/widgets/interface_settings.dart';
 import 'package:lazer_nextgen/widgets/ui_scaling.dart';
 
 class _Gateway extends NeteaseGateway {
@@ -170,7 +169,7 @@ void main() {
     double? auto;
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildAppTheme(),
+        theme: buildLegacyTheme(),
         home: UiScaling(
           state: state,
           child: Scaffold(
@@ -211,6 +210,7 @@ void main() {
     BuildContext? probe;
     await tester.pumpWidget(
       MaterialApp(
+        theme: buildLegacyTheme(),
         home: UiScaling(
           state: state,
           child: Scaffold(
@@ -230,49 +230,10 @@ void main() {
     expect(UiMetrics.autoScaleOf(probe!), kDpiScaleDefault);
   });
 
-  testWidgets('the forced modes override the window width in the shell', (
+  testWidgets('the legacy settings drive device form, layout and dpi scale', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    await tester.pumpWidget(
-      AnimatedBuilder(
-        animation: state,
-        builder: (BuildContext context, _) =>
-            MaterialApp(theme: buildAppTheme(), home: PlayerPage(state: state)),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final sidebarMarker = find.byKey(
-      const ValueKey('sidebar-selection-marker'),
-    );
-    expect(sidebarMarker, findsOneWidget);
-    expect(find.text('我的歌单'), findsOneWidget);
-
-    await state.setUiMode(AppUiMode.mobile);
-    await tester.pumpAndSettle();
-    expect(sidebarMarker, findsNothing);
-    expect(find.text('我的歌单'), findsNothing);
-    // The compact shell keeps the three-tab bar and the top settings button.
-    expect(find.text('主页'), findsOneWidget);
-    expect(find.text('我喜欢'), findsNothing);
-
-    tester.view.physicalSize = const Size(600, 800);
-    await tester.pumpAndSettle();
-    await state.setUiMode(AppUiMode.desktop);
-    await tester.pumpAndSettle();
-    expect(sidebarMarker, findsOneWidget);
-    expect(find.text('我的歌单'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('the settings sheet drives device form, layout and dpi scale', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.physicalSize = const Size(900, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final state = AppState(catalog: _Catalog());
@@ -281,24 +242,21 @@ void main() {
       AnimatedBuilder(
         animation: state,
         builder: (BuildContext context, _) => MaterialApp(
-          theme: buildAppTheme(),
+          theme: buildLegacyTheme(),
           builder: (BuildContext context, Widget? child) =>
               UiScaling(state: state, child: child!),
-          home: Scaffold(
-            body: SingleChildScrollView(child: InterfaceSettings(state: state)),
-          ),
+          home: Scaffold(body: LegacySettingsPage(state: state)),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('强制桌面端'), findsNothing);
 
     // Layout dropdown: the forced modes are the three documented choices.
-    final layoutDropdown = find.byType(DropdownButtonFormField<AppUiMode>);
+    final layoutDropdown = find.byType(DropdownButton<AppUiMode>);
+    expect(layoutDropdown, findsOneWidget);
     await tester.tap(layoutDropdown);
     await tester.pumpAndSettle();
     expect(find.text('强制桌面端'), findsOneWidget);
-    expect(find.text('强制移动端'), findsOneWidget);
     await tester.tap(find.text('强制移动端').last);
     await tester.pumpAndSettle();
     expect(state.uiMode, AppUiMode.mobile);
@@ -309,23 +267,36 @@ void main() {
 
     // Dragging the slider pins a manual scale and turns the auto mode off.
     expect(state.autoDpiScale, isTrue);
-    await tester.drag(
-      find.byKey(const ValueKey('dpi-scale-slider')),
-      const Offset(60, 0),
+    final dpiSlider = find.descendant(
+      of: find.byKey(const ValueKey('dpi-scale-slider')),
+      matching: find.byType(Slider),
     );
+    await tester.drag(dpiSlider, const Offset(60, 0));
     await tester.pumpAndSettle();
     expect(state.autoDpiScale, isFalse);
     expect(state.dpiScale, greaterThan(1));
-    expect(find.textContaining('DPI 缩放 · '), findsWidgets);
 
-    // The switch brings the automatic scale back.
-    await tester.tap(find.byKey(const ValueKey('auto-dpi-switch')));
+    // The switch works in both directions.
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('auto-dpi-switch')),
+        matching: find.byType(Switch),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(state.autoDpiScale, isTrue);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('auto-dpi-switch')),
+        matching: find.byType(Switch),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(state.autoDpiScale, isFalse);
 
     // Device form: choosing the car raises the floor the slider may reach.
-    expect(tester.widget<Slider>(find.byType(Slider)).min, kDpiScaleMin);
-    final surfaceDropdown = find.byType(DropdownButtonFormField<AppSurface>);
+    expect(tester.widget<Slider>(dpiSlider).min, kDpiScaleMin);
+    final surfaceDropdown = find.byType(DropdownButton<AppSurface>);
     await tester.tap(surfaceDropdown);
     await tester.pumpAndSettle();
     await tester.tap(find.text('车机').last);
@@ -336,11 +307,11 @@ void main() {
       'car',
     );
     expect(UiMetrics.carOf(tester.element(surfaceDropdown)), isTrue);
-    expect(find.text('已启用'), findsOneWidget);
-    expect(find.textContaining('135–175%'), findsOneWidget);
-    final Slider carSlider = tester.widget<Slider>(find.byType(Slider));
-    expect(carSlider.min, kCarScaleMin);
-    expect(carSlider.value, greaterThanOrEqualTo(kCarScaleMin));
+    expect(find.textContaining('车机形态已把界面放大到'), findsOneWidget);
+    expect(tester.widget<Slider>(dpiSlider).min, kCarScaleMin);
+    expect(tester.widget<Slider>(dpiSlider).value, greaterThanOrEqualTo(
+      kCarScaleMin,
+    ));
 
     // The floor holds whatever the manual value is: the applied scale can
     // never fall back to desktop density on a head unit.
@@ -355,11 +326,8 @@ void main() {
       kCarScaleMin,
       reason: 'the car floor overrides a smaller manual value',
     );
-    expect(
-      tester.widget<Slider>(find.byType(Slider)).value,
-      kCarScaleMin,
-    );
-    expect(find.text('DPI 缩放 · 135%'), findsOneWidget);
+    expect(tester.widget<Slider>(dpiSlider).value, kCarScaleMin);
+    expect(find.text('135%'), findsWidgets);
 
     // Reset returns to the shipped 100% default, and standard restores 80%.
     await tester.tap(find.byKey(const ValueKey('dpi-scale-reset')));
@@ -372,7 +340,7 @@ void main() {
     await tester.pumpAndSettle();
     settingsContext = tester.element(surfaceDropdown);
     expect(UiMetrics.carOf(settingsContext), isFalse);
-    expect(tester.widget<Slider>(find.byType(Slider)).min, kDpiScaleMin);
+    expect(tester.widget<Slider>(dpiSlider).min, kDpiScaleMin);
     expect(tester.takeException(), isNull);
   });
 }

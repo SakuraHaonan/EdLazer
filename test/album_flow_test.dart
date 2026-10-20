@@ -71,7 +71,10 @@ void main() {
     final List<double> lightness = <double>[
       for (final Color color in palette) HSLColor.fromColor(color).lightness,
     ];
-    expect(lightness, orderedEquals(<double>[...lightness]..sort((a, b) => b.compareTo(a))));
+    expect(
+      lightness,
+      orderedEquals(<double>[...lightness]..sort((a, b) => b.compareTo(a))),
+    );
     expect(lightness.first, closeTo(0.90, 0.005));
     expect(lightness.last, closeTo(0.31, 0.005));
     for (final Color color in palette) {
@@ -86,7 +89,10 @@ void main() {
 
   test('the palette normalizer always yields five colours', () {
     expect(normalizeFlowPalette(const <Color>[]), hasLength(5));
-    expect(normalizeFlowPalette(<Color>[const Color(0xFF112233)]), hasLength(5));
+    expect(
+      normalizeFlowPalette(<Color>[const Color(0xFF112233)]),
+      hasLength(5),
+    );
     final List<Color> two = normalizeFlowPalette(<Color>[
       const Color(0xFF112233),
       const Color(0xFF445566),
@@ -98,7 +104,9 @@ void main() {
 
   test('the palette fetches a 96px rendition of the cover', () {
     expect(
-      albumPaletteArtworkUrl('https://p1.music.126.net/a/b.jpg?param=1024y1024'),
+      albumPaletteArtworkUrl(
+        'https://p1.music.126.net/a/b.jpg?param=1024y1024',
+      ),
       'https://p1.music.126.net/a/b.jpg?param=96y96',
     );
     expect(
@@ -126,7 +134,10 @@ void main() {
     final Color seed = albumSeedFromPixels(pixels, 8, 8);
     final HSLColor hsl = HSLColor.fromColor(seed);
     expect(hsl.hue < 3 || hsl.hue > 357, isTrue, reason: 'hue ${hsl.hue}');
-    expect(hsl.saturation, greaterThan(HSLColor.fromColor(const Color(0xFFC82828)).saturation));
+    expect(
+      hsl.saturation,
+      greaterThan(HSLColor.fromColor(const Color(0xFFC82828)).saturation),
+    );
     expect(albumSeedFromPixels(Uint8List(0), 0, 0), kAlbumDefaultSeed);
   });
 
@@ -148,8 +159,16 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 33));
     await tester.pump(const Duration(milliseconds: 33));
-    // Five drifting gradients, each wrapped in a translate/rotate/scale.
-    expect(find.byType(Transform), findsNWidgets(5 * 3));
+    // The whole canvas is one painter now: five gradients in one pass, no
+    // per-layer Transform widgets and no composited layers.
+    expect(
+      find.descendant(
+        of: find.byType(AlbumFlowBackground),
+        matching: find.byType(CustomPaint),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(Transform), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(
@@ -178,9 +197,7 @@ void main() {
     final AppState state = AppState(catalog: _Catalog());
     addTearDown(state.dispose);
     await state.setLegacyBackground(LegacyBackgroundMode.off);
-    await tester.pumpWidget(
-      _app(_reducedMotion(LegacyShell(state: state))),
-    );
+    await tester.pumpWidget(_app(_reducedMotion(LegacyShell(state: state))));
     await tester.pumpAndSettle();
     expect(find.byType(LegacyAlbumBackdrop), findsNothing);
     expect(
@@ -224,9 +241,7 @@ void main() {
     addTearDown(tester.view.reset);
     final AppState state = AppState(catalog: _Catalog());
     addTearDown(state.dispose);
-    await tester.pumpWidget(
-      _app(_reducedMotion(LegacyShell(state: state))),
-    );
+    await tester.pumpWidget(_app(_reducedMotion(LegacyShell(state: state))));
     await tester.pumpAndSettle();
     await tester.tap(find.text('设置').first);
     await tester.pumpAndSettle();
@@ -235,7 +250,9 @@ void main() {
     expect(find.text('内容不透明度'), findsOneWidget);
     expect(find.text('70%'), findsOneWidget);
 
-    await tester.ensureVisible(find.byType(DropdownButton<LegacyBackgroundMode>));
+    await tester.ensureVisible(
+      find.byType(DropdownButton<LegacyBackgroundMode>),
+    );
     await tester.tap(find.byType(DropdownButton<LegacyBackgroundMode>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('不使用').last);

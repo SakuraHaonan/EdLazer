@@ -1,13 +1,9 @@
-import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
-
-import '../theme/design_tokens.dart';
-import '../theme/paper_widgets.dart';
 
 /// Window title shown in the custom frame — also pushed to the native
 /// window so the taskbar and Alt+Tab agree with the bar.
@@ -56,13 +52,9 @@ Future<void> initWindowFrame() async {
 /// so pushed routes never cover it). Falls through to the plain child
 /// wherever the system frame is in charge.
 class WindowFrame extends StatelessWidget {
-  const WindowFrame({super.key, required this.child, this.legacy = false});
+  const WindowFrame({super.key, required this.child});
 
   final Widget child;
-
-  /// Follow the active theme instead of the parchment palette, so the frame
-  /// matches the legacy Material shell when that style is selected.
-  final bool legacy;
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +64,7 @@ class WindowFrame extends StatelessWidget {
       textDirection: TextDirection.ltr,
       child: Column(
         children: [
-          DesktopTitleBar(legacy: legacy),
+          const DesktopTitleBar(),
           Expanded(child: child),
         ],
       ),
@@ -86,13 +78,10 @@ class WindowFrame extends StatelessWidget {
   }
 }
 
-/// The frame strip itself: parchment fill, window title on the left, window
-/// controls on the right, closed off by a Stone hairline (never a shadow).
+/// The frame strip itself: theme surface, window title on the left, window
+/// controls on the right, closed off by a hairline (never a shadow).
 class DesktopTitleBar extends StatefulWidget {
-  const DesktopTitleBar({super.key, this.legacy = false});
-
-  /// Parchment chrome for the Nextgen shell, theme colours for the legacy one.
-  final bool legacy;
+  const DesktopTitleBar({super.key});
 
   @override
   State<DesktopTitleBar> createState() => _DesktopTitleBarState();
@@ -149,26 +138,21 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
-    final bool legacy = widget.legacy;
     return DefaultTextStyle(
-      style: legacy
-          ? theme.textTheme.labelMedium!.copyWith(
-              decoration: TextDecoration.none,
-            )
-          : context.type.caption.copyWith(decoration: TextDecoration.none),
+      style: theme.textTheme.labelMedium!.copyWith(
+        decoration: TextDecoration.none,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             height: _barHeight,
-            color: legacy ? scheme.surface : context.colors.ivoryMedium,
+            color: scheme.surface,
             child: DragToMoveArea(
               child: Row(
                 children: [
                   // Traffic lights own the left edge on macOS.
-                  SizedBox(
-                    width: _usesNativeWindowButtons ? 84 : AppSpacing.md,
-                  ),
+                  SizedBox(width: _usesNativeWindowButtons ? 84 : 16),
                   // Expanded (not Flexible): the title yields its unused width
                   // to the controls so they stay flush against the edge.
                   Expanded(
@@ -176,31 +160,24 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                       kWindowTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: legacy
-                          ? theme.textTheme.labelMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            )
-                          : context.type.caption.copyWith(
-                              color: context.colors.cloudDark,
-                            ),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                   if (!_usesNativeWindowButtons) ...[
                     _WindowButton(
                       control: _FrameControl.minimize,
-                      legacy: legacy,
                       onPressed: () => windowManager.minimize(),
                     ),
                     _WindowButton(
                       control: _maximized
                           ? _FrameControl.restore
                           : _FrameControl.maximize,
-                      legacy: legacy,
                       onPressed: _toggleMaximize,
                     ),
                     _WindowButton(
                       control: _FrameControl.close,
-                      legacy: legacy,
                       onPressed: () => windowManager.close(),
                     ),
                   ],
@@ -208,10 +185,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
               ),
             ),
           ),
-          if (legacy)
-            Container(height: 1, color: scheme.outlineVariant)
-          else
-            const Hairline(),
+          Container(height: 1, color: scheme.outlineVariant),
         ],
       ),
     );
@@ -221,17 +195,13 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
 enum _FrameControl { minimize, maximize, restore, close }
 
 /// One caption button: flat fill, no radius, no shadow. Hover moves the
-/// tone (Oat Warm for the quiet controls, Slate Dark inversion for close).
+/// tone (secondary container for the quiet controls, the error fill for
+/// close).
 class _WindowButton extends StatefulWidget {
-  const _WindowButton({
-    required this.control,
-    required this.onPressed,
-    this.legacy = false,
-  });
+  const _WindowButton({required this.control, required this.onPressed});
 
   final _FrameControl control;
   final VoidCallback onPressed;
-  final bool legacy;
 
   @override
   State<_WindowButton> createState() => _WindowButtonState();
@@ -254,15 +224,13 @@ class _WindowButtonState extends State<_WindowButton> {
     final Color background = !_hovering
         ? Colors.transparent
         : isClose
-        ? (widget.legacy ? scheme.error : context.colors.slateDark)
-        : (widget.legacy ? scheme.secondaryContainer : context.colors.oatWarm);
+        ? scheme.error
+        : scheme.secondaryContainer;
     final Color glyph = !_hovering
-        ? (widget.legacy ? scheme.onSurfaceVariant : context.colors.cloudDark)
+        ? scheme.onSurfaceVariant
         : isClose
-        ? (widget.legacy ? scheme.onError : context.colors.onDark)
-        : (widget.legacy
-              ? scheme.onSecondaryContainer
-              : context.colors.slateDark);
+        ? scheme.onError
+        : scheme.onSecondaryContainer;
 
     return Semantics(
       button: true,

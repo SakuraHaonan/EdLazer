@@ -5,10 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:gal/gal.dart';
 
 import '../cache/media_cache.dart';
+import 'artwork.dart';
 
 /// Saves the same real artwork as the player, with explicitly set CDN headers.
 Future<bool> saveCover(String url, String title) async {
-  final bytes = await ArtworkCache.shared.bytes(url);
+  final bytes = await ArtworkCache.shared.bytes(enlargedArtworkUrl(url) ?? url);
   return saveCoverBytes(bytes, title);
 }
 

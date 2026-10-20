@@ -45,7 +45,7 @@ class LegacyPlayerBar extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
     return AnimatedBuilder(
-      animation: state.all,
+      animation: state,
       builder: (BuildContext context, _) {
         final Track? track = state.current;
         final double uiAlpha =
@@ -387,44 +387,54 @@ class _SeekRowState extends State<_SeekRow> {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
-    final TextStyle? label = theme.textTheme.labelSmall?.copyWith(
-      color: scheme.onSurfaceVariant,
-      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-    );
-    final Track? track = widget.state.current;
-    final double duration = (track?.duration.inMilliseconds ?? 0).toDouble();
-    final double position = widget.state.precisePosition.inMilliseconds
-        .toDouble();
-    final double fraction =
-        _drag ?? (duration > 0 ? (position / duration).clamp(0.0, 1.0) : 0.0);
-    final Duration elapsed = Duration(
-      milliseconds: (fraction * duration).round(),
-    );
-    return Row(
-      children: [
-        Text(legacyDuration(elapsed), style: label),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: LegacyThinSeekBar(
-              progress: fraction,
-              semanticLabel: '播放进度',
-              onSeek: duration <= 0
-                  ? null
-                  : (double value) {
-                      setState(() => _drag = value);
-                      widget.state.seek(value);
-                    },
-              onSeekFinished: duration <= 0
-                  ? null
-                  : () => setState(() => _drag = null),
+    return AnimatedBuilder(
+      animation: widget.state.all,
+      builder: (BuildContext context, _) {
+        final ThemeData theme = Theme.of(context);
+        final ColorScheme scheme = theme.colorScheme;
+        final TextStyle? label = theme.textTheme.labelSmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+          fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+        );
+        final Track? track = widget.state.current;
+        final double duration = (track?.duration.inMilliseconds ?? 0)
+            .toDouble();
+        final double position = widget.state.precisePosition.inMilliseconds
+            .toDouble();
+        final double fraction =
+            _drag ??
+            (duration > 0 ? (position / duration).clamp(0.0, 1.0) : 0.0);
+        final Duration elapsed = Duration(
+          milliseconds: (fraction * duration).round(),
+        );
+        return Row(
+          children: [
+            Text(legacyDuration(elapsed), style: label),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: LegacyThinSeekBar(
+                  progress: fraction,
+                  semanticLabel: '播放进度',
+                  onSeek: duration <= 0
+                      ? null
+                      : (double value) {
+                          setState(() => _drag = value);
+                          widget.state.seek(value);
+                        },
+                  onSeekFinished: duration <= 0
+                      ? null
+                      : () => setState(() => _drag = null),
+                ),
+              ),
             ),
-          ),
-        ),
-        Text(legacyDuration(track?.duration ?? Duration.zero), style: label),
-      ],
+            Text(
+              legacyDuration(track?.duration ?? Duration.zero),
+              style: label,
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -619,6 +629,7 @@ class _VolumeButtonState extends State<_VolumeButton> {
   Timer? _hide;
   bool _iconHovered = false;
   bool _panelHovered = false;
+  double? _drag;
 
   void _sync() {
     _hide?.cancel();
@@ -643,7 +654,7 @@ class _VolumeButtonState extends State<_VolumeButton> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
-    final double volume = widget.state.volume.clamp(0.0, 1.0);
+    final double volume = (_drag ?? widget.state.volume).clamp(0.0, 1.0);
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: (BuildContext context) =>
@@ -696,8 +707,17 @@ class _VolumeButtonState extends State<_VolumeButton> {
                     LegacyThinSeekBar(
                       progress: volume,
                       semanticLabel: '音量',
-                      onSeek: (double value) =>
-                          unawaited(widget.state.setVolume(value)),
+                      onSeek: (double value) {
+                        setState(() => _drag = value);
+                        widget.state.previewVolume(value);
+                      },
+                      onSeekFinished: () {
+                        final double? value = _drag;
+                        setState(() => _drag = null);
+                        if (value != null) {
+                          unawaited(widget.state.setVolume(value));
+                        }
+                      },
                     ),
                   ],
                 ),

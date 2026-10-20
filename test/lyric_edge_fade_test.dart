@@ -9,8 +9,7 @@ import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
-import 'package:lazer_nextgen/theme/design_tokens.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/widgets/lyric_edge_fade.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -114,7 +113,7 @@ void main() {
       final key = GlobalKey();
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(),
+          theme: buildLegacyTheme(),
           home: Material(
             child: Center(
               child: RepaintBoundary(
@@ -123,7 +122,7 @@ void main() {
                   width: 340,
                   height: 500,
                   child: ColoredBox(
-                    color: AppColors.ivoryMedium,
+                    color: const Color(0xFFF0EEE6),
                     child: LyricViewport(state: state),
                   ),
                 ),

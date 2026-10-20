@@ -9,10 +9,7 @@ import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/legacy/legacy_pages.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/screens/player_page.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
-import 'package:lazer_nextgen/widgets/square_switch_list_tile.dart';
 
 const _preferenceKey = 'lazer_independent_playback';
 const _home = HomeFeed(
@@ -125,53 +122,9 @@ void main() {
   }
 
   testWidgets(
-    'Nextgen settings toggle independent playback in the playback group',
-    (tester) async {
-      tester.view.physicalSize = const Size(1280, 1400);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final state = AppState(catalog: _Catalog());
-      addTearDown(state.dispose);
-      await tester.pumpWidget(
-        AnimatedBuilder(
-          animation: state,
-          builder: (context, _) => MaterialApp(
-            theme: buildAppTheme(),
-            home: PlayerPage(state: state),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('设置'));
-      await tester.pumpAndSettle();
-
-      final label = find.text('独立播放');
-      await tester.ensureVisible(label);
-      await tester.pumpAndSettle();
-      _expectPlaybackGroup(tester);
-      final toggle = find.ancestor(
-        of: label,
-        matching: find.byType(SquareSwitchListTile),
-      );
-      expect(toggle, findsOneWidget);
-      expect(tester.widget<SquareSwitchListTile>(toggle).value, isFalse);
-      final prefs = await SharedPreferences.getInstance();
-
-      for (final enabled in <bool>[true, false]) {
-        await tester.tap(label);
-        await tester.pumpAndSettle();
-        expect(state.independentPlayback, enabled);
-        expect(tester.widget<SquareSwitchListTile>(toggle).value, enabled);
-        expect(prefs.getBool(_preferenceKey), enabled);
-      }
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
     'Legacy settings toggle independent playback in the playback group',
     (tester) async {
-      tester.view.physicalSize = const Size(1280, 1400);
+      tester.view.physicalSize = const Size(1280, 2400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final state = AppState(catalog: _Catalog());

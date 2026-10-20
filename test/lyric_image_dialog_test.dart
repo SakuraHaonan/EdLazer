@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lazer_nextgen/data/lyrics.dart';
 import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/widgets/lyric_image_dialog.dart';
 
 const _lines = [
@@ -121,10 +121,10 @@ void main() {
       PaintingBinding.instance.imageCache.clearLiveImages();
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(),
+          theme: buildLegacyTheme(),
           home: Scaffold(
             body: Theme(
-              data: buildAppTheme(brightness: Brightness.dark),
+              data: buildLegacyTheme(brightness: Brightness.dark),
               child: Builder(
                 builder: (context) => TextButton(
                   onPressed: () => showLyricImageDialog(
@@ -188,7 +188,7 @@ void main() {
         RepaintBoundary(
           key: key,
           child: MaterialApp(
-            theme: buildAppTheme(brightness: brightness),
+            theme: buildLegacyTheme(brightness: brightness),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(
                 context,
@@ -231,7 +231,7 @@ void main() {
       });
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(brightness: Brightness.dark),
+          theme: buildLegacyTheme(brightness: Brightness.dark),
           home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(
@@ -331,9 +331,13 @@ void main() {
         final frame = await codec.getNextFrame();
         expect(frame.image.width, 1080);
         final rgba = await frame.image.toByteData();
+        final Color canvas = buildLegacyTheme(
+          brightness: Brightness.dark,
+        ).colorScheme.surfaceContainerLowest;
+        final int argb = canvas.toARGB32();
         expect(
           rgba!.getUint32(0),
-          0x191918ff,
+          ((argb & 0x00FFFFFF) << 8) | 0x000000FF,
           reason:
               'dialog borders and animations must not enter the exported image',
         );

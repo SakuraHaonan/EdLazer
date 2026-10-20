@@ -134,7 +134,6 @@ class AppState extends ChangeNotifier {
   final Catalog catalog;
   StreamSubscription<void>? _completionSubscription;
   static const playbackInterval = Duration(milliseconds: 100);
-  static const lyricFollowInterval = Duration(milliseconds: 5);
   bool hapticsEnabled = true;
   final AppHaptics haptics = AppHaptics();
   Future<void> feedback({bool detent = false, bool boundary = false}) =>
@@ -160,6 +159,16 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('lazer_volume', _volume);
     await prefs.setDouble('lazer_unmuted_volume', _unmutedVolume);
+  }
+
+  /// Live volume change for a drag in progress: updates the engine and the
+  /// in-memory value without notifying the whole shell or touching prefs.
+  /// Callers persist once on release with [setVolume].
+  void previewVolume(double value) {
+    if (!value.isFinite) return;
+    _volume = value.clamp(0, 1);
+    if (_volume > 0) _unmutedVolume = _volume;
+    unawaited(audioEngine?.setVolume(_volume) ?? Future<void>.value());
   }
 
   Future<void> toggleMute() => setVolume(_volume > 0 ? 0 : _unmutedVolume);
@@ -194,10 +203,6 @@ class AppState extends ChangeNotifier {
 
   // -- interface ------------------------------------------------------------
 
-  /// Which interface the app draws; [AppUiStyle.nextgen] unless the user picks
-  /// the ported legacy shell.
-  AppUiStyle uiStyle = AppUiStyle.nextgen;
-
   /// Which presentation the shell forces; [AppUiMode.auto] follows the width.
   AppUiMode uiMode = AppUiMode.auto;
 
@@ -218,16 +223,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
       'lazer_ui_mode',
-      value.name,
-    );
-  }
-
-  Future<void> setUiStyle(AppUiStyle value) async {
-    if (uiStyle == value) return;
-    uiStyle = value;
-    notifyListeners();
-    await (await SharedPreferences.getInstance()).setString(
-      'lazer_ui_style',
       value.name,
     );
   }
@@ -305,10 +300,21 @@ class AppState extends ChangeNotifier {
 
   double lyricControlsSeconds = 2.5;
   bool lyricBlurEnabled = true;
+  bool showFrameStats = const bool.fromEnvironment('LAZER_FRAME_STATS');
   double lyricFontSize = 22;
   int lyricFontWeight = 600;
   static int normalizeLyricWeight(int value) =>
       (value.clamp(400, 700) / 100).round() * 100;
+
+  Future<void> setShowFrameStats(bool value) async {
+    if (showFrameStats == value) return;
+    showFrameStats = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setBool(
+      'lazer_show_frame_stats',
+      value,
+    );
+  }
 
   /// The legacy shell's accent palette: the fixed Lazer scheme, or one seeded
   /// from the current cover like the app's "follow the song" palette.
@@ -331,7 +337,9 @@ class AppState extends ChangeNotifier {
   void setLegacySeed(Color? value) {
     if (legacySeed == value) return;
     legacySeed = value;
-    notifyListeners();
+    // The fixed palette does not consume the seed; rebuilding the whole shell
+    // for it on every track change was pure work.
+    if (legacyPalette == LegacyPaletteMode.nowPlaying) notifyListeners();
   }
 
   Future<void> setLyricFontSize(double value) async {
@@ -505,7 +513,6 @@ class AppState extends ChangeNotifier {
         orElse: () => ThemeMode.system,
       );
       language = AppLanguage.parse(prefs.getString('lazer_language'));
-      uiStyle = AppUiStyleLabels.parse(prefs.getString('lazer_ui_style'));
       legacyBackground = LegacyBackgroundModeLabels.parse(
         prefs.getString('lazer_legacy_background'),
       );
@@ -527,6 +534,8 @@ class AppState extends ChangeNotifier {
       lyricControlsSeconds =
           (prefs.getDouble('lazer_lyric_controls_seconds') ?? 2.5).clamp(1, 10);
       lyricBlurEnabled = prefs.getBool('lazer_lyric_blur') ?? true;
+      showFrameStats =
+          prefs.getBool('lazer_show_frame_stats') ?? showFrameStats;
       lyricFontSize = (prefs.getDouble('lazer_lyric_font_size') ?? 22).clamp(
         14,
         40,

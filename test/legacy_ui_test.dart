@@ -8,9 +8,6 @@ import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/ui_preferences.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
-import 'package:lazer_nextgen/widgets/interface_settings.dart';
 
 const Track _track = Track(
   id: '1939575649',
@@ -80,32 +77,27 @@ void main() {
   test('the legacy theme keeps the Lazer palette and type ramp', () {
     final ThemeData dark = buildLegacyTheme(brightness: Brightness.dark);
     expect(dark.colorScheme.primary, LegacyTokens.nightBlue);
-    expect(dark.colorScheme.surface, LegacyTokens.nightRaised);
-    expect(dark.textTheme.displaySmall?.fontSize, 34);
-    expect(dark.textTheme.headlineMedium?.fontSize, 25);
+    expect(dark.colorScheme.surface, LegacyTokens.nightPaper);
+    expect(dark.textTheme.displaySmall?.fontSize, 36);
+    expect(dark.textTheme.headlineMedium?.fontSize, 28);
     expect(dark.textTheme.bodyMedium?.fontSize, 14);
 
     final ThemeData light = buildLegacyTheme();
-    expect(light.colorScheme.primary, LegacyTokens.lakeBlue);
+    expect(light.colorScheme.primary, const Color(0xFF35657D));
     expect(light.colorScheme.surface, LegacyTokens.paperRaised);
-  });
-
-  test('the UI style defaults to Nextgen and persists the choice', () async {
-    final AppState state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    expect(state.uiStyle, AppUiStyle.nextgen);
-    await state.setUiStyle(AppUiStyle.legacy);
+    // Every Material 3 surface role is explicit; none of them may fall back
+    // to Flutter's purple baseline scheme.
+    expect(light.colorScheme.surfaceContainerLowest, const Color(0xFFFFFFFF));
+    expect(light.colorScheme.surfaceContainerHighest, const Color(0xFFE3DED4));
+    expect(dark.colorScheme.surfaceDim, const Color(0xFF0F1619));
+    expect(dark.colorScheme.surfaceBright, const Color(0xFF394448));
+    expect(dark.colorScheme.inversePrimary, const Color(0xFF35657D));
+    expect(light.useMaterial3, isTrue);
+    expect(dark.textTheme.labelSmall?.fontSize, 11);
     expect(
-      (await SharedPreferences.getInstance()).getString('lazer_ui_style'),
-      'legacy',
+      dark.cardTheme.shape,
+      const RoundedRectangleBorder(borderRadius: AppShape.lgRadius),
     );
-
-    final AppState restarted = AppState(catalog: _Catalog());
-    addTearDown(restarted.dispose);
-    await restarted.bootstrap();
-    expect(restarted.uiStyle, AppUiStyle.legacy);
-    expect(AppUiStyleLabels.parse('nope'), AppUiStyle.nextgen);
-    expect(AppUiStyleLabels.parse(null), AppUiStyle.nextgen);
   });
 
   testWidgets('the legacy shell draws rail, discovery page and transport', (
@@ -135,14 +127,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('推荐歌单'), findsOneWidget);
 
-    // 设置 carries the interface switch back to Nextgen UI.
+    // 设置 opens the preferences page.
     await tester.tap(find.text('设置').first);
     await tester.pumpAndSettle();
-    expect(find.text('界面风格'), findsOneWidget);
-    expect(find.byType(SegmentedButton<AppUiStyle>), findsOneWidget);
-    await tester.tap(find.text('Nextgen UI'));
-    await tester.pumpAndSettle();
-    expect(state.uiStyle, AppUiStyle.nextgen);
+    expect(find.text('配色'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -158,41 +146,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('音乐库'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('the Nextgen settings expose the interface style switch', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(900, 1400);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final AppState state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    await tester.pumpWidget(
-      AnimatedBuilder(
-        animation: state,
-        builder: (BuildContext context, _) => MaterialApp(
-          theme: buildAppTheme(),
-          home: Scaffold(
-            body: SingleChildScrollView(child: InterfaceSettings(state: state)),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('界面风格'), findsOneWidget);
-    expect(find.text('Nextgen UI'), findsOneWidget);
-
-    await tester.tap(find.byType(DropdownButtonFormField<AppUiStyle>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Legacy UI').last);
-    await tester.pumpAndSettle();
-    expect(state.uiStyle, AppUiStyle.legacy);
-    expect(
-      (await SharedPreferences.getInstance()).getString('lazer_ui_style'),
-      'legacy',
-    );
     expect(tester.takeException(), isNull);
   });
 
@@ -230,7 +183,6 @@ void main() {
     await tester.pumpAndSettle();
 
     for (final String label in <String>[
-      '界面风格',
       '配色',
       '设备形态',
       '界面布局',
@@ -257,7 +209,9 @@ void main() {
     expect(find.text('100%'), findsWidgets);
 
     Finder controlFor<T extends Widget>(String label) => find.descendant(
-      of: find.ancestor(of: find.text(label), matching: find.byType(Container)).first,
+      of: find
+          .ancestor(of: find.text(label), matching: find.byType(Container))
+          .first,
       matching: find.byType(T),
     );
 

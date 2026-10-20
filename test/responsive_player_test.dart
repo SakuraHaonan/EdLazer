@@ -10,15 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/screens/now_playing_page.dart';
-import 'package:lazer_nextgen/screens/player_page.dart';
-import 'package:lazer_nextgen/screens/playlist_detail_page.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
-import 'package:lazer_nextgen/theme/design_tokens.dart';
 import 'package:lazer_nextgen/widgets/interaction_feedback.dart';
-import 'package:lazer_nextgen/widgets/plate_art.dart';
-import 'package:lazer_nextgen/screens/login_page.dart';
 import 'package:lazer_nextgen/widgets/window_frame.dart';
 
 const _track = Track(
@@ -144,120 +138,6 @@ void main() {
   });
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('mobile Me favorites entry opens the account liked playlist', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final state = AppState(catalog: _Catalog(gateway: _AuthGateway()));
-    addTearDown(state.dispose);
-    await state.signInWithCookie('MUSIC_U=fixture');
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(),
-        home: PlayerPage(state: state),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('我').first);
-    await tester.pumpAndSettle();
-    final entry = find.byKey(const ValueKey('mobile-liked-playlist'));
-    expect(entry, findsOneWidget);
-    expect(
-      find.descendant(of: entry, matching: find.text('我喜欢')),
-      findsOneWidget,
-    );
-    await tester.tap(entry);
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<PlaylistDetailPage>(find.byType(PlaylistDetailPage))
-          .playlist
-          .id,
-      '99',
-    );
-    expect(find.text('まにまに'), findsWidgets);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'mobile account card contains only avatar and sign-out and grows with text size',
-    (tester) async {
-      final state = AppState(catalog: _Catalog(gateway: _AuthGateway()));
-      addTearDown(state.dispose);
-      addTearDown(tester.view.reset);
-      await state.signInWithCookie('MUSIC_U=fixture');
-      for (final width in [320.0, 390.0]) {
-        for (final scale in [1.0, 1.6, 2.0]) {
-          tester.view.physicalSize = Size(width, 844);
-          tester.view.devicePixelRatio = 1;
-          final key = GlobalKey();
-          await tester.pumpWidget(
-            RepaintBoundary(
-              key: key,
-              child: MaterialApp(
-                theme: buildAppTheme(),
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(textScaler: TextScaler.linear(scale)),
-                  child: child!,
-                ),
-                home: PlayerPage(key: ValueKey('$width-$scale'), state: state),
-              ),
-            ),
-          );
-          await tester.pumpAndSettle();
-          await tester.tap(find.text('我').first);
-          await tester.pumpAndSettle();
-          expect(find.text('测试账户'), findsNothing);
-          expect(find.text('黑胶会员'), findsNothing);
-          expect(find.text('退出登录'), findsOneWidget);
-          expect(find.byType(PlateArt), findsWidgets);
-          expect(
-            tester.takeException(),
-            isNull,
-            reason: 'profile width=$width scale=$scale',
-          );
-          if (width == 320 && scale == 1) {
-            await _capture(tester, key, 'ui_mobile_account_latest');
-          }
-        }
-      }
-    },
-  );
-  testWidgets(
-    'four-digit track ordinal stays on one line at large text sizes',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildAppTheme(),
-          home: MediaQuery(
-            data: const MediaQueryData(textScaler: TextScaler.linear(1.6)),
-            child: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  width: 320,
-                  child: TrackRow(
-                    track: _track,
-                    index: 1002,
-                    isCurrent: false,
-                    onPlay: () {},
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      final text = tester.widget<Text>(find.text('1002'));
-      expect(text.maxLines, 1);
-      expect(text.softWrap, false);
-      expect(tester.getSize(find.text('1002')).height, lessThan(32));
-      expect(tester.takeException(), isNull);
-    },
-  );
   testWidgets(
     'title bar has an explicit text style outside a Material scaffold',
     (tester) async {
@@ -266,7 +146,7 @@ void main() {
         RepaintBoundary(
           key: key,
           child: MaterialApp(
-            theme: buildAppTheme(),
+            theme: buildLegacyTheme(),
             builder: (context, child) => Column(
               children: [
                 const DesktopTitleBar(),
@@ -285,7 +165,10 @@ void main() {
         ),
       );
       expect(rich.text.style?.decoration, TextDecoration.none);
-      expect(rich.text.style?.color, AppColors.cloudDark);
+      expect(
+        rich.text.style?.color,
+        buildLegacyTheme().colorScheme.onSurfaceVariant,
+      );
       expect(tester.takeException(), isNull);
       await _capture(tester, key, 'ui_title_latest');
     },
@@ -301,93 +184,6 @@ void main() {
     expect(state.signedIn, true);
     expect(state.user.method, AuthMethod.qrcode);
   });
-
-  testWidgets(
-    'cookie login closes the dialog and synchronizes sidebar collections',
-    (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final state = AppState(catalog: _Catalog(gateway: _AuthGateway()));
-      addTearDown(state.dispose);
-      await tester.pumpWidget(
-        AnimatedBuilder(
-          animation: state,
-          builder: (context, _) => MaterialApp(
-            theme: buildAppTheme(),
-            home: PlayerPage(state: state),
-          ),
-        ),
-      );
-      await tester.tap(find.text('游客'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Cookie'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'MUSIC_U=fixture');
-      await tester.tap(find.widgetWithText(TextButton, '登录'));
-      await tester.pumpAndSettle();
-      expect(find.byType(LoginPage), findsNothing);
-      expect(state.signedIn, true);
-      expect(find.text('测试账户'), findsOneWidget);
-      expect(find.text('我的歌单'), findsOneWidget);
-      expect(find.text('未在播放'), findsNothing);
-      expect(tester.getRect(find.text('设置')).top, greaterThan(500));
-
-      final marker = find.byKey(const ValueKey('sidebar-selection-marker'));
-      final before = tester.getTopLeft(marker).dy;
-      await tester.tap(find.text('搜索'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      final during = tester.getTopLeft(marker).dy;
-      expect(during, greaterThan(before));
-      expect(during, lessThan(before + 44));
-      await tester.pumpAndSettle();
-      final field = find.ancestor(
-        of: find.byType(TextField),
-        matching: find.byType(AnimatedContainer),
-      );
-      expect(tester.getSize(field.first).height, greaterThanOrEqualTo(52));
-      await tester.tap(find.text('测试歌单详情').first);
-      await tester.pumpAndSettle();
-      expect(find.byType(PlaylistDetailView), findsOneWidget);
-      expect(find.byType(PlaylistDetailPage), findsNothing);
-      expect(find.text('我的歌单'), findsOneWidget);
-      final row = find.byType(TrackRow).first;
-      final hover = await tester.createGesture(
-        kind: ui.PointerDeviceKind.mouse,
-      );
-      await hover.addPointer(location: Offset.zero);
-      await hover.moveTo(tester.getCenter(row));
-      await tester.pump(const Duration(milliseconds: 1));
-      final background = tester.widget<AnimatedContainer>(
-        find
-            .descendant(of: row, matching: find.byType(AnimatedContainer))
-            .first,
-      );
-      expect(
-        (background.decoration as BoxDecoration).borderRadius,
-        BorderRadius.zero,
-      );
-      expect(background.clipBehavior, Clip.antiAlias);
-      final painted = tester.widget<DecoratedBox>(
-        find.descendant(of: row, matching: find.byType(DecoratedBox)).first,
-      );
-      final tint = (painted.decoration as BoxDecoration).color!;
-      expect(
-        tint.withValues(alpha: 1),
-        AppColors.oatWarm,
-        reason:
-            'the first hover frame retains the paper RGB, with no interpolation from black',
-      );
-      await hover.removePointer();
-      await tester.pump();
-      await tester.tap(find.text('我').first);
-      await tester.pumpAndSettle();
-      expect(find.text('我喜欢的音乐'), findsNothing);
-      expect(find.text('我创建的歌单 · 1'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
 
   test(
     'restored queue loads current lyrics without starting playback',
@@ -415,190 +211,6 @@ void main() {
       expect(state.playing, false);
       expect(state.lyricsLoading, false);
       expect(state.lyrics, hasLength(4));
-    },
-  );
-
-  testWidgets('mobile navigation, compact feature, and playlist details', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    final key = GlobalKey();
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: key,
-        child: MaterialApp(
-          theme: buildAppTheme(),
-          home: PlayerPage(state: state),
-        ),
-      ),
-    );
-    expect(find.byTooltip('设置'), findsOneWidget);
-    expect(find.text('设置'), findsNothing);
-    expect(find.byType(InkWell), findsWidgets);
-    await tester.pumpAndSettle();
-    expect(find.text('推荐歌单'), findsOneWidget);
-    expect(find.text('推荐专辑'), findsNothing);
-    await _capture(tester, key, 'ui_mobile_shell');
-    await tester.ensureVisible(find.text('测试歌单详情').first);
-    await tester.tap(find.text('测试歌单详情').first);
-    await tester.pumpAndSettle();
-    expect(find.byType(PlaylistDetailPage), findsOneWidget);
-    expect(find.text('まにまに'), findsOneWidget);
-    Future<void> backGesture(
-      String method, [
-      Map<String, Object?>? args,
-    ]) async {
-      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
-        'flutter/backgesture',
-        const StandardMethodCodec().encodeMethodCall(MethodCall(method, args)),
-        (_) {},
-      );
-      await tester.pump();
-    }
-
-    const start = <String, Object?>{
-      'touchOffset': <double>[5, 300],
-      'progress': 0.0,
-      'swipeEdge': 0,
-    };
-    await backGesture('startBackGesture', start);
-    await backGesture('updateBackGestureProgress', <String, Object?>{
-      'x': 100.0,
-      'y': 300.0,
-      'progress': 0.4,
-      'swipeEdge': 0,
-    });
-    await backGesture('cancelBackGesture');
-    await tester.pumpAndSettle();
-    expect(find.byType(PlaylistDetailPage), findsOneWidget);
-    await backGesture('startBackGesture', start);
-    await backGesture('updateBackGestureProgress', <String, Object?>{
-      'x': 150.0,
-      'y': 300.0,
-      'progress': 0.6,
-      'swipeEdge': 0,
-    });
-    await backGesture('commitBackGesture');
-    await tester.pumpAndSettle();
-    expect(find.byType(PlaylistDetailPage), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'player adapts to phone, landscape and desktop; lyric controls hide and wake',
-    (tester) async {
-      final state = AppState(catalog: _Catalog());
-      addTearDown(state.dispose);
-      state.playQueue([_track]);
-      for (final size in [
-        const Size(390, 844),
-        const Size(320, 568),
-        const Size(640, 360),
-        const Size(1028, 674),
-        const Size(800, 400),
-        const Size(1360, 860),
-      ]) {
-        tester.view.physicalSize = size;
-        tester.view.devicePixelRatio = 1;
-        final key = GlobalKey();
-        await tester.pumpWidget(
-          RepaintBoundary(
-            key: key,
-            child: MaterialApp(
-              theme: buildAppTheme(),
-              home: NowPlayingPage(key: ValueKey(size), state: state),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull, reason: 'layout $size');
-        final title = tester.widget<Text>(find.text(_track.title).first);
-        expect(title.maxLines, size.width >= 720 ? 2 : 1);
-        expect(title.overflow, TextOverflow.ellipsis);
-        expect(find.text('测试译名'), findsOneWidget);
-        if (size.width >= 720) {
-          expect(find.text('第一句翻译'), findsOneWidget);
-          final artwork = tester.getRect(find.byType(PlateArt).first);
-          expect(artwork.left, greaterThanOrEqualTo(24));
-          expect(artwork.right, lessThan(size.width * .55));
-        }
-        final transport = tester.getRect(
-          find.byKey(const ValueKey('now-playing-transport')),
-        );
-        expect(transport.top, greaterThanOrEqualTo(0));
-        expect(
-          transport.bottom,
-          lessThanOrEqualTo(size.height - 8),
-          reason:
-              'every media control must stay fully inside the viewport at $size',
-        );
-        final shuffled = state.shuffle;
-        await tester.tap(find.byTooltip('随机播放'));
-        await tester.pump();
-        expect(
-          state.shuffle,
-          !shuffled,
-          reason: 'the control is visible and hit-testable',
-        );
-        expect(
-          find.ancestor(
-            of: find.byType(PlateArt),
-            matching: find.byType(ImageFiltered),
-          ),
-          findsNothing,
-          reason: 'cover mode has a flat background',
-        );
-        if (size.width < 720 && size.height > 500) {
-          expect(
-            tester.getRect(find.byTooltip('循环播放')).right,
-            closeTo(size.width - 24, 1),
-            reason: 'transport fills the row through the right edge',
-          );
-        }
-        await _capture(
-          tester,
-          key,
-          size.width > 720
-              ? 'ui_desktop_player_${size.width.toInt()}_${size.height.toInt()}'
-              : 'ui_mobile_player',
-        );
-        if (size.width == 390) {
-          await tester.longPress(find.byType(PlateArt).first);
-          await tester.pumpAndSettle();
-          expect(find.text('保存封面图片？'), findsOneWidget);
-          await tester.tap(find.text('取消'));
-          await tester.pumpAndSettle();
-          await tester.tap(find.byTooltip('歌词'));
-          await tester.pump(const Duration(milliseconds: 100));
-          expect(find.byKey(const ValueKey('mobile-cover')), findsOneWidget);
-          expect(find.byKey(const ValueKey('mobile-lyrics')), findsOneWidget);
-          for (var frame = 0; frame < 40; frame++) {
-            await tester.pump(const Duration(milliseconds: 16));
-          }
-          expect(find.text('第一句翻译'), findsOneWidget);
-          await tester.pump(const Duration(seconds: 3));
-          await tester.pump(const Duration(milliseconds: 250));
-          final opacityFinder = find.ancestor(
-            of: find.byTooltip('歌词'),
-            matching: find.byType(AnimatedOpacity),
-          );
-          expect(
-            tester.widget<AnimatedOpacity>(opacityFinder.first).opacity,
-            0,
-          );
-          await tester.tapAt(const Offset(180, 190));
-          await tester.pump();
-          expect(
-            tester.widget<AnimatedOpacity>(opacityFinder.first).opacity,
-            1,
-          );
-        }
-      }
-      tester.view.reset();
     },
   );
 

@@ -13,6 +13,7 @@ import '../widgets/lyric_viewport.dart';
 import '../widgets/playback_queue_view.dart';
 import '../widgets/song_comments_view.dart';
 import 'legacy_background.dart';
+import 'legacy_desktop_player.dart';
 import 'legacy_login.dart';
 import 'legacy_player_bar.dart' show LegacyThinSeekBar;
 import 'legacy_theme.dart';
@@ -50,10 +51,7 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage>
   static const Cubic _motion = Cubic(0.2, 0, 0, 1);
   static const double _compactCover = 52;
 
-  late final AnimationController _cover = AnimationController(
-    vsync: this,
-    duration: _coverFlight,
-  );
+  late final AnimationController _cover;
 
   final GlobalKey _stackKey = GlobalKey();
   final GlobalKey _compactSlotKey = GlobalKey();
@@ -80,6 +78,14 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage>
   AppState get state => widget.state;
 
   @override
+  void initState() {
+    super.initState();
+    // Built eagerly: a landscape build never reads _cover, and touching the
+    // lazy field in dispose() would create the controller on a dead element.
+    _cover = AnimationController(vsync: this, duration: _coverFlight);
+  }
+
+  @override
   void dispose() {
     _cover.dispose();
     _comments?.dispose();
@@ -88,6 +94,19 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage>
 
   @override
   Widget build(BuildContext context) {
+    // A desktop window gets the desktop composition: a stable left-hand track
+    // column, the lyric sheet in the centre, and a full-width transport.
+    // Phones, tablets and forced-mobile windows keep the mobile page.
+    if (_usesDesktopLayout(context)) {
+      return LegacyDesktopNowPlaying(
+        state: state,
+        onClose: () {
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).maybePop();
+          }
+        },
+      );
+    }
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
     return Scaffold(
@@ -134,6 +153,12 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage>
         },
       ),
     );
+  }
+
+  bool _usesDesktopLayout(BuildContext context) {
+    final Size window = MediaQuery.sizeOf(context);
+    if (useCompactLayout(state.uiMode, window.width)) return false;
+    return window.width >= 1000 && window.width > window.height * 1.05;
   }
 
   // -- portrait -------------------------------------------------------------
@@ -422,6 +447,7 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage>
     final double playSide = compact ? 52 : 64;
     final double playGlyph = compact ? 29 : 34;
     return Padding(
+      key: const ValueKey<String>('now-playing-transport'),
       padding: compact
           ? const EdgeInsets.symmetric(horizontal: 12, vertical: 4)
           : EdgeInsets.zero,
@@ -533,7 +559,7 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage>
   }
 
   Widget _artists(BuildContext context, Track track, {required bool centered}) {
-    final String names = _artistNames(track);
+    final String names = legacyArtistNames(track);
     if (names.trim().isEmpty) return const SizedBox.shrink();
     final bool compact = !centered;
     return GestureDetector(
@@ -980,14 +1006,6 @@ class _LegacyNowPlayingPageState extends State<LegacyNowPlayingPage>
       ).showSnackBar(const SnackBar(content: Text('封面保存失败，请稍后重试')));
     }
   }
-}
-
-String _artistNames(Track track) {
-  final List<String> names = <String>[
-    for (final ArtistRef artist in track.artists)
-      if (artist.id > 0 && artist.name.trim().isNotEmpty) artist.name.trim(),
-  ];
-  return names.isEmpty ? track.artist : names.join(' / ');
 }
 
 Color _onSurfaceVariant(BuildContext context) =>

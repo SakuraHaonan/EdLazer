@@ -130,6 +130,14 @@ const List<_FlowLayer> _flowLayers = <_FlowLayer>[
 ];
 
 /// The animated album-colour renderer.
+///
+/// The whole canvas is one [CustomPaint]: the five drifting gradients are
+/// drawn with transformed radial shaders in a single paint pass. The previous
+/// widget version wrapped every layer in three Transform widgets plus a
+/// DecoratedBox, and stepped the phase at 30 fps; that both capped the motion
+/// at 30 fps and allocated five composited layers per frame. The painter now
+/// runs at the display refresh rate and only marks itself dirty through the
+/// clock notifier — the widget tree is built once.
 class AlbumFlowBackground extends StatefulWidget {
   const AlbumFlowBackground({
     super.key,
@@ -160,7 +168,6 @@ class AlbumFlowBackground extends StatefulWidget {
 class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
     with TickerProviderStateMixin {
   static const Duration _paletteFade = Duration(milliseconds: 650);
-  static const double _frameInterval = 1 / 30;
 
   late List<Color> _from = normalizeFlowPalette(widget.colors);
   late List<Color> _to = _from;
@@ -172,7 +179,6 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
   final ValueNotifier<int> _frames = ValueNotifier<int>(0);
   Ticker? _ticker;
   double _phase = 0;
-  double _pending = 0;
   Duration _last = Duration.zero;
   bool _reduceMotion = false;
 
@@ -185,8 +191,7 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final bool reduce =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final bool reduce = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     if (reduce != _reduceMotion) {
       _reduceMotion = reduce;
       _syncPlayback();
@@ -206,7 +211,10 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
         _palette.forward(from: 0);
       }
     }
-    if (oldWidget.animated != widget.animated) _syncPlayback();
+    if (oldWidget.animated != widget.animated ||
+        oldWidget.solid != widget.solid) {
+      _syncPlayback();
+    }
   }
 
   @override
@@ -217,9 +225,10 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
     super.dispose();
   }
 
+  bool get _runs => widget.animated && !_reduceMotion && !widget.solid;
+
   void _syncPlayback() {
-    final bool run = widget.animated && !_reduceMotion && !widget.solid;
-    if (run) {
+    if (_runs) {
       _ticker ??= createTicker(_onTick)..start();
     } else {
       _ticker?.dispose();
@@ -235,10 +244,7 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
     final double delta =
         (elapsed - _last).inMicroseconds / Duration.microsecondsPerSecond;
     _last = elapsed;
-    _pending += delta.clamp(0.0, 0.1);
-    if (_pending < _frameInterval) return;
-    _phase = (_phase + _pending) % 10000;
-    _pending = 0;
+    _phase = (_phase + delta.clamp(0.0, 0.1)) % 10000;
     _frames.value++;
   }
 
@@ -255,88 +261,110 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
     return RepaintBoundary(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(widget.cornerRadius),
-        child: AnimatedBuilder(
-          animation: Listenable.merge(<Listenable>[_palette, _frames]),
-          builder: (BuildContext context, Widget? _) {
-            final List<Color> palette = _currentPalette();
-            final String tag = widget.solid ? 'solid' : 'flow';
-            return LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                final Size size = constraints.biggest;
-                if (!size.isFinite || size.isEmpty) {
-                  return ColoredBox(color: palette[4], key: ValueKey<String>(tag));
-                }
-                return Stack(
-                  key: ValueKey<String>(tag),
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    ColoredBox(color: palette[4]),
-                    if (!widget.solid)
-                      for (final _FlowLayer layer in _flowLayers)
-                        _flowLayerBox(layer, palette[layer.paletteIndex], size),
-                    if (widget.veil.a > 0) ..._veil(),
-                  ],
-                );
-              },
-            );
-          },
+        child: CustomPaint(
+          key: ValueKey<String>(widget.solid ? 'solid' : 'flow'),
+          painter: _FlowPainter(
+            palette: _currentPalette,
+            phase: () => _phase,
+            veil: widget.veil,
+            solid: widget.solid,
+            repaint: Listenable.merge(<Listenable>[_palette, _frames]),
+          ),
+          isComplex: true,
+          willChange: _runs,
+          child: const SizedBox.expand(),
         ),
       ),
     );
   }
+}
 
-  Widget _flowLayerBox(_FlowLayer layer, Color color, Size size) {
-    final double time = _phase * layer.speed + layer.phaseOffset;
-    final double secondary = _phase * layer.speed * 0.73 + layer.phaseOffset * 1.37;
-    final double pulse = math.sin(time * 0.61) * 0.075;
-    final double alpha = layer.colorAlpha;
-    return Transform.translate(
-      offset: Offset(
-        math.sin(time) * size.width * layer.orbitX,
-        math.cos(secondary) * size.height * layer.orbitY,
-      ),
-      child: Transform.rotate(
-        angle: math.sin(time * 0.43) * layer.rotationRange * math.pi / 180,
-        child: Transform.scale(
-          scaleX: layer.scaleX + pulse,
-          scaleY: layer.scaleY - pulse * 0.72,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                radius: 0.5,
-                colors: <Color>[
-                  color.withValues(alpha: alpha),
-                  color.withValues(alpha: alpha * 0.56),
-                  color.withValues(alpha: alpha * 0.16),
-                  color.withValues(alpha: 0),
-                ],
-                stops: const <double>[0, 1 / 3, 2 / 3, 1],
-              ),
-            ),
+/// Paints the base, five transformed radial gradients and the veil in one
+/// pass. No per-layer widgets, no save layers.
+class _FlowPainter extends CustomPainter {
+  _FlowPainter({
+    required this.palette,
+    required this.phase,
+    required this.veil,
+    required this.solid,
+    required Listenable repaint,
+  }) : super(repaint: repaint);
+
+  final List<Color> Function() palette;
+  final double Function() phase;
+  final Color veil;
+  final bool solid;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final List<Color> colors = palette();
+    final Rect canvasRect = Offset.zero & size;
+    canvas.drawRect(canvasRect, Paint()..color = colors[4]);
+    if (!solid) {
+      final double timeBase = phase();
+      final double shortest = size.shortestSide;
+      for (final _FlowLayer layer in _flowLayers) {
+        final Color color = colors[layer.paletteIndex];
+        final double time = timeBase * layer.speed + layer.phaseOffset;
+        final double secondary =
+            timeBase * layer.speed * 0.73 + layer.phaseOffset * 1.37;
+        final double pulse = math.sin(time * 0.61) * 0.075;
+        final double alpha = layer.colorAlpha;
+        final ui.Shader shader = ui.Gradient.radial(
+          Offset.zero,
+          shortest * 0.5,
+          <Color>[
+            color.withValues(alpha: alpha),
+            color.withValues(alpha: alpha * 0.56),
+            color.withValues(alpha: alpha * 0.16),
+            color.withValues(alpha: 0),
+          ],
+          const <double>[0, 1 / 3, 2 / 3, 1],
+        );
+        canvas.save();
+        canvas.translate(
+          size.width * 0.5 + math.sin(time) * size.width * layer.orbitX,
+          size.height * 0.5 + math.cos(secondary) * size.height * layer.orbitY,
+        );
+        canvas.rotate(
+          math.sin(time * 0.43) * layer.rotationRange * math.pi / 180,
+        );
+        canvas.scale(layer.scaleX + pulse, layer.scaleY - pulse * 0.72);
+        canvas.drawRect(
+          Rect.fromCenter(
+            center: Offset.zero,
+            width: size.width,
+            height: size.height,
           ),
-        ),
-      ),
-    );
+          Paint()..shader = shader,
+        );
+        canvas.restore();
+      }
+    }
+    if (veil.a > 0) {
+      final Rect bounds = Offset.zero & size;
+      final ui.Shader veilShader = ui.Gradient.radial(
+        size.center(Offset.zero),
+        size.shortestSide * 0.5,
+        <Color>[
+          veil.withValues(alpha: 0),
+          veil.withValues(alpha: veil.a * 0.28),
+          veil.withValues(alpha: veil.a * 0.72),
+        ],
+        const <double>[0, 0.5, 1],
+      );
+      canvas.drawRect(bounds, Paint()..shader = veilShader);
+      canvas.drawRect(
+        bounds,
+        Paint()..color = veil.withValues(alpha: veil.a * 0.72),
+      );
+    }
   }
 
-  List<Widget> _veil() {
-    final Color veil = widget.veil;
-    return <Widget>[
-      DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            colors: <Color>[
-              veil.withValues(alpha: 0),
-              veil.withValues(alpha: veil.a * 0.28),
-              veil.withValues(alpha: veil.a * 0.72),
-            ],
-            stops: const <double>[0, 0.5, 1],
-          ),
-        ),
-      ),
-      ColoredBox(color: veil.withValues(alpha: veil.a * 0.72)),
-    ];
-  }
+  @override
+  bool shouldRepaint(covariant _FlowPainter oldDelegate) =>
+      oldDelegate.solid != solid || oldDelegate.veil != veil;
 }
 
 double _fluidEase(double fraction) {
@@ -382,9 +410,7 @@ Color albumSeedFromPixels(Uint8List rgba, int width, int height) {
       averageGreen += g;
       averageBlue += b;
       averageCount++;
-      final HSLColor hsl = HSLColor.fromColor(
-        Color.fromARGB(255, r, g, b),
-      );
+      final HSLColor hsl = HSLColor.fromColor(Color.fromARGB(255, r, g, b));
       final double saturation = hsl.saturation;
       final double lightness = hsl.lightness;
       if (saturation >= 0.15 && lightness >= 0.12 && lightness <= 0.92) {
@@ -575,6 +601,76 @@ class _LegacyAlbumBackdropState extends State<LegacyAlbumBackdrop> {
         if (widget.veil == null)
           ColoredBox(color: scheme.surface.withValues(alpha: veil)),
       ],
+    );
+  }
+}
+
+/// The shell's album-colour flow, re-scrimmed for the immersive Apple Music
+/// player.
+///
+/// This deliberately reuses the exact [LegacyAlbumBackdrop] /
+/// [AlbumFlowBackground] path the main shell paints: one CustomPaint, five
+/// drifting gradients at the display refresh rate and a palette crossfade on
+/// track change. The only additions are the darker vertical gradient and the
+/// vignette that keep white controls and lyrics legible over a bright cover.
+class AlbumBlurFlow extends StatelessWidget {
+  const AlbumBlurFlow({
+    super.key,
+    required this.track,
+    required this.mode,
+    required this.pageColor,
+  });
+
+  final Track? track;
+  final LegacyBackgroundMode mode;
+  final Color pageColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: RepaintBoundary(
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            LegacyAlbumBackdrop(
+              track: track,
+              mode: mode,
+              uiAlpha: 1,
+              pageColor: pageColor,
+              veil: const Color(0x00000000),
+            ),
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: <Color>[
+                      Color(0x99000000),
+                      Color(0x33000000),
+                      Color(0x59000000),
+                      Color(0xE6000000),
+                    ],
+                    stops: <double>[0, .28, .62, 1],
+                  ),
+                ),
+              ),
+            ),
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment(-0.35, -0.25),
+                    radius: 1.1,
+                    colors: <Color>[Color(0x00000000), Color(0x80000000)],
+                    stops: <double>[0.45, 1],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

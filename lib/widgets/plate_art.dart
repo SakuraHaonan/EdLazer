@@ -1,10 +1,14 @@
-import 'package:lazer_nextgen/theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../utils/artwork.dart';
 import 'artwork_image.dart';
 
-/// Displays cached service artwork. Missing covers use a neutral music icon.
+/// Displays artwork from the media cache, decoded at the size it is painted.
+///
+/// The previous implementation always requested the 1024 px CDN rendition, so
+/// a 44 dp queue thumbnail decoded a 1024² image. Sizing the request to the
+/// painted size keeps the image cache small and removes decode work from the
+/// scroll path.
 class PlateArt extends StatelessWidget {
   const PlateArt({
     super.key,
@@ -12,6 +16,7 @@ class PlateArt extends StatelessWidget {
     this.accent = 0,
     this.radius,
     this.coverUrl,
+    this.size,
   });
 
   final int seed;
@@ -19,13 +24,26 @@ class PlateArt extends StatelessWidget {
   final BorderRadius? radius;
   final String? coverUrl;
 
+  /// Painted edge in logical pixels; drives the CDN rendition.
+  final double? size;
+
   @override
   Widget build(BuildContext context) {
-    final url = enlargedArtworkUrl(coverUrl);
-    final fallback = ColoredBox(
-      color: context.colors.manilla,
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    final String? url = artworkUrlForSize(
+      coverUrl,
+      logicalEdge: size,
+      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
+    final Widget fallback = ColoredBox(
+      color: scheme.surfaceContainerHighest,
       child: Center(
-        child: Icon(Icons.music_note_rounded, color: context.colors.cloudDark),
+        child: Icon(
+          Icons.music_note_rounded,
+          color: scheme.onSurfaceVariant,
+          size: (size ?? 48) * 0.38,
+        ),
       ),
     );
     return ClipRRect(
@@ -35,7 +53,10 @@ class PlateArt extends StatelessWidget {
           : Image(
               image: ArtworkImage(url),
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stack) => fallback,
+              gaplessPlayback: true,
+              errorBuilder:
+                  (BuildContext context, Object error, StackTrace? _) =>
+                      fallback,
             ),
     );
   }

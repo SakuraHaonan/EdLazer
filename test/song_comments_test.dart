@@ -12,15 +12,12 @@ import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/data/song_comments.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/gateway/transport.dart';
-import 'package:lazer_nextgen/screens/login_page.dart';
-import 'package:lazer_nextgen/screens/now_playing_page.dart';
+import 'package:lazer_nextgen/legacy/legacy_now_playing.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/song_comments_controller.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
-import 'package:lazer_nextgen/widgets/playback_queue_view.dart';
 import 'package:lazer_nextgen/widgets/song_comments_view.dart';
-import 'package:lazer_nextgen/widgets/volume_control.dart';
 
 Map<String, dynamic> _comment(int id, {bool liked = false, int count = 10}) => {
   'commentId': id,
@@ -72,8 +69,10 @@ class _Gateway extends NeteaseGateway {
   Future<String> createQrCodeUrl(String key) async =>
       'https://music.163.com/login?codekey=$key';
   @override
-  Future<GatewayQrCheck> checkQrCode(String key, {String secureCaptcha = ''}) async =>
-      const GatewayQrCheck(code: 801);
+  Future<GatewayQrCheck> checkQrCode(
+    String key, {
+    String secureCaptcha = '',
+  }) async => const GatewayQrCheck(code: 801);
 }
 
 class _Catalog extends Catalog {
@@ -354,9 +353,7 @@ void main() {
     const Size(1100, 760),
     const Size(1440, 900),
   ]) {
-    testWidgets('desktop dock and comments stay usable at $size', (
-      tester,
-    ) async {
+    testWidgets('comments stay usable at $size', (tester) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -374,12 +371,17 @@ void main() {
         RepaintBoundary(
           key: key,
           child: MaterialApp(
-            theme: buildAppTheme(
+            theme: buildLegacyTheme(
               brightness: size.width == 1100
                   ? Brightness.light
                   : Brightness.dark,
             ),
-            home: NowPlayingPage(state: state),
+            // The album backdrop flows forever; freeze it so the page settles.
+            builder: (BuildContext context, Widget? child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
+            home: LegacyNowPlayingPage(state: state),
           ),
         ),
       );
@@ -391,14 +393,13 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(gateway.reads, isEmpty, reason: 'comments load only on opening');
-      final dock = tester.getRect(
-        find.byKey(const ValueKey('now-playing-transport')),
+      await _snapshot(tester, key, 'legacy_workspace_${size.width.toInt()}');
+      final bool desktop = size.width >= 1000;
+      await tester.tap(
+        desktop
+            ? find.byKey(const ValueKey('desktop-comments'))
+            : find.text('查看评论'),
       );
-      expect(dock.width, greaterThan(size.width * .8));
-      expect(dock.bottom, lessThanOrEqualTo(size.height));
-      expect(find.byType(VolumeControl), findsOneWidget);
-      await _snapshot(tester, key, 'desktop_workspace_${size.width.toInt()}');
-      await tester.tap(find.byTooltip('查看评论'));
       await tester.pumpAndSettle();
       expect(gateway.reads, [(42, 0)]);
       expect(find.byType(SongCommentsView), findsOneWidget);
@@ -409,31 +410,43 @@ void main() {
         expect(gateway.likes, [(42, 1, true)]);
         expect(find.byTooltip('取消点赞'), findsOneWidget);
       }
-      await _snapshot(tester, key, 'desktop_comments_${size.width.toInt()}');
-      await tester.tap(find.byTooltip('播放队列'));
-      await tester.pumpAndSettle();
-      expect(find.byType(PlaybackQueueView), findsOneWidget);
-      expect(find.byType(Dialog), findsNothing);
-      expect(find.byType(SongCommentsView), findsNothing);
-      await _snapshot(tester, key, 'desktop_queue_${size.width.toInt()}');
+      await _snapshot(tester, key, 'legacy_comments_${size.width.toInt()}');
       for (var i = 0; i < 10; i++) {
         state.seek(i / 100);
         await tester.pump();
       }
       expect(gateway.reads, hasLength(1));
-      await tester.tap(find.text('歌词').first);
+      await tester.tap(find.byTooltip('关闭').last);
       await tester.pumpAndSettle();
+      expect(find.byType(SongCommentsView), findsNothing);
       expect(find.byType(LyricViewport), findsOneWidget);
-      await tester.tap(find.byTooltip('查看评论'));
+      await tester.tap(
+        desktop
+            ? find.byKey(const ValueKey('desktop-comments'))
+            : find.text('查看评论'),
+      );
       await tester.pumpAndSettle();
       expect(
         gateway.reads,
         hasLength(1),
-        reason: 'switching panes retains the current page',
+        reason: 'reopening the sheet keeps the loaded page',
       );
+      await tester.tap(find.byTooltip('关闭').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('下一首'));
       await tester.pumpAndSettle();
       expect(state.current?.id, '43');
+      expect(
+        gateway.reads,
+        hasLength(1),
+        reason: 'comments load only when the sheet opens',
+      );
+      await tester.tap(
+        desktop
+            ? find.byKey(const ValueKey('desktop-comments'))
+            : find.text('查看评论'),
+      );
+      await tester.pumpAndSettle();
       expect(gateway.reads.last, (43, 0));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -452,24 +465,31 @@ void main() {
       state.playQueue([track]);
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(),
-          home: NowPlayingPage(state: state),
+          theme: buildLegacyTheme(),
+          // The album backdrop flows forever; freeze it so the page settles.
+          builder: (BuildContext context, Widget? child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: LegacyNowPlayingPage(state: state),
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('查看评论'));
+      await tester.tap(find.text('查看评论'));
       await tester.pumpAndSettle();
       expect(find.byType(SongCommentsView), findsOneWidget);
       expect(gateway.reads, [(42, 0)]);
       await tester.tap(find.byTooltip('登录后点赞').first);
       await tester.pumpAndSettle();
-      expect(find.byType(LoginPage), findsOneWidget);
+      // The legacy sign-in card: its title and the cookie escape hatch.
+      expect(find.text('登录'), findsWidgets);
+      expect(find.text('使用 Cookie 登录'), findsOneWidget);
       expect(gateway.likes, isEmpty);
-      await tester.tap(find.text('取消'));
+      await tester.tap(find.byTooltip('关闭').last);
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('关闭').last);
       await tester.pumpAndSettle();
-      expect(find.byType(NowPlayingPage), findsOneWidget);
+      expect(find.byType(LegacyNowPlayingPage), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

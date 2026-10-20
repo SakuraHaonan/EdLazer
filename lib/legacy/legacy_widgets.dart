@@ -12,6 +12,16 @@ String legacyDuration(Duration value) {
   return '$minutes:${rest.toString().padLeft(2, '0')}';
 }
 
+/// The display names of a track's credited artists, falling back to the
+/// denormalised artist line.
+String legacyArtistNames(Track track) {
+  final List<String> names = <String>[
+    for (final ArtistRef artist in track.artists)
+      if (artist.id > 0 && artist.name.trim().isNotEmpty) artist.name.trim(),
+  ];
+  return names.isEmpty ? track.artist : names.join(' / ');
+}
+
 /// Rounded album artwork with the legacy shell's flat placeholder.
 class LegacyCover extends StatelessWidget {
   const LegacyCover({
@@ -29,8 +39,13 @@ class LegacyCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme scheme = Theme.of(context).colorScheme;
-    final String? resolved = enlargedArtworkUrl(url);
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    final String? resolved = artworkUrlForSize(
+      url,
+      logicalEdge: size ?? 1024,
+      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
     final Widget fallback = ColoredBox(
       color: scheme.surfaceContainerHighest,
       child: Center(
@@ -47,8 +62,9 @@ class LegacyCover extends StatelessWidget {
             image: ArtworkImage(resolved),
             fit: BoxFit.cover,
             gaplessPlayback: true,
-            errorBuilder: (BuildContext context, Object? error, StackTrace? _) =>
-                fallback,
+            errorBuilder:
+                (BuildContext context, Object? error, StackTrace? _) =>
+                    fallback,
           );
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
@@ -86,7 +102,8 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
         widget.subtitle ??
         <String>[
           if (widget.playlist.trackCount > 0) '${widget.playlist.trackCount} 首',
-          if (widget.playlist.description.isNotEmpty) widget.playlist.description,
+          if (widget.playlist.description.isNotEmpty)
+            widget.playlist.description,
         ].join(' · ');
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
@@ -105,10 +122,12 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
                 scale: _hovering ? 1.015 : 1,
                 duration: const Duration(milliseconds: 160),
                 curve: Curves.easeOutCubic,
-                child: LegacyCover(
-                  url: widget.playlist.coverUrl,
-                  size: widget.width,
-                  radius: 16,
+                child: RepaintBoundary(
+                  child: LegacyCover(
+                    url: widget.playlist.coverUrl,
+                    size: widget.width,
+                    radius: 16,
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -436,4 +455,3 @@ class LegacyNotice extends StatelessWidget {
     );
   }
 }
-

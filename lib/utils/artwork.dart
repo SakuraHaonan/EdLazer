@@ -63,6 +63,45 @@ String? enlargedArtworkUrl(String? raw, {int sizePx = 1024}) {
   return trimmed.startsWith('file://') ? trimmed : null;
 }
 
+/// Renditions the CDN is asked for. Quantising to this ladder keeps one
+/// decoded image per display size instead of one per widget instance.
+const List<int> kArtworkRenditions = <int>[
+  64,
+  96,
+  128,
+  192,
+  256,
+  384,
+  512,
+  768,
+  1024,
+];
+
+/// The smallest rendition that covers [logicalEdge] at [devicePixelRatio].
+int artworkPixelSize(double? logicalEdge, double devicePixelRatio) {
+  if (logicalEdge == null || !logicalEdge.isFinite || logicalEdge <= 0) {
+    return kArtworkRenditions.last;
+  }
+  final double dpr = devicePixelRatio.isFinite && devicePixelRatio > 0
+      ? devicePixelRatio
+      : 1;
+  final int needed = (logicalEdge * dpr).ceil();
+  for (final int size in kArtworkRenditions) {
+    if (needed <= size) return size;
+  }
+  return kArtworkRenditions.last;
+}
+
+/// A CDN-sized artwork URL for a widget painted at [logicalEdge].
+String? artworkUrlForSize(
+  String? raw, {
+  double? logicalEdge,
+  double devicePixelRatio = 1,
+}) => enlargedArtworkUrl(
+  raw,
+  sizePx: artworkPixelSize(logicalEdge, devicePixelRatio),
+);
+
 /// Cover requests carry the app identity and music-site Referer. CDN nodes
 /// can still reject an individual request; callers use bounded alternatives.
 const Map<String, String> artworkHeaders = <String, String>{
@@ -71,9 +110,12 @@ const Map<String, String> artworkHeaders = <String, String>{
 };
 
 /// Ordered alternatives for an intermittently rejected NetEase CDN image.
-/// Only known image CDN hosts are rewritten; the artwork path is preserved.
+///
+/// The preferred URL keeps its existing `param=NyN` resize directive;
+/// stripping the directive is only the fallback for a CDN that rejects the
+/// small rendition. The artwork path is preserved either way.
 List<String> artworkCandidates(String? raw) {
-  final preferred = enlargedArtworkUrl(raw);
+  final String? preferred = normalizedArtworkUrl(raw) ?? _localArtworkUrl(raw);
   if (preferred == null) return const <String>[];
   final uri = Uri.tryParse(preferred);
   if (uri == null || !RegExp(r'^p[1-4]\.music\.126\.net$').hasMatch(uri.host)) {
@@ -95,4 +137,9 @@ List<String> artworkCandidates(String? raw) {
     ])
       original.replace(host: host).toString(),
   }.toList(growable: false);
+}
+
+String? _localArtworkUrl(String? raw) {
+  final String trimmed = raw?.trim() ?? '';
+  return trimmed.startsWith('file://') ? trimmed : null;
 }

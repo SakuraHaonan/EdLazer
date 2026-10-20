@@ -5,71 +5,15 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../data/song_comments.dart';
 import '../l10n/app_localizations.dart';
-import '../screens/login_page.dart';
+import '../legacy/legacy_login.dart';
 import '../state/app_state.dart';
 import '../state/song_comments_controller.dart';
-import '../theme/app_palette.dart';
-import '../theme/paper_widgets.dart';
+import '../theme/tokens.dart';
 import '../utils/artwork.dart';
 import 'accessible_controls.dart';
 import 'animated_notice.dart';
 import 'artwork_image.dart';
 import 'interaction_feedback.dart';
-
-Future<void> showSongComments(
-  BuildContext context, {
-  required AppState state,
-  required Track track,
-  required SongCommentsController controller,
-}) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  useSafeArea: true,
-  backgroundColor: context.colors.ivoryLight,
-  shape: const RoundedRectangleBorder(),
-  builder: (context) => SizedBox(
-    height: MediaQuery.sizeOf(context).height * .92,
-    child: Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 8, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TrText('评论', style: context.type.subheading),
-                    const SizedBox(height: 4),
-                    Text(
-                      track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.type.captionMuted,
-                    ),
-                  ],
-                ),
-              ),
-              AccessibleIconButton(
-                tooltip: '关闭',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ],
-          ),
-        ),
-        const Hairline(),
-        Expanded(
-          child: SongCommentsView(
-            state: state,
-            track: track,
-            controller: controller,
-          ),
-        ),
-      ],
-    ),
-  ),
-);
 
 /// Lazy rows, pagination and reactions listen only to the comment controller.
 class SongCommentsView extends StatefulWidget {
@@ -79,15 +23,17 @@ class SongCommentsView extends StatefulWidget {
     required this.track,
     required this.controller,
   });
+
   final AppState state;
   final Track track;
   final SongCommentsController controller;
+
   @override
   State<SongCommentsView> createState() => _SongCommentsViewState();
 }
 
 class _SongCommentsViewState extends State<SongCommentsView> {
-  final _scroll = ScrollController();
+  final ScrollController _scroll = ScrollController();
   late int _accountId;
   SongCommentsController get _comments => widget.controller;
 
@@ -123,7 +69,7 @@ class _SongCommentsViewState extends State<SongCommentsView> {
   }
 
   void _accountChanged() {
-    final id = widget.state.user.userId;
+    final int id = widget.state.user.userId;
     if (id == _accountId) return;
     _accountId = id;
     _scheduleBind();
@@ -140,7 +86,7 @@ class _SongCommentsViewState extends State<SongCommentsView> {
 
   Future<void> _like(int id) async {
     if (!widget.state.signedIn) {
-      await showLoginDialog(context, widget.state);
+      await showLegacyLoginDialog(context, widget.state);
       if (!mounted || !widget.state.signedIn) return;
       await _comments.openSong(
         widget.track.id,
@@ -152,8 +98,8 @@ class _SongCommentsViewState extends State<SongCommentsView> {
   }
 
   Future<void> _loginAgain() async {
-    final previous = widget.state.user;
-    await showLoginDialog(context, widget.state);
+    final SessionUser previous = widget.state.user;
+    await showLegacyLoginDialog(context, widget.state);
     if (!mounted ||
         !widget.state.signedIn ||
         identical(previous, widget.state.user)) {
@@ -164,198 +110,230 @@ class _SongCommentsViewState extends State<SongCommentsView> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _comments,
-    builder: (context, _) {
-      final bound = _comments.trackId == widget.track.id;
-      final hot = bound ? _comments.hot : const <SongComment>[];
-      final latest = bound ? _comments.latest : const <SongComment>[];
-      final initialLoading = !bound || _comments.loading && _comments.isEmpty;
-      final empty = bound && _comments.isEmpty;
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 8, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    return AnimatedBuilder(
+      animation: _comments,
+      builder: (BuildContext context, _) {
+        final bool bound = _comments.trackId == widget.track.id;
+        final List<SongComment> hot = bound
+            ? _comments.hot
+            : const <SongComment>[];
+        final List<SongComment> latest = bound
+            ? _comments.latest
+            : const <SongComment>[];
+        final bool initialLoading =
+            !bound || _comments.loading && _comments.isEmpty;
+        final bool empty = bound && _comments.isEmpty;
+        return Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 10, 2),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 200),
-                      child: TrText(
+                      child: Text(
                         initialLoading ? '正在加载评论…' : '${_comments.total} 条评论',
-                        key: ValueKey((initialLoading, _comments.total)),
-                        style: context.type.captionMuted,
+                        key: ValueKey<(bool, int)>((
+                          initialLoading,
+                          _comments.total,
+                        )),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                AccessibleIconButton(
-                  tooltip: '刷新评论',
-                  onPressed:
-                      !bound ||
-                          _comments.loading ||
-                          _comments.loadingMore ||
-                          _comments.reacting ||
-                          _comments.unsupported
-                      ? null
-                      : () => unawaited(_comments.refresh()),
-                  icon: const Icon(Icons.refresh_rounded, size: 20),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: AnimatedNotice(
-              message: _comments.actionError,
-              onDismiss: _comments.dismissActionError,
-            ),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            alignment: Alignment.topLeft,
-            child: _comments.loginRequired
-                ? Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: TextButton(
-                        onPressed: () => unawaited(_loginAgain()),
-                        child: const TrText('重新登录'),
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-          Expanded(
-            child: TweenAnimationBuilder<double>(
-              key: ValueKey((widget.track.id, initialLoading, empty)),
-              tween: Tween(begin: 0, end: 1),
-              duration: MediaQuery.disableAnimationsOf(context)
-                  ? Duration.zero
-                  : const Duration(milliseconds: 240),
-              curve: Curves.easeOutCubic,
-              builder: (context, value, child) => Opacity(
-                opacity: value,
-                child: Transform.translate(
-                  offset: Offset(0, (1 - value) * 10),
-                  child: child,
-                ),
+                  AccessibleIconButton(
+                    tooltip: '刷新评论',
+                    onPressed:
+                        !bound ||
+                            _comments.loading ||
+                            _comments.loadingMore ||
+                            _comments.reacting ||
+                            _comments.unsupported
+                        ? null
+                        : () => unawaited(_comments.refresh()),
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                  ),
+                ],
               ),
-              child: initialLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : empty
-                  ? Center(
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: AnimatedNotice(
+                message: _comments.actionError,
+                onDismiss: _comments.dismissActionError,
+              ),
+            ),
+            AnimatedSize(
+              duration: AppMotion.standard,
+              alignment: Alignment.topLeft,
+              child: _comments.loginRequired
+                  ? Align(
+                      alignment: Alignment.centerLeft,
                       child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.chat_bubble_outline_rounded,
-                              size: 36,
-                              color: context.colors.cloudMedium,
-                            ),
-                            const SizedBox(height: 16),
-                            TrText(
-                              _comments.unsupported
-                                  ? '这首歌暂不支持查看评论'
-                                  : _comments.error ?? '这首歌还没有评论',
-                              textAlign: TextAlign.center,
-                              style: context.type.bodySmMuted,
-                            ),
-                            if (_comments.error != null)
-                              TextButton(
-                                onPressed: () => unawaited(_comments.retry()),
-                                child: const TrText('重试'),
-                              ),
-                          ],
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: TextButton(
+                          onPressed: () => unawaited(_loginAgain()),
+                          child: const TrText('重新登录'),
                         ),
                       ),
                     )
-                  : CustomScrollView(
-                      controller: _scroll,
-                      key: const PageStorageKey('song-comments'),
-                      slivers: [
-                        if (hot.isNotEmpty) ...[
-                          const SliverPadding(
-                            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-                            sliver: SliverToBoxAdapter(
-                              child: SectionHeading('热门评论'),
-                            ),
-                          ),
-                          _rows(hot),
-                        ],
-                        if (latest.isNotEmpty) ...[
-                          const SliverPadding(
-                            padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
-                            sliver: SliverToBoxAdapter(
-                              child: SectionHeading('最新评论'),
-                            ),
-                          ),
-                          _rows(latest),
-                        ],
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                            child: Center(
-                              child: _comments.loadingMore
-                                  ? const SizedBox.square(
-                                      dimension: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : _comments.error != null
-                                  ? Column(
-                                      children: [
-                                        TrText(
-                                          _comments.error!,
-                                          style: context.type.captionMuted,
-                                        ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              unawaited(_comments.retry()),
-                                          child: const TrText('重试'),
-                                        ),
-                                      ],
-                                    )
-                                  : _comments.hasMore
-                                  ? TextButton(
-                                      onPressed: () =>
-                                          unawaited(_comments.loadMore()),
-                                      child: const TrText('加载更多评论'),
-                                    )
-                                  : TrText(
-                                      '已显示全部评论',
-                                      style: context.type.captionMuted,
-                                    ),
-                            ),
+                  : const SizedBox.shrink(),
+            ),
+            Expanded(
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey<(String, bool, bool)>((
+                  widget.track.id,
+                  initialLoading,
+                  empty,
+                )),
+                tween: Tween<double>(begin: 0, end: 1),
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 240),
+                curve: AppMotion.emphasizedDecelerate,
+                builder: (BuildContext context, double value, Widget? child) =>
+                    Opacity(
+                      opacity: value,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - value) * 10),
+                        child: child,
+                      ),
+                    ),
+                child: initialLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : empty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Icon(
+                                Icons.forum_outlined,
+                                size: 36,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _comments.unsupported
+                                    ? '这首歌暂不支持查看评论'
+                                    : _comments.error ?? '这首歌还没有评论',
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                              if (_comments.error != null)
+                                TextButton(
+                                  onPressed: () => unawaited(_comments.retry()),
+                                  child: const TrText('重试'),
+                                ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      )
+                    : CustomScrollView(
+                        controller: _scroll,
+                        key: const PageStorageKey<String>('song-comments'),
+                        slivers: <Widget>[
+                          if (hot.isNotEmpty) ...<Widget>[
+                            const SliverPadding(
+                              padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
+                              sliver: SliverToBoxAdapter(
+                                child: _CommentsSectionLabel('热门评论'),
+                              ),
+                            ),
+                            _rows(hot),
+                          ],
+                          if (latest.isNotEmpty) ...<Widget>[
+                            const SliverPadding(
+                              padding: EdgeInsets.fromLTRB(20, 22, 20, 4),
+                              sliver: SliverToBoxAdapter(
+                                child: _CommentsSectionLabel('最新评论'),
+                              ),
+                            ),
+                            _rows(latest),
+                          ],
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                16,
+                                20,
+                                32,
+                              ),
+                              child: Center(
+                                child: _comments.loadingMore
+                                    ? const SizedBox.square(
+                                        dimension: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : _comments.error != null
+                                    ? Column(
+                                        children: <Widget>[
+                                          Text(
+                                            _comments.error!,
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                                  color:
+                                                      scheme.onSurfaceVariant,
+                                                ),
+                                          ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                unawaited(_comments.retry()),
+                                            child: const TrText('重试'),
+                                          ),
+                                        ],
+                                      )
+                                    : _comments.hasMore
+                                    ? TextButton(
+                                        onPressed: () =>
+                                            unawaited(_comments.loadMore()),
+                                        child: const TrText('加载更多评论'),
+                                      )
+                                    : Text(
+                                        '已显示全部评论',
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                              color: scheme.onSurfaceVariant,
+                                            ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
             ),
-          ),
-        ],
-      );
-    },
-  );
+          ],
+        );
+      },
+    );
+  }
 
   Widget _rows(List<SongComment> comments) => SliverPadding(
     padding: const EdgeInsets.symmetric(horizontal: 20),
     sliver: SliverList.builder(
       itemCount: comments.length,
-      itemBuilder: (context, index) => _CommentRow(
-        key: ValueKey(comments[index].id),
-        comment: comments[index],
-        pending: _comments.isLiking(comments[index].id),
-        signedIn: widget.state.signedIn,
-        onLike: () => unawaited(_like(comments[index].id)),
+      itemBuilder: (BuildContext context, int index) => RepaintBoundary(
+        key: ValueKey<String>('comment-${comments[index].id}'),
+        child: _CommentRow(
+          comment: comments[index],
+          pending: _comments.isLiking(comments[index].id),
+          signedIn: widget.state.signedIn,
+          onLike: () => unawaited(_like(comments[index].id)),
+        ),
       ),
     ),
   );
@@ -368,14 +346,36 @@ class _SongCommentsViewState extends State<SongCommentsView> {
   }
 }
 
+class _CommentsSectionLabel extends StatelessWidget {
+  const _CommentsSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    return Row(
+      children: <Widget>[
+        Text(
+          label,
+          style: theme.textTheme.titleSmall?.copyWith(color: scheme.onSurface),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Divider(color: scheme.outlineVariant, height: 1)),
+      ],
+    );
+  }
+}
+
 class _CommentRow extends StatelessWidget {
   const _CommentRow({
-    super.key,
     required this.comment,
     required this.pending,
     required this.signedIn,
     required this.onLike,
   });
+
   final SongComment comment;
   final bool pending;
   final bool signedIn;
@@ -383,58 +383,71 @@ class _CommentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = comment.liked
-        ? context.colors.clayDeep
-        : context.colors.cloudDark;
-    final avatar = enlargedArtworkUrl(comment.avatarUrl, sizePx: 96);
-    final fallback = ColoredBox(
-      color: context.colors.oatWarm,
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    final Color accent = comment.liked
+        ? scheme.primary
+        : scheme.onSurfaceVariant;
+    final String? avatar = enlargedArtworkUrl(comment.avatarUrl, sizePx: 96);
+    final Widget fallback = ColoredBox(
+      color: scheme.surfaceContainerHighest,
       child: Icon(
         Icons.person_outline_rounded,
-        color: context.colors.cloudDark,
+        color: scheme.onSurfaceVariant,
         size: 20,
       ),
     );
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.only(top: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           Row(
-            children: [
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
               ExcludeSemantics(
-                child: SizedBox.square(
-                  dimension: 36,
-                  child: avatar == null
-                      ? fallback
-                      : Image(
-                          image: ResizeImage(
-                            ArtworkImage(avatar),
-                            width: 96,
-                            height: 96,
+                child: ClipOval(
+                  child: SizedBox.square(
+                    dimension: 36,
+                    child: avatar == null
+                        ? fallback
+                        : Image(
+                            image: ResizeImage(
+                              ArtworkImage(avatar),
+                              width: 96,
+                              height: 96,
+                            ),
+                            fit: BoxFit.cover,
+                            errorBuilder:
+                                (
+                                  BuildContext context,
+                                  Object error,
+                                  StackTrace? _,
+                                ) => fallback,
                           ),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => fallback,
-                        ),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  children: <Widget>[
                     Text(
                       comment.author.isEmpty
                           ? context.tr('匿名用户')
                           : comment.author,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.type.captionStrong,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: scheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    if (comment.time > 0) ...[
-                      const SizedBox(height: 3),
+                    if (comment.time > 0) ...<Widget>[
+                      const SizedBox(height: 2),
                       Text(
-                        [
+                        <String>[
                           MaterialLocalizations.of(context).formatMediumDate(
                             DateTime.fromMillisecondsSinceEpoch(comment.time),
                           ),
@@ -443,7 +456,9 @@ class _CommentRow extends StatelessWidget {
                         ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: context.type.captionMuted,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ],
@@ -457,46 +472,46 @@ class _CommentRow extends StatelessWidget {
                     : '登录后点赞',
                 child: Semantics(
                   toggled: comment.liked,
-                  child: TextButton(
+                  child: IconButton(
                     onPressed: pending ? null : feedbackAction(context, onLike),
-                    style: TextButton.styleFrom(
-                      foregroundColor: color,
-                      disabledForegroundColor: color.withValues(alpha: .65),
-                      shape: const RoundedRectangleBorder(),
+                    style: IconButton.styleFrom(
+                      foregroundColor: accent,
+                      disabledForegroundColor: accent.withValues(alpha: .65),
                       minimumSize: const Size(48, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      enableFeedback: false,
                     ),
-                    child: Row(
+                    icon: Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: [
+                      children: <Widget>[
                         AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          transitionBuilder: (child, animation) =>
-                              ScaleTransition(
-                                scale: animation,
-                                child: FadeTransition(
-                                  opacity: animation,
-                                  child: child,
-                                ),
-                              ),
+                          duration: AppMotion.quick,
+                          transitionBuilder:
+                              (Widget child, Animation<double> animation) =>
+                                  ScaleTransition(
+                                    scale: animation,
+                                    child: FadeTransition(
+                                      opacity: animation,
+                                      child: child,
+                                    ),
+                                  ),
                           child: Icon(
                             comment.liked
                                 ? Icons.thumb_up_rounded
                                 : Icons.thumb_up_outlined,
-                            key: ValueKey(comment.liked),
+                            key: ValueKey<bool>(comment.liked),
                             size: 18,
                           ),
                         ),
                         const SizedBox(width: 6),
                         AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
+                          duration: AppMotion.quick,
                           child: Text(
                             MaterialLocalizations.of(
                               context,
                             ).formatDecimal(comment.likedCount),
-                            key: ValueKey(comment.likedCount),
-                            style: context.type.caption.copyWith(color: color),
+                            key: ValueKey<int>(comment.likedCount),
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: accent,
+                            ),
                           ),
                         ),
                       ],
@@ -506,31 +521,35 @@ class _CommentRow extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           SelectableText(
             comment.content,
-            style: context.type.bodySm.copyWith(height: 1.7),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              height: 1.7,
+              color: scheme.onSurface,
+            ),
           ),
-          for (final reply in comment.replies)
+          for (final CommentReply reply in comment.replies)
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.only(top: 10),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: context.colors.ivoryLight,
-                  border: Border(
-                    left: BorderSide(color: context.colors.stone, width: 2),
-                  ),
+                  color: scheme.surfaceContainer,
+                  borderRadius: AppShape.mdRadius,
                 ),
                 child: Text(
                   '${reply.author}：${reply.content}',
-                  style: context.type.bodySmMuted.copyWith(height: 1.6),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    height: 1.6,
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
-          const SizedBox(height: 20),
-          const Hairline(),
+          const SizedBox(height: 18),
+          Divider(height: 1, color: scheme.outlineVariant),
         ],
       ),
     );

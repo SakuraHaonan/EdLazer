@@ -92,8 +92,8 @@ class _LegacyShellState extends State<LegacyShell> {
     unawaited(
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (BuildContext context) =>
-              LegacyNowPlayingPage(state: state),
+          settings: const RouteSettings(name: '/legacy-now-playing'),
+          builder: (BuildContext context) => LegacyNowPlayingPage(state: state),
         ),
       ),
     );
@@ -132,65 +132,76 @@ class _LegacyShellState extends State<LegacyShell> {
                   uiAlpha: state.legacyUiAlpha,
                   onSeed: state.setLegacySeed,
                 ),
-              Column(
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        if (wide) _rail(scheme, hasBackground),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              // The legacy comments page replaces the whole
-                              // content column, search bar included.
-                              if (!_comments)
-                                _topBar(context, scheme, wide),
-                              Expanded(child: _content()),
-                            ],
+              // The canvas above stays full-bleed; the chrome column starts
+              // below the status bar or notch. The bottom is left to the
+              // chrome itself: the NavigationBar consumes the bottom safe
+              // area on its own, and on the desktop the bar has none.
+              SafeArea(
+                bottom: false,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          if (wide)
+                            RepaintBoundary(
+                              child: _rail(scheme, hasBackground),
+                            ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                // The legacy comments page replaces the whole
+                                // content column, search bar included.
+                                if (!_comments) _topBar(context, scheme, wide),
+                                Expanded(
+                                  child: RepaintBoundary(child: _content()),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  LegacyPlayerBar(
-                    state: state,
-                    compact: compactBar,
-                    comments: _comments,
-                    onComments: _toggleComments,
-                    onOpen: _openNowPlaying,
-                  ),
-                  if (!wide)
-                    NavigationBar(
-                      backgroundColor: hasBackground
-                          ? scheme.surface.withValues(alpha: 0.78)
-                          : null,
-                      selectedIndex: _section.index,
-                      onDestinationSelected: (int index) =>
-                          _select(_LegacySection.values[index]),
-                      destinations: const <NavigationDestination>[
-                        NavigationDestination(
-                          icon: Icon(Icons.home_outlined),
-                          selectedIcon: Icon(Icons.home_rounded),
-                          label: '主页',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.library_music_outlined),
-                          selectedIcon: Icon(Icons.library_music_rounded),
-                          label: '音乐库',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.favorite_border_rounded),
-                          selectedIcon: Icon(Icons.favorite_rounded),
-                          label: '我喜欢',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.settings_outlined),
-                          selectedIcon: Icon(Icons.settings_rounded),
-                          label: '设置',
-                        ),
-                      ],
+                    LegacyPlayerBar(
+                      state: state,
+                      compact: compactBar,
+                      comments: _comments,
+                      onComments: _toggleComments,
+                      onOpen: _openNowPlaying,
                     ),
-                ],
+                    if (!wide)
+                      NavigationBar(
+                        backgroundColor: hasBackground
+                            ? scheme.surface.withValues(alpha: 0.78)
+                            : null,
+                        selectedIndex: _section.index,
+                        onDestinationSelected: (int index) =>
+                            _select(_LegacySection.values[index]),
+                        destinations: const <NavigationDestination>[
+                          NavigationDestination(
+                            icon: Icon(Icons.home_outlined),
+                            selectedIcon: Icon(Icons.home_rounded),
+                            label: '主页',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.library_music_outlined),
+                            selectedIcon: Icon(Icons.library_music_rounded),
+                            label: '音乐库',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.favorite_border_rounded),
+                            selectedIcon: Icon(Icons.favorite_rounded),
+                            label: '我喜欢',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.settings_outlined),
+                            selectedIcon: Icon(Icons.settings_rounded),
+                            label: '设置',
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -247,7 +258,8 @@ class _LegacyShellState extends State<LegacyShell> {
                 LegacyRailItem(
                   icon: Icons.home_outlined,
                   label: '主页',
-                  selected: _section == _LegacySection.home && _playlist == null,
+                  selected:
+                      _section == _LegacySection.home && _playlist == null,
                   onTap: () => _select(_LegacySection.home),
                 ),
                 const SizedBox(height: 4),
@@ -283,9 +295,9 @@ class _LegacyShellState extends State<LegacyShell> {
                 Expanded(
                   child: Text(
                     '你的歌单',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: scheme.onSurface,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleSmall?.copyWith(color: scheme.onSurface),
                   ),
                 ),
                 if (state.signedIn)
@@ -342,9 +354,9 @@ class _LegacyShellState extends State<LegacyShell> {
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         child: Text(
           state.isGuest ? '登录后同步你的歌单' : '暂无歌单',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
       );
     }
@@ -502,6 +514,7 @@ class _LegacyShellState extends State<LegacyShell> {
       ),
     );
   }
+
   Widget _accountButton(ColorScheme scheme) {
     final String initial = state.isGuest
         ? '游'
@@ -523,7 +536,9 @@ class _LegacyShellState extends State<LegacyShell> {
           value: 'header',
           enabled: false,
           child: Text(
-            state.isGuest ? '游客模式' : '${state.user.name} · ${state.user.detail}',
+            state.isGuest
+                ? '游客模式'
+                : '${state.user.name} · ${state.user.detail}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
@@ -651,7 +666,12 @@ class _RailPlaylistState extends State<_RailPlaylist> {
           ),
           child: Row(
             children: [
-              LegacyCover(url: widget.playlist.coverUrl, size: 34, radius: 8, iconSize: 14),
+              LegacyCover(
+                url: widget.playlist.coverUrl,
+                size: 34,
+                radius: 8,
+                iconSize: 14,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(

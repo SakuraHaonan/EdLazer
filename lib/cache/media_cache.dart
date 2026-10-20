@@ -17,7 +17,12 @@ class ArtworkCache {
   final List<String> Function(String) _candidates;
   final _pending = <String, Future<Uint8List>>{};
 
-  String _key(String url) => enlargedArtworkUrl(url) ?? url;
+  /// Normalises a cover URL without rewriting its CDN resize directive.
+  ///
+  /// The previous key collapsed every rendition to the 1024 px URL, so a
+  /// 44 dp thumbnail still downloaded and decoded a 1024² JPEG. The key now
+  /// keeps the requested `param=NyN`, and the widgets decide the rendition.
+  String _key(String url) => normalizedArtworkUrl(url) ?? url;
 
   Future<Uint8List> bytes(String url) {
     final key = _key(url);

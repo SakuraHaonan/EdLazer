@@ -2,35 +2,47 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../theme/app_palette.dart';
-import '../theme/paper_widgets.dart';
+import '../theme/tokens.dart';
 import 'accessible_controls.dart';
 import 'interaction_feedback.dart';
 import 'plate_art.dart';
 
-/// The same queue content can fill a desktop pane or a compact queue sheet.
+/// The same queue content fills the desktop side panel, the floating player
+/// card and the compact bottom sheet.
 class PlaybackQueueView extends StatefulWidget {
-  const PlaybackQueueView({super.key, required this.state, this.onClose});
+  const PlaybackQueueView({
+    super.key,
+    required this.state,
+    this.onClose,
+    this.showHeader = true,
+  });
+
   final AppState state;
   final VoidCallback? onClose;
+
+  /// `false` when the host panel already draws the title and close button.
+  final bool showHeader;
+
   @override
   State<PlaybackQueueView> createState() => _PlaybackQueueViewState();
 }
 
 class _PlaybackQueueViewState extends State<PlaybackQueueView> {
   ScrollController? _scroll;
+
   double get _rowExtent =>
-      (MediaQuery.textScalerOf(context).scale(15) * 1.3 +
+      (MediaQuery.textScalerOf(context).scale(16) * 1.4 +
               MediaQuery.textScalerOf(context).scale(12) * 1.4 +
-              23)
-          .clamp(76, double.infinity);
+              22)
+          .clamp(72, double.infinity);
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _scroll ??= ScrollController(
       initialScrollOffset:
           (widget.state.queue.indexWhere(
-                    (track) => track.id == widget.state.current?.id,
+                    (Track track) => track.id == widget.state.current?.id,
                   ) -
                   2)
               .clamp(0, widget.state.queue.length) *
@@ -45,56 +57,75 @@ class _PlaybackQueueViewState extends State<PlaybackQueueView> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.state,
-    builder: (context, _) {
-      final state = widget.state;
-      return SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 8, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SectionHeading('播放队列 · ${state.queue.length} 首'),
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    return AnimatedBuilder(
+      animation: widget.state,
+      builder: (BuildContext context, _) {
+        final AppState state = widget.state;
+        return SafeArea(
+          top: false,
+          child: Column(
+            children: <Widget>[
+              if (widget.showHeader)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 10, 8),
+                  child: Row(
+                    children: <Widget>[
+                      Icon(
+                        Icons.queue_music_rounded,
+                        size: 20,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text('播放队列', style: theme.textTheme.titleMedium),
+                      ),
+                      Text(
+                        '${state.queue.length} 首',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (widget.onClose != null) ...<Widget>[
+                        const SizedBox(width: 4),
+                        AccessibleIconButton(
+                          tooltip: '关闭',
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: widget.onClose,
+                        ),
+                      ],
+                    ],
                   ),
-                  if (widget.onClose != null)
-                    AccessibleIconButton(
-                      tooltip: '关闭',
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: widget.onClose,
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                key: const PageStorageKey('playback-queue'),
-                controller: _scroll,
-                itemExtent: _rowExtent,
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                itemCount: state.queue.length,
-                itemBuilder: (context, i) => _QueueRow(
-                  track: state.queue[i],
-                  index: i,
-                  state: state,
-                  isCurrent: state.current?.id == state.queue[i].id,
-                  playing:
-                      state.playing && state.current?.id == state.queue[i].id,
-                  onTap: () => state.playTrackAt(i),
+                ),
+              Expanded(
+                child: ListView.builder(
+                  key: const PageStorageKey<String>('playback-queue'),
+                  controller: _scroll,
+                  itemExtent: _rowExtent,
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                  itemCount: state.queue.length,
+                  itemBuilder: (BuildContext context, int i) => _QueueRow(
+                    track: state.queue[i],
+                    index: i,
+                    state: state,
+                    isCurrent: state.current?.id == state.queue[i].id,
+                    playing:
+                        state.playing && state.current?.id == state.queue[i].id,
+                    onTap: () => state.playTrackAt(i),
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
-class _QueueRow extends StatelessWidget {
+class _QueueRow extends StatefulWidget {
   const _QueueRow({
     required this.track,
     required this.index,
@@ -112,80 +143,109 @@ class _QueueRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_QueueRow> createState() => _QueueRowState();
+}
+
+class _QueueRowState extends State<_QueueRow> {
+  bool _hovering = false;
+
+  @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    final bool current = widget.isCurrent;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: feedbackAction(context, onTap),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-          decoration: BoxDecoration(
-            color: isCurrent
-                ? context.colors.oatWarm.withValues(alpha: .6)
-                : context.colors.oatWarm.withValues(alpha: 0),
-            border: Border(
-              left: BorderSide(
-                color: isCurrent
-                    ? context.colors.clay
-                    : context.colors.clay.withValues(alpha: 0),
-                width: 2,
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 22,
-                child: Text(
-                  (index + 1).toString().padLeft(2, '0'),
-                  style: context.type.monoSm.copyWith(
-                    color: isCurrent
-                        ? context.colors.slateDark
-                        : context.colors.cloudMedium,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Material(
+          color: current
+              ? scheme.secondaryContainer.withValues(alpha: 0.64)
+              : _hovering
+              ? scheme.onSurface.withValues(alpha: 0.05)
+              : Colors.transparent,
+          borderRadius: AppShape.mdRadius,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: feedbackAction(context, widget.onTap),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+              child: Row(
+                children: <Widget>[
+                  SizedBox(
+                    width: 24,
+                    child: current && widget.playing
+                        ? _PlayingBars(state: widget.state)
+                        : Text(
+                            '${widget.index + 1}'.padLeft(2, '0'),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: current
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant,
+                              fontFeatures: const <FontFeature>[
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
                   ),
-                ),
-              ),
-              SizedBox.square(
-                dimension: 48,
-                child: PlateArt(
-                  seed: track.coverSeed,
-                  coverUrl: track.coverUrl,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.type.body.copyWith(
-                        fontSize: 15,
-                        height: 1.3,
-                        fontWeight: isCurrent
-                            ? FontWeight.w600
-                            : FontWeight.w400,
+                  const SizedBox(width: 8),
+                  ClipRRect(
+                    borderRadius: AppShape.smRadius,
+                    child: SizedBox.square(
+                      dimension: 44,
+                      child: PlateArt(
+                        seed: widget.track.coverSeed,
+                        coverUrl: widget.track.coverUrl,
+                        size: 44,
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      track.artist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.type.captionMuted,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Text(
+                          widget.track.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: current
+                                ? scheme.onSecondaryContainer
+                                : scheme.onSurface,
+                            fontWeight: current
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.track.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    fmt(widget.track.duration),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontFeatures: const <FontFeature>[
+                        FontFeature.tabularFigures(),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              if (playing)
-                _PlayingBars(state: state)
-              else
-                Text(fmt(track.duration), style: context.type.monoSm),
-            ],
+            ),
           ),
         ),
       ),
@@ -193,16 +253,12 @@ class _QueueRow extends StatelessWidget {
   }
 }
 
-/// Three tiny animated bars marking the active track — a spare line indicator
-/// in the warm-neutral family, not a color accent.
+/// Three tiny animated bars marking the active track.
 ///
 /// Driven by the discrete 100 ms tick lane instead of a repeating
-/// AnimationController: the old 900 ms `repeat(reverse: true)` kept the UI
-/// isolate never-idle at 60 fps while playing, and — on Windows, where an
-/// accessibility client forces per-frame AXTree syncs on the platform
-/// thread — that starved the message pump and read as a UI freeze.
-/// Implicit 220 ms steps, bounded and excluded from the semantics tree,
-/// keep the living feel without the busy loop.
+/// AnimationController: a perpetual 60 fps ticker would keep the UI isolate
+/// busy for a decorative indicator. Implicit 220 ms steps keep the living feel
+/// without a busy loop.
 class _PlayingBars extends StatefulWidget {
   const _PlayingBars({required this.state});
 
@@ -240,7 +296,7 @@ class _PlayingBarsState extends State<_PlayingBars> {
     super.dispose();
   }
 
-  static final List<List<double>> _pattern = <List<double>>[
+  static const List<List<double>> _pattern = <List<double>>[
     <double>[5, 11, 8],
     <double>[9, 6, 12],
     <double>[12, 10, 5],
@@ -249,21 +305,25 @@ class _PlayingBarsState extends State<_PlayingBars> {
 
   @override
   Widget build(BuildContext context) {
-    final List<double> h = _pattern[_step];
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final List<double> heights = _pattern[_step];
     return ExcludeSemantics(
       child: RepaintBoundary(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
+          children: <Widget>[
             for (int i = 0; i < 3; i++)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOut,
                 width: 2.5,
-                height: h[i],
+                height: heights[i],
                 margin: const EdgeInsets.only(right: 2.5),
-                color: context.colors.slateDark,
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  borderRadius: const BorderRadius.all(Radius.circular(2)),
+                ),
               ),
           ],
         ),

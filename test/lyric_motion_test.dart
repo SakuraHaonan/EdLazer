@@ -6,12 +6,11 @@ import 'package:lazer_nextgen/animation/lyric_spring.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
+import 'package:lazer_nextgen/legacy/legacy_now_playing.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
 import 'package:lazer_nextgen/widgets/app_scroll_behavior.dart';
-import 'package:lazer_nextgen/screens/now_playing_page.dart';
-import 'package:lazer_nextgen/screens/playlist_detail_page.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
 
 const _track = Track(
   id: '90001',
@@ -157,7 +156,7 @@ void main() {
       state.playQueue([_track]);
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(),
+          theme: buildLegacyTheme(),
           home: Scaffold(body: LyricViewport(state: state)),
         ),
       );
@@ -202,17 +201,23 @@ void main() {
       state.playQueue([_track]);
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(),
-          home: NowPlayingPage(state: state),
+          theme: buildLegacyTheme(),
+          // The album backdrop flows forever; freeze it so the page settles.
+          builder: (BuildContext context, Widget? child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: LegacyNowPlayingPage(state: state),
         ),
       );
       await tester.pumpAndSettle();
+      final cover = find.byKey(const ValueKey('legacy-now-playing-cover'));
       for (var i = 0; i < 6; i++) {
-        await tester.tap(find.byTooltip('歌词'));
+        await tester.tap(cover);
         await tester.pump(const Duration(milliseconds: 80));
       }
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('歌词'));
+      await tester.tap(cover);
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(milliseconds: 500));
@@ -284,36 +289,5 @@ void main() {
       .98,
       reason: 'changing the preference updates an already-mounted scroll view',
     );
-  });
-  testWidgets('playlist floating button locates a distant current song', (
-    tester,
-  ) async {
-    final catalog = _Catalog();
-    final state = AppState(catalog: catalog);
-    addTearDown(state.dispose);
-    state.playQueue([catalog.tracks[75]]);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(),
-        scrollBehavior: const AppScrollBehavior(),
-        home: Scaffold(
-          body: PlaylistDetailView(
-            state: state,
-            playlist: const Playlist(
-              id: '10',
-              name: '定位测试',
-              trackIds: [],
-              coverSeed: 1,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('歌曲 76'), findsNothing);
-    await tester.tap(find.byTooltip('定位正在播放的歌曲'));
-    await tester.pumpAndSettle();
-    expect(find.text('歌曲 76'), findsOneWidget);
-    expect(tester.takeException(), isNull);
   });
 }

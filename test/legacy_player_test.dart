@@ -109,10 +109,7 @@ void main() {
     addTearDown(restarted.dispose);
     await restarted.bootstrap();
     expect(restarted.legacyPalette, LegacyPaletteMode.nowPlaying);
-    expect(
-      LegacyPaletteModeLabels.parse('nope'),
-      LegacyPaletteMode.fixed,
-    );
+    expect(LegacyPaletteModeLabels.parse('nope'), LegacyPaletteMode.fixed);
   });
 
   testWidgets('the legacy player bar fits its 84 dp rule', (tester) async {
@@ -154,7 +151,7 @@ void main() {
     expect(find.text('巴别塔'), findsOneWidget);
     expect(find.text('拙いペースを守る 守る'), findsOneWidget);
     expect(find.text('谨慎地遵守着步调'), findsOneWidget);
-    expect(find.byType(LegacyThinSeekBar), findsWidgets);
+    expect(find.byKey(const ValueKey('desktop-seek-bar')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // The third line sits at 12 s; tapping it seeks the transport there.

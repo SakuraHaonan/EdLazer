@@ -12,12 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'audio/audio_engine.dart';
 import 'audio/system_media_handler.dart';
 import 'audio/playback_session.dart';
+import 'diagnostics/frame_stats.dart';
 import 'legacy/legacy_shell.dart';
 import 'legacy/legacy_theme.dart';
-import 'screens/player_page.dart';
 import 'state/app_state.dart';
 import 'state/ui_preferences.dart';
-import 'theme/app_theme.dart';
 import 'widgets/window_frame.dart';
 import 'widgets/interaction_feedback.dart';
 import 'widgets/app_scroll_behavior.dart';
@@ -141,25 +140,19 @@ class _LazerAppState extends State<LazerApp> {
 
   @override
   Widget build(BuildContext context) {
-    final bool legacy = _state.uiStyle == AppUiStyle.legacy;
-    // The legacy 配色 setting can seed the whole scheme from the current cover.
-    final Color? seed =
-        legacy && _state.legacyPalette == LegacyPaletteMode.nowPlaying
+    // The 配色 setting can seed the whole scheme from the current cover.
+    final Color? seed = _state.legacyPalette == LegacyPaletteMode.nowPlaying
         ? _state.legacySeed
         : null;
-    // WindowFrame is a pass-through off desktop: the system frame (and the
-    // plain MaterialApp) stays exactly as it was.
     return InteractionFeedback(
       state: _state,
       child: MaterialApp(
         title: 'Lazer · Field Player',
         debugShowCheckedModeBanner: false,
-        // Legacy UI is the Material 3 shell ported from the Lazer project, so
-        // it brings its own palette and type ramp instead of the paper theme.
-        theme: legacy ? buildLegacyTheme(seed: seed) : buildAppTheme(),
-        darkTheme: legacy
-            ? buildLegacyTheme(brightness: Brightness.dark, seed: seed)
-            : buildAppTheme(brightness: Brightness.dark),
+        // The app is the Material 3 shell ported from the Lazer project, so
+        // it brings its own palette and type ramp.
+        theme: buildLegacyTheme(seed: seed),
+        darkTheme: buildLegacyTheme(brightness: Brightness.dark, seed: seed),
         themeMode: _state.themeMode,
         locale: _state.language.locale,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -178,11 +171,17 @@ class _LazerAppState extends State<LazerApp> {
         // The whole interface — custom title bar included — is drawn at the
         // resolved DPI scale, so the window frame and the pages agree. The car
         // profile additionally rooms out the framework's own tap targets.
-        builder: (context, child) => UiScaling(
-          state: _state,
-          child: CarMetrics(
-            child: WindowFrame(legacy: legacy, child: child!),
-          ),
+        // WindowFrame is a pass-through off desktop: the system frame (and the
+        // plain MaterialApp) stays as it was there.
+        builder: (context, child) => Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            UiScaling(
+              state: _state,
+              child: CarMetrics(child: WindowFrame(child: child!)),
+            ),
+            if (_state.showFrameStats) const FrameStatsOverlay(),
+          ],
         ),
         // Structural rebuilds only: `setState` fires on sign-in/out, never on
         // the 100 ms position ticks (leaf transport widgets consume those).
@@ -191,11 +190,8 @@ class _LazerAppState extends State<LazerApp> {
         // overlap can leave AX nodes pending after the old page is detached.
         // The shell is always home: the guest session boots straight into
         // it, and sign-in happens in a popup card that closes over this —
-        // no gate, no home swap to churn the accessibility tree. The legacy
-        // style swaps the whole shell for the Lazer-ported one.
-        home: legacy
-            ? LegacyShell(key: const ValueKey('legacy'), state: _state)
-            : PlayerPage(key: const ValueKey('player'), state: _state),
+        // no gate, no home swap to churn the accessibility tree.
+        home: LegacyShell(key: const ValueKey('legacy'), state: _state),
       ),
     );
   }

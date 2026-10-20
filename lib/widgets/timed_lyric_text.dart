@@ -2,10 +2,20 @@
 // Adapted lyric animation; reference: README.md. License: licenses/lyric_animation/AGPL-3.0.txt.
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
 import '../animation/lyric_word_motion.dart';
 import '../data/lyrics.dart';
 
+/// Word-timed lyric line.
+///
+/// Painting is deliberately batched: the base line is painted once, every fully
+/// sung word is painted once through a glyph clip, and only the one word the
+/// playhead is currently crossing needs per-glyph mask layers. The previous
+/// implementation repainted the whole line and allocated a layer for *every*
+/// glyph, which made a 20-character line cost ~20 save layers per frame — fine
+/// at 60 fps on a desktop GPU, not fine inside a 120 fps budget.
 class TimedLyricText extends StatefulWidget {
   const TimedLyricText({
     super.key,
@@ -14,14 +24,14 @@ class TimedLyricText extends StatefulWidget {
     required this.active,
     required this.position,
     required this.repaint,
-    this.emphasis,
   });
+
   final LyricLine line;
   final TextStyle style;
   final bool active;
   final Duration Function() position;
   final Listenable repaint;
-  final double Function()? emphasis;
+
   @override
   State<TimedLyricText> createState() => _TimedLyricTextState();
 }
@@ -29,6 +39,7 @@ class TimedLyricText extends StatefulWidget {
 class _TimedLyricTextState extends State<TimedLyricText> {
   _WordLayout? _layout;
   Object? _layoutKey;
+
   @override
   void dispose() {
     _layout?.dispose();
@@ -38,10 +49,16 @@ class _TimedLyricTextState extends State<TimedLyricText> {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
-      builder: (context, box) {
-        final scaler = MediaQuery.textScalerOf(context);
-        final locale = Localizations.maybeLocaleOf(context);
-        final key = (widget.line, widget.style, box.maxWidth, scaler, locale);
+      builder: (BuildContext context, BoxConstraints box) {
+        final TextScaler scaler = MediaQuery.textScalerOf(context);
+        final Locale? locale = Localizations.maybeLocaleOf(context);
+        final Object key = (
+          widget.line,
+          widget.style,
+          box.maxWidth,
+          scaler,
+          locale,
+        );
         if (_layoutKey != key) {
           _layout?.dispose();
           _layout = _WordLayout(
@@ -61,7 +78,7 @@ class _TimedLyricTextState extends State<TimedLyricText> {
               painter: _WordPainter(
                 layout: _layout!,
                 position: widget.position,
-                emphasis: widget.emphasis ?? () => widget.active ? 1.0 : 0.0,
+                active: widget.active,
                 repaint: widget.repaint,
               ),
             ),
@@ -72,23 +89,46 @@ class _TimedLyricTextState extends State<TimedLyricText> {
   }
 }
 
-class _Segment {
-  const _Segment(
-    this.character,
-    this.count,
-    this.rect,
-    this.wordLeft,
-    this.consumed,
-    this.totalWidth,
-    this.startMs,
-    this.durationMs,
-    this.emphasized,
-    this.last,
-  );
-  final int character, count;
+class _Glyph {
+  const _Glyph({
+    required this.character,
+    required this.rect,
+    required this.clip,
+    required this.start,
+    required this.end,
+  });
+
+  /// Index of the character inside its word.
+  final int character;
   final Rect rect;
-  final double wordLeft, consumed, totalWidth, startMs, durationMs;
-  final bool emphasized, last;
+  final Rect clip;
+
+  /// Horizontal span inside the word's own (possibly wrapped) flow.
+  final double start;
+  final double end;
+}
+
+class _WordGlyphs {
+  _WordGlyphs({
+    required this.word,
+    required this.glyphs,
+    required this.path,
+    required this.bounds,
+    required this.totalWidth,
+    required this.emphasized,
+    required this.last,
+  });
+
+  final LyricWord word;
+  final List<_Glyph> glyphs;
+  final Path path;
+  final Rect bounds;
+  final double totalWidth;
+  final bool emphasized;
+  final bool last;
+
+  double get startMs => word.start.inMicroseconds / 1000;
+  double get durationMs => word.duration.inMicroseconds / 1000;
 }
 
 class _WordLayout {
@@ -119,73 +159,83 @@ class _WordLayout {
     fontSize = scaler.scale(style.fontSize ?? 22);
     var offset = 0;
     for (var wi = 0; wi < line.words.length; wi++) {
-      final word = line.words[wi];
-      final rects = bright
+      final LyricWord word = line.words[wi];
+      final int wordStart = offset;
+      final int wordEnd = offset + word.text.length;
+      final List<Rect> rects = bright
           .getBoxesForSelection(
-            TextSelection(
-              baseOffset: offset,
-              extentOffset: offset + word.text.length,
-            ),
+            TextSelection(baseOffset: wordStart, extentOffset: wordEnd),
           )
-          .map((box) => box.toRect())
+          .map((TextBox box) => box.toRect())
           .toList();
-      final totalWidth = rects.fold<double>(0, (sum, rect) => sum + rect.width);
-      final chars = word.text.characters.toList();
-      final trimmedLength = word.text.trim().characters.length;
-      final emphasized =
+      final double totalWidth = rects.fold<double>(
+        0,
+        (double sum, Rect rect) => sum + rect.width,
+      );
+      final int trimmedLength = word.text.trim().characters.length;
+      final bool emphasized =
           word.duration >= const Duration(milliseconds: 1000) &&
           (_WordPainter.cjk.hasMatch(word.text) ||
               trimmedLength > 1 && trimmedLength <= 7);
-      for (var ci = 0; ci < chars.length; ci++) {
-        final end = offset + chars[ci].length;
-        for (final box in bright.getBoxesForSelection(
-          TextSelection(baseOffset: offset, extentOffset: end),
-        )) {
-          if (box.right > box.left) {
-            final rect = box.toRect();
-            final glyphClip = Rect.fromLTRB(
-              rect.left,
-              rect.top - fontSize * .15,
-              rect.right,
-              rect.bottom + fontSize * .15,
-            );
-            baseClip.addRect(glyphClip);
-            var consumed = 0.0;
-            var wordLeft = rect.left;
-            for (final part in rects) {
-              if ((part.top - rect.top).abs() < 1 &&
-                  rect.left >= part.left - 1 &&
-                  rect.right <= part.right + 1) {
-                wordLeft = part.left;
-                break;
-              }
-              consumed += part.width;
-            }
-            segments.add(
-              _Segment(
-                ci,
-                chars.length,
-                rect,
-                wordLeft,
-                consumed,
-                totalWidth,
-                word.start.inMicroseconds / 1000,
-                word.duration.inMicroseconds / 1000,
-                emphasized,
-                wi == line.words.length - 1,
-              ),
-            );
-          }
+      final List<_Glyph> glyphs = <_Glyph>[];
+      final Path wordPath = Path();
+      var consumed = 0.0;
+      var charIndex = 0;
+      offset = wordStart;
+      for (final String character in word.text.characters) {
+        final int end = offset + character.length;
+        for (final Rect rect
+            in bright
+                .getBoxesForSelection(
+                  TextSelection(baseOffset: offset, extentOffset: end),
+                )
+                .map((TextBox box) => box.toRect())) {
+          if (rect.right <= rect.left || rect.height <= 0) continue;
+          final Rect clip = Rect.fromLTRB(
+            rect.left,
+            rect.top - fontSize * .15,
+            rect.right,
+            rect.bottom + fontSize * .15,
+          );
+          baseClip.addRect(clip);
+          wordPath.addRect(clip);
+          glyphs.add(
+            _Glyph(
+              character: charIndex,
+              rect: rect,
+              clip: clip,
+              start: consumed,
+              end: consumed + rect.width,
+            ),
+          );
+          consumed += rect.width;
         }
         offset = end;
+        charIndex++;
       }
+      if (glyphs.isEmpty) continue;
+      words.add(
+        _WordGlyphs(
+          word: word,
+          glyphs: glyphs,
+          path: wordPath,
+          bounds: wordPath.getBounds(),
+          totalWidth: totalWidth <= 0 ? consumed : totalWidth,
+          emphasized: emphasized,
+          last: wi == line.words.length - 1,
+        ),
+      );
+      offset = wordEnd;
     }
   }
+
   final LyricLine line;
-  late final TextPainter bright, dim;
+  late final TextPainter bright;
+  late final TextPainter dim;
   late final double fontSize;
-  final List<_Segment> segments = [];
   final Path baseClip = Path();
+  final List<_WordGlyphs> words = <_WordGlyphs>[];
+
   void dispose() {
     bright.dispose();
     dim.dispose();
@@ -196,110 +246,150 @@ class _WordPainter extends CustomPainter {
   _WordPainter({
     required this.layout,
     required this.position,
-    required this.emphasis,
+    required this.active,
     required Listenable repaint,
   }) : super(repaint: repaint);
+
   final _WordLayout layout;
   final Duration Function() position;
-  final double Function() emphasis;
-  static final cjk = RegExp(r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]');
+  final bool active;
+
+  static final RegExp cjk = RegExp(
+    r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]',
+  );
+
+  static final Paint _maskPaint = Paint()..blendMode = BlendMode.dstIn;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final focus = emphasis().clamp(0.0, 1.0);
-    if (focus < 1) {
-      canvas.saveLayer(
-        null,
-        Paint()..color = Colors.white.withValues(alpha: 1 - focus),
-      );
+    // Inactive lines are painted as one clipped paragraph: no per-frame work,
+    // no layers, and the row's ColorFilter still animates its emphasis.
+    if (!active) {
+      canvas.save();
+      canvas.clipPath(layout.baseClip);
       layout.bright.paint(canvas, Offset.zero);
       canvas.restore();
+      return;
     }
-    if (focus <= 0) return;
-    // Retain the word painter while the row exits; fade its emphasis using
-    // the same spring as the row's scale and color instead of swapping to Text.
-    canvas.saveLayer(
-      null,
-      Paint()..color = Colors.white.withValues(alpha: focus),
-    );
-    final now = position().inMicroseconds / 1000;
-    // Each clipped glyph used to repaint the entire dim lyric line. Paint the
-    // same base once, then retain the existing per-glyph highlight effects.
+
+    final double nowMs = position().inMicroseconds / 1000.0;
+
+    // Intro: the first line is focused but no word has started yet. Show the
+    // whole line at full brightness rather than its unsung 28% base.
+    if (layout.words.isEmpty || nowMs < layout.words.first.startMs) {
+      canvas.save();
+      canvas.clipPath(layout.baseClip);
+      layout.bright.paint(canvas, Offset.zero);
+      canvas.restore();
+      return;
+    }
+
+    // Unsung text sits under the highlight at 28% opacity.
     canvas.save();
     canvas.clipPath(layout.baseClip);
     layout.dim.paint(canvas, Offset.zero);
     canvas.restore();
-    for (final segment in layout.segments) {
-      final elapsed = now - segment.startMs;
-      final duration = segment.durationMs;
-      final motion = segment.emphasized
+
+    final Path sung = Path();
+    _WordGlyphs? crossing;
+    for (final _WordGlyphs word in layout.words) {
+      final double elapsed = nowMs - word.startMs;
+      if (elapsed < word.durationMs) {
+        if (elapsed > 0) crossing = word;
+        break;
+      }
+      sung.addPath(word.path, Offset.zero);
+    }
+
+    if (sung.getBounds().isEmpty == false) {
+      canvas.save();
+      canvas.clipPath(sung);
+      layout.bright.paint(canvas, Offset.zero);
+      canvas.restore();
+    }
+    if (crossing != null) _paintWord(canvas, crossing, nowMs);
+  }
+
+  void _paintWord(Canvas canvas, _WordGlyphs word, double nowMs) {
+    final double elapsed = nowMs - word.startMs;
+    final double duration = math.max(1, word.durationMs);
+    final double boundary =
+        (elapsed / duration).clamp(0.0, 1.0) * word.totalWidth;
+    final double fade = math.max(1.0, word.glyphs.first.rect.height * .5);
+
+    for (final _Glyph glyph in word.glyphs) {
+      if (glyph.start >= boundary) break;
+      final bool completed = glyph.end <= boundary;
+      // A glyph keeps its pop for a short beat after the mask crosses it, then
+      // settles. Only running glyphs need the transform path.
+      final double glyphEndMs =
+          word.startMs + duration * (glyph.end / math.max(1, word.totalWidth));
+      final bool settling = !completed || nowMs - glyphEndMs < 420;
+      final LyricWordMotion motion = word.emphasized
           ? LyricWordMotion.emphasized(
               elapsed,
               duration,
-              segment.character,
-              segment.count,
-              last: segment.last,
+              glyph.character,
+              word.word.text.characters.length,
+              last: word.last,
             )
           : LyricWordMotion.ordinary(elapsed, duration);
-      final rect = segment.rect;
-      final boundary =
-          segment.wordLeft +
-          LyricWordMotion.maskBoundary(elapsed, duration, segment.totalWidth) -
-          segment.consumed;
-      final fade = math.max(1.0, rect.height * .5);
+      final bool transform =
+          settling && (motion.scale != 1 || motion.xEm != 0 || motion.yEm != 0);
+      final bool glow = settling && motion.glow > .001;
+
       canvas.save();
-      canvas.translate(
-        motion.xEm * layout.fontSize * focus,
-        motion.yEm * layout.fontSize * focus,
-      );
-      canvas.translate(rect.center.dx, rect.center.dy);
-      canvas.scale(1 + (motion.scale - 1) * focus);
-      canvas.translate(-rect.center.dx, -rect.center.dy);
-      final clip = Rect.fromLTRB(
-        rect.left,
-        rect.top - layout.fontSize * .15,
-        rect.right,
-        rect.bottom + layout.fontSize * .15,
-      );
-      canvas.clipRect(clip);
-      if (boundary + fade / 2 >= rect.left) {
-        canvas.saveLayer(clip, Paint());
-        if (motion.glow > .001) {
-          canvas.saveLayer(
-            clip,
-            Paint()
-              ..imageFilter = ui.ImageFilter.blur(
-                sigmaX: motion.glowRadiusEm * layout.fontSize,
-                sigmaY: motion.glowRadiusEm * layout.fontSize,
-              )
-              ..colorFilter = ColorFilter.mode(
-                Colors.white.withValues(alpha: motion.glow),
-                BlendMode.srcIn,
-              ),
-          );
-          layout.bright.paint(canvas, Offset.zero);
-          canvas.restore();
-        }
+      if (transform) {
+        final Rect rect = glyph.rect;
+        canvas.translate(
+          motion.xEm * layout.fontSize,
+          motion.yEm * layout.fontSize,
+        );
+        canvas.translate(rect.center.dx, rect.center.dy);
+        canvas.scale(motion.scale);
+        canvas.translate(-rect.center.dx, -rect.center.dy);
+      }
+      canvas.clipRect(glyph.clip);
+      if (glow) {
+        canvas.saveLayer(
+          glyph.clip,
+          Paint()
+            ..imageFilter = ui.ImageFilter.blur(
+              sigmaX: motion.glowRadiusEm * layout.fontSize,
+              sigmaY: motion.glowRadiusEm * layout.fontSize,
+            )
+            ..colorFilter = ColorFilter.mode(
+              Colors.white.withValues(alpha: motion.glow),
+              BlendMode.srcIn,
+            ),
+        );
+        layout.bright.paint(canvas, Offset.zero);
+        canvas.restore();
+      }
+      if (completed) {
+        layout.bright.paint(canvas, Offset.zero);
+      } else {
+        final double boundaryX = glyph.rect.left + (boundary - glyph.start);
+        canvas.saveLayer(glyph.clip, Paint());
         layout.bright.paint(canvas, Offset.zero);
         canvas.drawRect(
-          clip,
-          Paint()
-            ..blendMode = BlendMode.dstIn
+          glyph.clip,
+          _maskPaint
             ..shader = ui.Gradient.linear(
-              Offset(boundary - fade / 2, 0),
-              Offset(boundary + fade / 2, 0),
-              [Colors.white, Colors.transparent],
+              Offset(boundaryX - fade, 0),
+              Offset(boundaryX + fade, 0),
+              <Color>[Colors.white, Colors.transparent],
             ),
         );
         canvas.restore();
       }
       canvas.restore();
     }
-    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _WordPainter oldDelegate) =>
       oldDelegate.layout != layout ||
       oldDelegate.position != position ||
-      oldDelegate.emphasis != emphasis;
+      oldDelegate.active != active;
 }

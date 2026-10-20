@@ -5,9 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/screens/login_page.dart';
+import 'package:lazer_nextgen/legacy/legacy_login.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
 
 const String _scanUrl = 'https://music.163.com/login?codekey=fixture-key';
 
@@ -181,12 +181,12 @@ void main() {
       AnimatedBuilder(
         animation: state,
         builder: (BuildContext context, _) => MaterialApp(
-          theme: buildAppTheme(),
+          theme: buildLegacyTheme(),
           home: Builder(
             builder: (BuildContext context) => Scaffold(
               body: Center(
                 child: TextButton(
-                  onPressed: () => showLoginDialog(context, state),
+                  onPressed: () => showLegacyLoginDialog(context, state),
                   child: const Text('open'),
                 ),
               ),
@@ -199,7 +199,9 @@ void main() {
     await tester.pump();
     await tester.pump();
     // First poll answered "waiting": the card stays up with the QR code.
-    expect(find.byType(LoginPage), findsOneWidget);
+    // The dialog class is private to the legacy shell, so the cookie escape
+    // hatch it always renders stands in for the widget type.
+    expect(find.text('使用 Cookie 登录'), findsOneWidget);
     expect(state.signedIn, isFalse);
 
     // Second poll reports the confirmation.
@@ -207,7 +209,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(state.signedIn, isTrue);
-    expect(find.byType(LoginPage), findsNothing);
+    expect(find.text('使用 Cookie 登录'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

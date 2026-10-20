@@ -22,20 +22,39 @@ void main() {
     ]);
   });
 
+  test('artwork requests the smallest rendition for the painted size', () {
+    expect(artworkPixelSize(44, 1), 64);
+    expect(artworkPixelSize(44, 2), 96);
+    expect(artworkPixelSize(160, 1.25), 256);
+    expect(artworkPixelSize(null, 1), 1024);
+    expect(artworkPixelSize(2000, 1), 1024);
+    expect(
+      artworkUrlForSize(cover, logicalEdge: 44, devicePixelRatio: 2),
+      'https://p1.music.126.net/Xgxfl8qPlwjRIoBDI-cPrg==/109951173819308049.jpg?param=96y96',
+    );
+  });
+
   testWidgets(
     'artwork failure keeps one provider and changing cover updates its cache key',
     (tester) async {
+      final double dpr = tester.view.devicePixelRatio;
       Future<void> render(String url) => tester.pumpWidget(
         MaterialApp(
           home: SizedBox(
             width: 100,
             height: 100,
-            child: PlateArt(seed: 1, coverUrl: url),
+            child: PlateArt(seed: 1, coverUrl: url, size: 44),
           ),
         ),
       );
       await render(cover);
       final image = tester.widget<Image>(find.byType(Image));
+      final String sizedCover = artworkUrlForSize(
+        cover,
+        logicalEdge: 44,
+        devicePixelRatio: dpr,
+      )!;
+      expect((image.image as ArtworkImage).url, sizedCover);
       image.errorBuilder!(
         tester.element(find.byType(Image)),
         NetworkImageLoadException(statusCode: 403, uri: Uri.parse(cover)),
@@ -47,12 +66,12 @@ void main() {
           tester.widget<Image>(find.byType(Image)).image as ArtworkImage;
       // CDN fallback is now handled once in the shared cache, rather than
       // restarting the same candidate sequence separately in each widget.
-      expect(retried.url, cover);
+      expect(retried.url, sizedCover);
       const next = 'https://p1.music.126.net/another/123.jpg';
       await render(next);
       expect(
         (tester.widget<Image>(find.byType(Image)).image as ArtworkImage).url,
-        enlargedArtworkUrl(next),
+        artworkUrlForSize(next, logicalEdge: 44, devicePixelRatio: dpr),
       );
     },
   );

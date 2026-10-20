@@ -9,7 +9,7 @@ import 'package:flutter/rendering.dart';
 import '../data/lyrics.dart';
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
-import '../theme/app_palette.dart';
+import '../theme/tokens.dart';
 import '../utils/artwork.dart';
 import '../utils/cover_save.dart';
 import 'accessible_controls.dart';
@@ -26,11 +26,12 @@ Future<void> showLyricImageDialog(
     from: context,
     to: Navigator.of(context, rootNavigator: true).context,
   );
+  final bool dark = Theme.of(context).brightness == Brightness.dark;
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
     barrierLabel: context.tr('关闭'),
-    barrierColor: Colors.black.withValues(alpha: context.colors.dark ? .6 : .3),
+    barrierColor: Colors.black.withValues(alpha: dark ? .62 : .32),
     transitionDuration: MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 300),
@@ -151,184 +152,195 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
     }
   }
 
-  Widget _preview() => AnimatedSwitcher(
-    duration: _motion,
-    switchInCurve: Curves.easeOutCubic,
-    switchOutCurve: Curves.easeInCubic,
-    transitionBuilder: (child, animation) => FadeTransition(
-      opacity: animation,
-      child: SlideTransition(
-        position: Tween(
-          begin: const Offset(0, .025),
-          end: Offset.zero,
-        ).animate(animation),
-        child: child,
-      ),
-    ),
-    layoutBuilder: (current, previous) => Stack(
-      fit: StackFit.expand,
-      children: [
-        for (final old in previous)
-          ExcludeSemantics(child: IgnorePointer(child: old)),
-        ?current,
-      ],
-    ),
-    child: _loading
-        ? Center(
-            key: const ValueKey('lyric-image-loading'),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.image_outlined,
-                    size: 40,
-                    color: context.colors.cloudMedium,
-                  ),
-                  const SizedBox(height: 20),
-                  const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(height: 12),
-                  TrText('正在加载封面…', style: context.type.captionMuted),
-                ],
-              ),
-            ),
-          )
-        : Scrollbar(
-            key: const ValueKey('lyric-image-preview'),
-            controller: _previewScroll,
-            thumbVisibility: true,
-            thickness: 3,
-            radius: Radius.zero,
-            child: SingleChildScrollView(
-              controller: _previewScroll,
-              padding: const EdgeInsets.all(12),
-              child: SizedBox(
-                width: double.infinity,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.topCenter,
-                  child: RepaintBoundary(
-                    key: _imageKey,
-                    child: LyricImageCard(
-                      track: widget.track,
-                      lines: widget.lines,
-                      artwork: _artwork,
-                    ),
-                  ),
-                ),
-              ),
+  Widget _preview() {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    return AnimatedSwitcher(
+      duration: _motion,
+      switchInCurve: AppMotion.emphasizedDecelerate,
+      switchOutCurve: AppMotion.emphasizedAccelerate,
+      transitionBuilder: (Widget child, Animation<double> animation) =>
+          FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, .025),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
             ),
           ),
-  );
-
-  Widget _status() => AnimatedSwitcher(
-    duration: _motion,
-    switchInCurve: Curves.easeOutCubic,
-    switchOutCurve: Curves.easeInCubic,
-    transitionBuilder: (child, animation) => SizeTransition(
-      sizeFactor: animation,
-      alignment: Alignment.topCenter,
-      child: FadeTransition(opacity: animation, child: child),
-    ),
-    child: _error == null && !_saved
-        ? const SizedBox.shrink(key: ValueKey('lyric-image-status-empty'))
-        : Padding(
-            key: ValueKey(_error ?? 'saved'),
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Semantics(
-              liveRegion: true,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    _error == null
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.error_outline_rounded,
-                    size: 18,
-                    color: context.colors.clayDeep,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TrText(
-                      _error ?? '歌词图片已保存',
-                      style: context.type.caption.copyWith(
-                        color: context.colors.clayDeep,
+      layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          for (final Widget old in previous)
+            ExcludeSemantics(child: IgnorePointer(child: old)),
+          ?current,
+        ],
+      ),
+      child: _loading
+          ? Center(
+              key: const ValueKey<String>('lyric-image-loading'),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.image_outlined,
+                      size: 40,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 20),
+                    const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '正在加载封面…',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : Scrollbar(
+              key: const ValueKey<String>('lyric-image-preview'),
+              controller: _previewScroll,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _previewScroll,
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: RepaintBoundary(
+                      key: _imageKey,
+                      child: LyricImageCard(
+                        track: widget.track,
+                        lines: widget.lines,
+                        artwork: _artwork,
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-  );
-
-  Widget _header() => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
-    child: Row(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          color: context.colors.clay.withValues(alpha: .12),
-          child: Icon(
-            Icons.image_outlined,
-            size: 22,
-            color: context.colors.clayDeep,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TrText(
-                '生成歌词图片',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: context.type.subheading.copyWith(
-                  fontSize: 20,
-                  height: 1.25,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                widget.track.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.type.captionMuted,
+            ),
+    );
+  }
+
+  Widget _status() {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    final Color tone = _error == null ? scheme.primary : scheme.error;
+    return AnimatedSwitcher(
+      duration: _motion,
+      switchInCurve: AppMotion.emphasizedDecelerate,
+      switchOutCurve: AppMotion.emphasizedAccelerate,
+      transitionBuilder: (Widget child, Animation<double> animation) =>
+          SizeTransition(
+            sizeFactor: animation,
+            alignment: Alignment.topCenter,
+            child: FadeTransition(opacity: animation, child: child),
+          ),
+      child: _error == null && !_saved
+          ? const SizedBox.shrink(
+              key: ValueKey<String>('lyric-image-status-empty'),
+            )
+          : Padding(
+              key: ValueKey<String>(_error ?? 'saved'),
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Semantics(
+                liveRegion: true,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(
+                      _error == null
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.error_outline_rounded,
+                      size: 18,
+                      color: tone,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error ?? '歌词图片已保存',
+                        style: theme.textTheme.bodySmall?.copyWith(color: tone),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
+    );
+  }
+
+  Widget _header() {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer,
+              borderRadius: AppShape.mdRadius,
+            ),
+            child: Icon(
+              Icons.image_outlined,
+              size: 22,
+              color: scheme.onPrimaryContainer,
+            ),
           ),
-        ),
-        AccessibleIconButton(
-          tooltip: '关闭',
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          style: IconButton.styleFrom(
-            shape: const RoundedRectangleBorder(),
-            foregroundColor: context.colors.cloudDark,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  '生成歌词图片',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  widget.track.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
-          icon: const Icon(Icons.close_rounded, size: 20),
-        ),
-      ],
-    ),
-  );
+          AccessibleIconButton(
+            tooltip: '关闭',
+            onPressed: _saving ? null : () => Navigator.pop(context),
+            color: scheme.onSurfaceVariant,
+            icon: const Icon(Icons.close_rounded, size: 20),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _footer() {
     final back = TextButton(
       onPressed: _saving
           ? null
           : feedbackAction(context, () => Navigator.pop(context)),
-      style: TextButton.styleFrom(
-        shape: const RoundedRectangleBorder(),
-        foregroundColor: context.colors.cloudDark,
-        minimumSize: const Size(0, 48),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        enableFeedback: false,
-      ),
+      style: TextButton.styleFrom(enableFeedback: false),
       child: const TrText('返回选择', maxLines: 1, overflow: TextOverflow.ellipsis),
     );
     final save = _SaveImageButton(
@@ -341,16 +353,16 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        children: <Widget>[
           _status(),
           if (MediaQuery.textScalerOf(context).scale(14) > 20)
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [save, const SizedBox(height: 8), back],
+              children: <Widget>[save, const SizedBox(height: 8), back],
             )
           else
             Row(
-              children: [
+              children: <Widget>[
                 back,
                 const SizedBox(width: 12),
                 Expanded(child: save),
@@ -362,96 +374,104 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_saving,
-    child: Dialog(
-      backgroundColor: context.colors.ivoryLight,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
-        side: context.borders.hairline,
-      ),
-      clipBehavior: Clip.antiAlias,
-      insetPadding: const EdgeInsets.all(12),
-      child: SizedBox(
-        width: 520,
-        height: math.min(
-          780,
-          math.max(
-            0,
-            MediaQuery.sizeOf(context).height -
-                MediaQuery.paddingOf(context).vertical -
-                24,
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    return PopScope(
+      canPop: !_saving,
+      child: Dialog(
+        backgroundColor: scheme.surfaceContainerHigh,
+        shape: const RoundedRectangleBorder(borderRadius: AppShape.xxlRadius),
+        clipBehavior: Clip.antiAlias,
+        insetPadding: const EdgeInsets.all(12),
+        child: SizedBox(
+          width: 520,
+          height: math.min(
+            780,
+            math.max(
+              0,
+              MediaQuery.sizeOf(context).height -
+                  MediaQuery.paddingOf(context).vertical -
+                  24,
+            ),
           ),
-        ),
-        child: Column(
-          children: [
-            _header(),
-            Divider(height: 1, color: context.colors.stone),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        spacing: 12,
-                        runSpacing: 4,
-                        children: [
-                          TrText('图片预览', style: context.type.captionStrong),
-                          TrText(
-                            '已选择 ${widget.lines.length} 行',
-                            style: context.type.captionMuted,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: context.colors.ivoryMedium,
-                          border: Border.fromBorderSide(
-                            context.borders.hairline,
-                          ),
-                        ),
-                        child: ClipRect(
-                          child: ShaderMask(
-                            blendMode: BlendMode.dstIn,
-                            shaderCallback: (bounds) {
-                              final fade = math.min(
-                                .12,
-                                12 / math.max(1, bounds.height),
-                              );
-                              return LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: const [
-                                  Colors.transparent,
-                                  Colors.black,
-                                  Colors.black,
-                                  Colors.transparent,
-                                ],
-                                stops: [0, fade, 1 - fade, 1],
-                              ).createShader(bounds);
-                            },
-                            child: _preview(),
-                          ),
+          child: Column(
+            children: <Widget>[
+              _header(),
+              Divider(height: 1, color: scheme.outlineVariant),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Column(
+                    children: <Widget>[
+                      SizedBox(
+                        width: double.infinity,
+                        child: Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          spacing: 12,
+                          runSpacing: 4,
+                          children: <Widget>[
+                            Text(
+                              '图片预览',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: scheme.onSurface,
+                              ),
+                            ),
+                            Text(
+                              '已选择 ${widget.lines.length} 行',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerLow,
+                            borderRadius: AppShape.mdRadius,
+                            border: Border.all(color: scheme.outlineVariant),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: AppShape.mdRadius,
+                            child: ShaderMask(
+                              blendMode: BlendMode.dstIn,
+                              shaderCallback: (Rect bounds) {
+                                final double fade = math.min(
+                                  .12,
+                                  12 / math.max(1, bounds.height),
+                                );
+                                return LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: const <Color>[
+                                    Colors.transparent,
+                                    Colors.black,
+                                    Colors.black,
+                                    Colors.transparent,
+                                  ],
+                                  stops: <double>[0, fade, 1 - fade, 1],
+                                ).createShader(bounds);
+                              },
+                              child: _preview(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            Divider(height: 1, color: context.colors.stone),
-            _footer(),
-          ],
+              Divider(height: 1, color: scheme.outlineVariant),
+              _footer(),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   @override
   void dispose() {
@@ -480,69 +500,72 @@ class _SaveImageButtonState extends State<_SaveImageButton> {
   }
 
   @override
-  Widget build(BuildContext context) => Listener(
-    onPointerDown: widget.onPressed == null ? null : (_) => _press(true),
-    onPointerUp: (_) => _press(false),
-    onPointerCancel: (_) => _press(false),
-    child: AnimatedScale(
-      scale: _pressed ? .97 : 1,
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 140),
-      curve: Curves.easeOutCubic,
-      child: FilledButton(
-        onPressed: feedbackAction(context, widget.onPressed),
-        style: FilledButton.styleFrom(
-          shape: const RoundedRectangleBorder(),
-          backgroundColor: widget.saved
-              ? context.colors.slateDark
-              : context.colors.clay,
-          foregroundColor: widget.saved ? context.colors.onInk : Colors.white,
-          disabledBackgroundColor: context.colors.oatWarm,
-          disabledForegroundColor: context.colors.cloudDark,
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          enableFeedback: false,
-        ),
-        child: AnimatedSwitcher(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 180),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
-          child: Row(
-            key: ValueKey((widget.saving, widget.saved)),
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              widget.saving
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      widget.saved
-                          ? Icons.check_rounded
-                          : Icons.save_alt_rounded,
-                      size: 18,
-                    ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: TrText(
-                  widget.saving
-                      ? '正在保存…'
-                      : widget.saved
-                      ? '再次保存'
-                      : '保存图片',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    return Listener(
+      onPointerDown: widget.onPressed == null ? null : (_) => _press(true),
+      onPointerUp: (_) => _press(false),
+      onPointerCancel: (_) => _press(false),
+      child: AnimatedScale(
+        scale: _pressed ? .97 : 1,
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : AppMotion.quick,
+        curve: AppMotion.emphasizedDecelerate,
+        child: FilledButton(
+          onPressed: feedbackAction(context, widget.onPressed),
+          style: FilledButton.styleFrom(
+            backgroundColor: widget.saved
+                ? scheme.secondaryContainer
+                : scheme.primary,
+            foregroundColor: widget.saved
+                ? scheme.onSecondaryContainer
+                : scheme.onPrimary,
+            disabledBackgroundColor: scheme.surfaceContainerHighest,
+            disabledForegroundColor: scheme.onSurfaceVariant,
+            enableFeedback: false,
+          ),
+          child: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : AppMotion.quick,
+            switchInCurve: AppMotion.emphasizedDecelerate,
+            switchOutCurve: AppMotion.emphasizedAccelerate,
+            child: Row(
+              key: ValueKey<(bool, bool)>((widget.saving, widget.saved)),
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                widget.saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        widget.saved
+                            ? Icons.check_rounded
+                            : Icons.save_alt_rounded,
+                        size: 18,
+                      ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: TrText(
+                    widget.saving
+                        ? '正在保存…'
+                        : widget.saved
+                        ? '再次保存'
+                        : '保存图片',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// A fixed-width, app-painted lyric sheet in the current application palette.
@@ -558,72 +581,81 @@ class LyricImageCard extends StatelessWidget {
   final ImageProvider? artwork;
 
   @override
-  Widget build(BuildContext context) => MediaQuery.withNoTextScaling(
-    child: SizedBox(
-      width: 360,
-      child: ColoredBox(
-        color: context.colors.ivoryMedium,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 26, 18, 30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: artwork == null
-                    ? PlateArt(seed: track.coverSeed)
-                    : Image(image: artwork!, fit: BoxFit.cover),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                track.title,
-                style: context.type.heading.copyWith(
-                  fontSize: 28,
-                  height: 1.25,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                track.album,
-                style: context.type.bodySm.copyWith(
-                  color: context.colors.cloudDark,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                track.artist,
-                style: context.type.bodySm.copyWith(
-                  color: context.colors.cloudDark,
-                ),
-              ),
-              Divider(height: 20, color: context.colors.cloudDark),
-              for (var i = 0; i < lines.length; i++) ...[
-                if (i > 0) const SizedBox(height: 24),
-                Text(
-                  lines[i].text.trim(),
-                  style: context.type.body.copyWith(
-                    fontSize: 20,
-                    height: 1.5,
-                    fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    return MediaQuery.withNoTextScaling(
+      child: SizedBox(
+        width: 360,
+        child: ColoredBox(
+          color: scheme.surfaceContainerLowest,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 26, 18, 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                ClipRRect(
+                  borderRadius: AppShape.mdRadius,
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: artwork == null
+                        ? PlateArt(seed: track.coverSeed, size: 324)
+                        : Image(image: artwork!, fit: BoxFit.cover),
                   ),
                 ),
-                if (lines[i].translation?.trim().isNotEmpty ?? false) ...[
-                  const SizedBox(height: 4),
+                const SizedBox(height: 18),
+                Text(
+                  track.title,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontSize: 28,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  track.album,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  track.artist,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                Divider(height: 24, color: scheme.outlineVariant),
+                for (var i = 0; i < lines.length; i++) ...<Widget>[
+                  if (i > 0) const SizedBox(height: 24),
                   Text(
-                    lines[i].translation!.trim(),
-                    style: context.type.bodySm.copyWith(
-                      fontSize: 14,
+                    lines[i].text.trim(),
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontSize: 20,
                       height: 1.5,
-                      color: context.colors.cloudDark,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface,
                     ),
                   ),
+                  if (lines[i].translation?.trim().isNotEmpty ??
+                      false) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Text(
+                      lines[i].translation!.trim(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ],
               ],
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

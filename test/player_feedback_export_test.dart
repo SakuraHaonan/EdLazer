@@ -14,18 +14,14 @@ import 'package:lazer_nextgen/data/lyrics.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/interaction/app_haptics.dart';
-import 'package:lazer_nextgen/screens/player_page.dart';
-import 'package:lazer_nextgen/screens/now_playing_page.dart';
+import 'package:lazer_nextgen/legacy/legacy_pages.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/scrolling/scroll_motion.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/theme/app_palette.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
 import 'package:lazer_nextgen/widgets/accessible_controls.dart';
-import 'package:lazer_nextgen/widgets/animated_track_cover.dart';
 import 'package:lazer_nextgen/widgets/interaction_feedback.dart';
 import 'package:lazer_nextgen/widgets/lyric_image_dialog.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
-import 'package:lazer_nextgen/widgets/volume_control.dart';
 
 const _track = Track(
   id: 'fixture',
@@ -222,125 +218,127 @@ void main() {
     variant: TargetPlatformVariant({TargetPlatform.iOS}),
   );
 
-  testWidgets('iOS intensity is saved and switches are rendered by the app', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(),
-        home: PlayerPage(state: state),
-      ),
-    );
-    await tester.tap(find.text('设置').first);
-    await tester.pumpAndSettle();
-    final intensity = find.byWidgetPredicate(
-      (w) => w is AccessibleSlider && w.semanticLabel == '震动强度',
-    );
-    await tester.ensureVisible(intensity);
-    await tester.pumpAndSettle();
-    final slider = find.descendant(
-      of: intensity,
-      matching: find.byType(Slider),
-    );
-    await tester.drag(slider, const Offset(90, 0));
-    await tester.pumpAndSettle();
-    expect(state.hapticIntensity, greaterThan(.5));
-    expect(
-      (await SharedPreferences.getInstance()).getDouble(
-        'lazer_haptic_intensity',
-      ),
-      state.hapticIntensity,
-    );
-    expect(find.byType(CupertinoSwitch), findsNothing);
-  }, variant: TargetPlatformVariant({TargetPlatform.iOS}));
-
-  testWidgets('setting sliders click through detents and stop when disabled', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final calls = <MethodCall>[];
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      AppHaptics.channel,
-      (call) async {
-        calls.add(call);
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        AppHaptics.channel,
-        null,
-      ),
-    );
-    final state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    await tester.pumpWidget(
-      InteractionFeedback(
-        state: state,
-        child: MaterialApp(
-          theme: buildAppTheme(),
-          home: PlayerPage(state: state),
+  testWidgets(
+    'iOS intensity is saved and switches are rendered by the app',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final state = AppState(catalog: _Catalog());
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildLegacyTheme(),
+          home: Scaffold(body: LegacySettingsPage(state: state)),
         ),
-      ),
-    );
-    await tester.tap(find.text('设置').first);
-    await tester.pumpAndSettle();
-    final slider = find.byWidgetPredicate(
-      (w) => w is AccessibleSlider && w.semanticLabel == '歌词控件自动隐藏时间',
-    );
-    expect(tester.widget<AccessibleSlider>(slider).detentFeedback, isTrue);
-    await tester.ensureVisible(slider);
-    await tester.pumpAndSettle();
-    calls.clear();
-    final track = tester.getRect(
-      find.descendant(of: slider, matching: find.byType(Slider)),
-    );
-    final gesture = await tester.startGesture(
-      Offset(track.left + 300, track.center.dy),
-    );
-    await tester.pump();
-    for (var dx = 250.0; dx >= 0; dx -= 25) {
-      await gesture.moveTo(Offset(track.left + dx, track.center.dy));
+      );
+      await tester.pumpAndSettle();
+      final intensity = find.byWidgetPredicate(
+        (w) => w is AccessibleSlider && w.semanticLabel == '震动强度',
+      );
+      await tester.ensureVisible(intensity);
+      await tester.pumpAndSettle();
+      final slider = find.descendant(
+        of: intensity,
+        matching: find.byType(Slider),
+      );
+      await tester.drag(slider, const Offset(90, 0));
+      await tester.pumpAndSettle();
+      expect(state.hapticIntensity, greaterThan(.5));
+      expect(
+        (await SharedPreferences.getInstance()).getDouble(
+          'lazer_haptic_intensity',
+        ),
+        state.hapticIntensity,
+      );
+      expect(find.byType(CupertinoSwitch), findsNothing);
+    },
+    variant: TargetPlatformVariant({TargetPlatform.iOS}),
+  );
+
+  testWidgets(
+    'setting sliders click through detents and stop when disabled',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        AppHaptics.channel,
+        (call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          AppHaptics.channel,
+          null,
+        ),
+      );
+      final state = AppState(catalog: _Catalog());
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        InteractionFeedback(
+          state: state,
+          child: MaterialApp(
+            theme: buildLegacyTheme(),
+            home: Scaffold(body: LegacySettingsPage(state: state)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final slider = find.byWidgetPredicate(
+        (w) => w is AccessibleSlider && w.semanticLabel == '歌词控件自动隐藏',
+      );
+      expect(tester.widget<AccessibleSlider>(slider).detentFeedback, isTrue);
+      await tester.ensureVisible(slider);
+      await tester.pumpAndSettle();
+      calls.clear();
+      final track = tester.getRect(
+        find.descendant(of: slider, matching: find.byType(Slider)),
+      );
+      final gesture = await tester.startGesture(
+        Offset(track.left + 300, track.center.dy),
+      );
       await tester.pump();
-    }
-    await gesture.up();
-    await tester.pumpAndSettle();
-    expect(calls, isNotEmpty);
-    expect(state.lyricControlsSeconds, 1);
-    expect(
-      calls.map((call) => (call.arguments as Map)['kind']),
-      everyElement(anyOf(equals('detent'), equals('boundary'))),
-    );
-    expect(
-      calls.map((call) => (call.arguments as Map)['kind']),
-      contains('detent'),
-    );
-    expect(
-      calls.map((call) => (call.arguments as Map)['kind']),
-      contains('boundary'),
-    );
-    await state.setHapticsEnabled(false);
-    calls.clear();
-    final back = await tester.startGesture(
-      Offset(track.left + 5, track.center.dy),
-    );
-    await tester.pump();
-    for (var dx = 50.0; dx <= 300; dx += 25) {
-      await back.moveTo(Offset(track.left + dx, track.center.dy));
+      for (var dx = 250.0; dx >= 0; dx -= 25) {
+        await gesture.moveTo(Offset(track.left + dx, track.center.dy));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(calls, isNotEmpty);
+      expect(state.lyricControlsSeconds, 1);
+      expect(
+        calls.map((call) => (call.arguments as Map)['kind']),
+        everyElement(anyOf(equals('detent'), equals('boundary'))),
+      );
+      expect(
+        calls.map((call) => (call.arguments as Map)['kind']),
+        contains('detent'),
+      );
+      expect(
+        calls.map((call) => (call.arguments as Map)['kind']),
+        contains('boundary'),
+      );
+      await state.setHapticsEnabled(false);
+      calls.clear();
+      final back = await tester.startGesture(
+        Offset(track.left + 5, track.center.dy),
+      );
       await tester.pump();
-    }
-    await back.up();
-    await tester.pumpAndSettle();
-    expect(state.lyricControlsSeconds, greaterThan(1));
-    expect(calls, isEmpty);
-  }, variant: TargetPlatformVariant({TargetPlatform.iOS}));
+      for (var dx = 50.0; dx <= 300; dx += 25) {
+        await back.moveTo(Offset(track.left + dx, track.center.dy));
+        await tester.pump();
+      }
+      await back.up();
+      await tester.pumpAndSettle();
+      expect(state.lyricControlsSeconds, greaterThan(1));
+      expect(calls, isEmpty);
+    },
+    variant: TargetPlatformVariant({TargetPlatform.iOS}),
+  );
 
   test('SliderDetents quantizes by divisions and stays silent when idle', () {
     final detents = SliderDetents(min: 1, max: 10, steps: 18);
@@ -357,38 +355,29 @@ void main() {
     expect(open.update(0.01), true);
   });
 
-  testWidgets(
+  test(
     'volume changes reach the engine, survive tracks and restore the unmuted level',
-    (tester) async {
+    () async {
       final engine = _Engine();
       final state = AppState(catalog: _Catalog(), audioEngine: engine);
       addTearDown(state.dispose);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(child: VolumeControl(state: state)),
-          ),
-        ),
-      );
       await state.setVolume(.7);
-      await tester.pump();
-      await tester.drag(find.byType(Slider), const Offset(-36, 0));
-      await tester.pumpAndSettle();
+      // Dragging the bar down to .4 is what the control does on onChanged.
+      await state.setVolume(.4);
       final volume = state.volume;
       expect(volume, inExclusiveRange(0, .7));
       expect(engine.volume, volume);
       state.playQueue([_track, _next]);
-      await tester.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(engine.volume, volume);
       state.next();
-      await tester.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(
         engine.volume,
         volume,
         reason: 'setUrl reset must not restore full volume',
       );
-      await tester.tap(find.byTooltip('静音'));
-      await tester.pumpAndSettle();
+      await state.toggleMute();
       expect(engine.volume, 0);
       final restoredEngine = _Engine();
       final restored = AppState(
@@ -411,66 +400,6 @@ void main() {
   );
 
   testWidgets(
-    'covers slide right on next, left on previous and keep identity on metadata updates',
-    (tester) async {
-      Future<void> render(Track track, int direction) => tester.pumpWidget(
-        MaterialApp(
-          home: Center(
-            child: SizedBox.square(
-              dimension: 240,
-              child: AnimatedTrackCover(track: track, direction: direction),
-            ),
-          ),
-        ),
-      );
-      await render(_track, 1);
-      final origin = tester.getTopLeft(find.byType(AnimatedTrackCover)).dx;
-      await render(_next, 1);
-      expect(
-        tester.getTopLeft(find.byKey(const ValueKey('next'))).dx,
-        origin + 240,
-      );
-      await tester.pump(const Duration(milliseconds: 120));
-      expect(
-        tester.getTopLeft(find.byKey(const ValueKey('fixture'))).dx,
-        inExclusiveRange(origin, origin + 240),
-      );
-      expect(
-        tester.getTopLeft(find.byKey(const ValueKey('next'))).dx,
-        inExclusiveRange(origin, origin + 240),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('fixture')), findsNothing);
-      await render(_track, -1);
-      await tester.pump(const Duration(milliseconds: 120));
-      expect(
-        tester.getTopLeft(find.byKey(const ValueKey('next'))).dx,
-        lessThan(origin),
-      );
-      expect(
-        tester.getTopLeft(find.byKey(const ValueKey('fixture'))).dx,
-        lessThan(origin),
-      );
-      await tester.pumpAndSettle();
-      await render(
-        Track.fromJson({..._track.toJson(), 'title': 'Metadata refreshed'}),
-        -1,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(AnimatedTrackCover),
-          matching: find.byType(SlideTransition),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        tester.getTopLeft(find.byKey(const ValueKey('fixture'))).dx,
-        origin,
-      );
-    },
-  );
-
-  testWidgets(
     'plain LRC follows within 5ms and eases color with scale across a line boundary',
     (tester) async {
       final engine = _Engine();
@@ -479,7 +408,7 @@ void main() {
       state.playQueue([_track]);
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(),
+          theme: buildLegacyTheme(),
           home: Scaffold(body: LyricViewport(state: state)),
         ),
       );
@@ -570,7 +499,7 @@ void main() {
       state.playQueue([_track]);
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(brightness: Brightness.dark),
+          theme: buildLegacyTheme(brightness: Brightness.dark),
           home: Scaffold(body: LyricViewport(state: state)),
         ),
       );
@@ -596,47 +525,6 @@ void main() {
     },
   );
 
-  testWidgets(
-    'short desktop workspace keeps the volume dock visible without scrolling',
-    (tester) async {
-      tester.view.physicalSize = const Size(800, 400);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final state = AppState(catalog: _Catalog());
-      addTearDown(state.dispose);
-      state.playQueue([_track]);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildAppTheme(),
-          home: NowPlayingPage(state: state),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final title = tester.getRect(find.text(_track.title));
-      final dock = tester.getRect(
-        find.byKey(const ValueKey('now-playing-transport')),
-      );
-      expect(title.top, greaterThanOrEqualTo(0));
-      expect(title.bottom, lessThanOrEqualTo(dock.top));
-      final slider = find.descendant(
-        of: find.byType(VolumeControl),
-        matching: find.byType(Slider),
-      );
-      expect(tester.getCenter(slider).dy, lessThan(400));
-      expect(
-        find.ancestor(
-          of: find.byType(VolumeControl),
-          matching: find.byType(SingleChildScrollView),
-        ),
-        findsNothing,
-      );
-      await tester.drag(slider, const Offset(-30, 0));
-      await tester.pumpAndSettle();
-      expect(state.volume, lessThan(1));
-      expect(tester.takeException(), isNull);
-    },
-  );
-
   for (final brightness in Brightness.values) {
     testWidgets(
       'long lyric PNG includes offscreen content in ${brightness.name} theme',
@@ -654,7 +542,7 @@ void main() {
         ];
         await tester.pumpWidget(
           MaterialApp(
-            theme: buildAppTheme(brightness: brightness),
+            theme: buildLegacyTheme(brightness: brightness),
             home: Scaffold(
               body: LyricImageDialog(track: _track, lines: lines),
             ),
@@ -677,9 +565,9 @@ void main() {
           expect(frame.image.width, 1080);
           expect(frame.image.height, greaterThan(7500));
           final raw = await frame.image.toByteData();
-          final background = AppPalette(
-            brightness == Brightness.dark,
-          ).ivoryMedium;
+          final background = buildLegacyTheme(
+            brightness: brightness,
+          ).colorScheme.surfaceContainerLowest;
           final rgba = raw!.buffer.asUint8List();
           final end = rgba.length - 4;
           expect(rgba.sublist(0, 4), [

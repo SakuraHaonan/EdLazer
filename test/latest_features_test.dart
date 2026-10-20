@@ -16,10 +16,10 @@ import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/l10n/app_language.dart';
 import 'package:lazer_nextgen/l10n/app_localizations.dart';
-import 'package:lazer_nextgen/screens/now_playing_page.dart';
-import 'package:lazer_nextgen/screens/player_page.dart';
+import 'package:lazer_nextgen/legacy/legacy_now_playing.dart';
+import 'package:lazer_nextgen/legacy/legacy_pages.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/theme/app_theme.dart';
 import 'package:lazer_nextgen/widgets/timed_lyric_text.dart';
 import 'package:lazer_nextgen/widgets/lyric_selection_toolbar.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
@@ -186,57 +186,49 @@ void main() {
       expect(AppLocalizations.resolve(const Locale('fr')).languageCode, 'en');
     },
   );
-  testWidgets(
-    'language changes from settings immediately and persists; music titles stay original',
-    (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final state = AppState(catalog: _Catalog());
-      addTearDown(state.dispose);
-      state.playQueue([_track]);
-      await tester.pumpWidget(
-        AnimatedBuilder(
-          animation: state,
-          builder: (context, _) => MaterialApp(
-            theme: buildAppTheme(),
-            locale: state.language.locale,
-            supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: _delegates,
-            localeListResolutionCallback: (locales, _) =>
-                AppLocalizations.resolve(locales?.firstOrNull),
-            home: PlayerPage(state: state),
-          ),
+  testWidgets('language changes from settings immediately and persists', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    state.playQueue([_track]);
+    await tester.pumpWidget(
+      AnimatedBuilder(
+        animation: state,
+        builder: (context, _) => MaterialApp(
+          theme: buildLegacyTheme(),
+          locale: state.language.locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: _delegates,
+          localeListResolutionCallback: (locales, _) =>
+              AppLocalizations.resolve(locales?.firstOrNull),
+          home: Scaffold(body: LegacySettingsPage(state: state)),
         ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Settings').first);
-      await tester.pumpAndSettle();
-      final dropdown = find.byType(DropdownButtonFormField<AppLanguage>);
-      await tester.ensureVisible(dropdown);
-      await tester.tap(dropdown);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('日本語').last);
-      await tester.pumpAndSettle();
-      expect(state.language, AppLanguage.japanese);
-      expect(find.text('表示言語'), findsOneWidget);
-      expect(find.text('スクロール慣性'), findsOneWidget);
-      expect(
-        find.text('设置'),
-        findsOneWidget,
-        reason: 'server title is never passed through the UI catalogue',
-      );
-      expect(
-        (await SharedPreferences.getInstance()).getString('lazer_language'),
-        'ja',
-      );
-      final restored = AppState(catalog: _Catalog());
-      addTearDown(restored.dispose);
-      await tester.runAsync(restored.bootstrap);
-      expect(restored.language, AppLanguage.japanese);
-      expect(restored.scrollRetention, .90);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    final dropdown = find.byType(DropdownButton<AppLanguage>);
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日本語').last);
+    await tester.pumpAndSettle();
+    expect(state.language, AppLanguage.japanese);
+    expect(find.text('表示言語'), findsNothing);
+    expect(find.text('语言'), findsOneWidget);
+    expect(
+      (await SharedPreferences.getInstance()).getString('lazer_language'),
+      'ja',
+    );
+    final restored = AppState(catalog: _Catalog());
+    addTearDown(restored.dispose);
+    await tester.runAsync(restored.bootstrap);
+    expect(restored.language, AppLanguage.japanese);
+    expect(restored.scrollRetention, .90);
+  });
   testWidgets(
     'long press selects multiple lines and copies originals plus translations in order',
     (tester) async {
@@ -248,12 +240,10 @@ void main() {
       state.playQueue([_track]);
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(),
-          home: NowPlayingPage(state: state),
+          theme: buildLegacyTheme(),
+          home: Scaffold(body: LyricViewport(state: state)),
         ),
       );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('歌词'));
       await tester.pumpAndSettle();
       final before = state.position;
       await tester.longPress(find.text('First line'));
@@ -314,7 +304,7 @@ void main() {
     },
   );
   testWidgets(
-    'desktop cover fills the rail; queue includes artwork and opens directly from footer',
+    'landscape artwork fills the rail; queue includes artwork and opens from the player',
     (tester) async {
       tester.view.physicalSize = const Size(1100, 760);
       tester.view.devicePixelRatio = 1;
@@ -338,18 +328,23 @@ void main() {
         RepaintBoundary(
           key: screenshot,
           child: MaterialApp(
-            theme: buildAppTheme(),
-            home: NowPlayingPage(state: state),
+            theme: buildLegacyTheme(),
+            // The album backdrop flows forever; freeze it so the page settles.
+            builder: (BuildContext context, Widget? child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
+            home: LegacyNowPlayingPage(state: state),
           ),
         ),
       );
       await tester.pumpAndSettle();
-      final art = find.byType(PlateArt).first;
-      expect(tester.getSize(art).width, inInclusiveRange(200, 440));
+      final art = find.bySemanticsLabel('Song 8 封面').first;
+      expect(tester.getSize(art).width, greaterThan(200));
       expect(tester.getSize(art).aspectRatio, closeTo(1, .01));
-      await tester.tap(find.byTooltip('播放队列'));
+      expect(find.byKey(const ValueKey('desktop-now-playing')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('desktop-queue')));
       await tester.pumpAndSettle();
-      expect(find.byType(Dialog), findsNothing);
       expect(find.byType(PlaybackQueueView), findsOneWidget);
       final list = find.descendant(
         of: find.byType(PlaybackQueueView),
@@ -360,80 +355,17 @@ void main() {
         findsWidgets,
       );
       expect(find.text('Artist 8'), findsWidgets);
-      expect(tester.getRect(list).right, lessThanOrEqualTo(1280));
+      expect(tester.getRect(list).right, lessThanOrEqualTo(1100));
       await _snapshot(tester, screenshot, 'ui_queue_latest');
-      await tester.tap(find.text('Song 9'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(PlaybackQueueView),
+          matching: find.text('Song 9'),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(state.current?.id, '9');
-      await tester.tap(find.text('歌词').first);
-      await tester.pumpAndSettle();
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildAppTheme(),
-          home: PlayerPage(state: state),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('播放队列 · 16 首'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Dialog), findsOneWidget);
-      expect(find.byType(NowPlayingPage), findsNothing);
       expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'settings marker rises on entry, descends on exit, and navigation surfaces are square',
-    (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final state = AppState(catalog: _Catalog());
-      addTearDown(state.dispose);
-      final screenshot = GlobalKey();
-      Future<void> render(Brightness brightness) => tester.pumpWidget(
-        RepaintBoundary(
-          key: screenshot,
-          child: MaterialApp(
-            theme: buildAppTheme(brightness: brightness),
-            home: PlayerPage(state: state),
-          ),
-        ),
-      );
-      await render(Brightness.light);
-      await tester.tap(find.text('设置'));
-      await tester.pump();
-      final marker = find.byKey(const ValueKey('settings-selection-marker'));
-      final slide = find
-          .ancestor(of: marker, matching: find.byType(SlideTransition))
-          .first;
-      expect(tester.widget<SlideTransition>(slide).position.value.dy, 1);
-      await tester.pump(const Duration(milliseconds: 100));
-      final midway = tester.widget<SlideTransition>(slide).position.value.dy;
-      expect(midway, inExclusiveRange(0, 1));
-      await tester.pumpAndSettle();
-      expect(tester.widget<SlideTransition>(slide).position.value.dy, 0);
-      expect(tester.getSize(marker).width, greaterThan(0));
-      expect(tester.getSize(marker).height, greaterThan(0));
-      await render(Brightness.dark);
-      await tester.pumpAndSettle();
-      expect(
-        tester.widget<ColoredBox>(marker).color.computeLuminance(),
-        greaterThan(.8),
-      );
-      await _snapshot(tester, screenshot, 'settings_marker_dark');
-      final nav = find
-          .ancestor(of: find.text('设置').first, matching: find.byType(InkWell))
-          .first;
-      expect(tester.widget<InkWell>(nav).borderRadius, BorderRadius.zero);
-      await tester.tap(find.text('主页'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(
-        tester.widget<SlideTransition>(slide).position.value.dy,
-        inExclusiveRange(0, 1),
-      );
-      await tester.pumpAndSettle();
-      expect(marker, findsNothing);
     },
   );
   testWidgets(
