@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -423,12 +424,30 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
             child: landscape
                 ? Padding(
                     padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(flex: 40, child: _mobileInfoCard(track)),
-                        const SizedBox(width: 10),
-                        Expanded(flex: 60, child: _lyricsPane(compact: true)),
-                      ],
+                    child: LayoutBuilder(
+                      builder:
+                          (BuildContext context, BoxConstraints constraints) {
+                            // The row must be told its height. Without it the
+                            // info card sizes from its own content and grows
+                            // past a short landscape screen, pushing the
+                            // transport below the visible edge.
+                            return SizedBox(
+                              height: constraints.maxHeight,
+                              child: Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    flex: 40,
+                                    child: _mobileInfoCard(track),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    flex: 60,
+                                    child: _lyricsPane(compact: true),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                     ),
                   )
                 : Padding(
@@ -442,25 +461,23 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     ),
                   ),
           ),
-          ClipRect(
-            child: AnimatedAlign(
+          // Keep the transport mounted so its key survives the hide, but report
+          // no height while collapsed. A height factor of zero only clips: the
+          // child is still measured at full size past the screen edge.
+          _Collapsible(
+            collapsed: !_controlsVisible,
+            child: AnimatedOpacity(
+              key: const ValueKey<String>('mobile-transport-visibility'),
               duration: const Duration(milliseconds: 280),
               curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              heightFactor: _controlsVisible ? 1 : 0,
-              child: AnimatedOpacity(
-                key: const ValueKey<String>('mobile-transport-visibility'),
-                duration: const Duration(milliseconds: 280),
-                curve: Curves.easeOutCubic,
-                opacity: _controlsVisible ? 1 : 0,
-                child: IgnorePointer(
-                  ignoring: !_controlsVisible,
-                  child: _MobileTransport(
-                    state: state,
-                    landscape: landscape,
-                    onOpenPanel: _openPanel,
-                    onInteract: _revealControls,
-                  ),
+              opacity: _controlsVisible ? 1 : 0,
+              child: IgnorePointer(
+                ignoring: !_controlsVisible,
+                child: _MobileTransport(
+                  state: state,
+                  landscape: landscape,
+                  onOpenPanel: _openPanel,
+                  onInteract: _revealControls,
                 ),
               ),
             ),
@@ -844,8 +861,15 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       border: Border.all(color: Colors.white.withValues(alpha: .12), width: .5),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
+          // An unbounded height (a scroll view, or a row that has not been
+          // given one) must not fall through to the 180 px ceiling: that makes
+          // the card report a height taller than a landscape phone, and the
+          // transport below it is pushed past the screen edge.
+          final double available = constraints.maxHeight.isFinite
+              ? constraints.maxHeight - 86
+              : constraints.maxWidth - 34;
           final double side = math
-              .min(constraints.maxWidth - 34, constraints.maxHeight - 86)
+              .min(constraints.maxWidth - 34, available)
               .clamp(50.0, 180.0);
           return Center(
             child: SingleChildScrollView(
@@ -1399,6 +1423,80 @@ class _DesktopTransportState extends State<_DesktopTransport> {
         ),
       ],
     );
+  }
+}
+
+/// Reports the child's height while open and nothing while collapsed, without
+/// unmounting it. The child is still laid out, but its box is clipped to the
+/// reported size so a hidden transport cannot extend past the screen.
+class _Collapsible extends SingleChildRenderObjectWidget {
+  const _Collapsible({required this.collapsed, required super.child});
+
+  final bool collapsed;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderCollapsible(collapsed);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderCollapsible renderObject,
+  ) {
+    renderObject.collapsed = collapsed;
+  }
+}
+
+class _RenderCollapsible extends RenderProxyBox {
+  _RenderCollapsible(this._collapsed);
+
+  bool _collapsed;
+
+  bool get collapsed => _collapsed;
+
+  set collapsed(bool value) {
+    if (_collapsed == value) return;
+    _collapsed = value;
+    markNeedsLayout();
+  }
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      _collapsed ? 0 : super.computeMinIntrinsicHeight(width);
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      _collapsed ? 0 : super.computeMaxIntrinsicHeight(width);
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    if (_collapsed) return Size(constraints.maxWidth, 0);
+    return child?.getDryLayout(constraints) ?? Size.zero;
+  }
+
+  @override
+  void performLayout() {
+    final RenderBox? current = child;
+    if (current == null) {
+      size = constraints.constrain(Size.zero);
+      return;
+    }
+    current.layout(constraints, parentUsesSize: true);
+    size = _collapsed
+        ? constraints.constrain(Size(current.size.width, 0))
+        : constraints.constrain(current.size);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    if (_collapsed) return false;
+    return super.hitTestChildren(result, position: position);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (_collapsed) return;
+    super.paint(context, offset);
   }
 }
 
