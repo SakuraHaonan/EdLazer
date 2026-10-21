@@ -100,6 +100,7 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
   final GlobalKey _capture = GlobalKey();
   final ScrollController _previewScroll = ScrollController();
   ImageProvider? _artwork;
+  Color? _coverSeed;
   bool _started = false;
   bool _loading = true;
   bool _saving = false;
@@ -121,6 +122,7 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
       try {
         await precacheImage(provider, context);
         _artwork = provider;
+        _coverSeed = await albumSeedForCover(widget.track.coverUrl);
       } catch (_) {
         _artwork = null;
       }
@@ -333,6 +335,7 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
                                 track: widget.track,
                                 lines: widget.lines,
                                 artwork: _artwork,
+                                flowSeed: _coverSeed,
                               ),
                             ),
                           ),
@@ -437,7 +440,10 @@ class LyricImageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
-    final Color seed = flowSeed ??
+    // The backdrop is sampled from the current cover. The hash tint is only
+    // the stand-in used before that sample arrives, or when there is no art.
+    final Color seed =
+        flowSeed ??
         HSLColor.fromAHSL(
           1,
           (track.coverSeed.abs() * 47) % 360,

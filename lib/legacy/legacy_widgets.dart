@@ -2,6 +2,7 @@
 
 import '../data/models.dart';
 import '../theme/apple_design.dart';
+import '../widgets/interaction_feedback.dart';
 import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/artwork_image.dart';
@@ -133,7 +134,7 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
       onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         behavior: HitTestBehavior.opaque,
         child: SizedBox(
           width: widget.width,
@@ -250,7 +251,7 @@ class _LegacyTrackRowState extends State<LegacyTrackRow> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
@@ -469,7 +470,7 @@ class _LegacyRailItemState extends State<LegacyRailItem> {
       onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),

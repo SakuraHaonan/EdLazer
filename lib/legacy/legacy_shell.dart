@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -10,6 +10,7 @@ import '../theme/apple_design.dart';
 import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/artwork_image.dart';
+import '../widgets/interaction_feedback.dart';
 import '../widgets/song_comments_view.dart';
 import 'legacy_background.dart';
 import 'legacy_login.dart';
@@ -61,16 +62,14 @@ class _LegacyShellState extends State<LegacyShell>
       duration: const Duration(milliseconds: 300),
       reverseDuration: const Duration(milliseconds: 300),
     )..addStatusListener(_onNowPlayingStatus);
-    _nowPlayingSlide = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _nowPlayingMotion,
-        curve: Curves.fastOutSlowIn,
-        reverseCurve: Curves.fastOutSlowIn,
-      ),
-    );
+    _nowPlayingSlide =
+        Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _nowPlayingMotion,
+            curve: Curves.fastOutSlowIn,
+            reverseCurve: Curves.fastOutSlowIn,
+          ),
+        );
   }
 
   void _onNowPlayingStatus(AnimationStatus status) {
@@ -276,10 +275,7 @@ class _LegacyShellState extends State<LegacyShell>
     );
   }
 
-  Widget _desktopLayout(
-    AppleSemanticColors apple, {
-    required bool compactBar,
-  }) {
+  Widget _desktopLayout(AppleSemanticColors apple, {required bool compactBar}) {
     return Column(
       children: <Widget>[
         Expanded(
@@ -312,10 +308,7 @@ class _LegacyShellState extends State<LegacyShell>
     );
   }
 
-  Widget _compactLayout(
-    AppleSemanticColors apple, {
-    required bool compactBar,
-  }) {
+  Widget _compactLayout(AppleSemanticColors apple, {required bool compactBar}) {
     return Column(
       children: <Widget>[
         _mobileToolbar(apple),
@@ -347,9 +340,7 @@ class _LegacyShellState extends State<LegacyShell>
           borderRadius: BorderRadius.zero,
           blurSigma: 28,
           color: apple.glass,
-          border: Border(
-            top: BorderSide(color: apple.separator, width: .5),
-          ),
+          border: Border(top: BorderSide(color: apple.separator, width: .5)),
           child: NavigationBar(
             selectedIndex: _section.index,
             onDestinationSelected: (int index) =>
@@ -396,26 +387,13 @@ class _LegacyShellState extends State<LegacyShell>
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 18, 14, 14),
-              child: Row(
-                children: <Widget>[
-                  const AppleIconTile(
-                    icon: Icons.graphic_eq_rounded,
-                    size: 30,
-                    iconSize: 18,
-                    radius: 7,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Lazer',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: apple.label,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -.5,
-                      ),
-                    ),
-                  ),
-                ],
+              child: Text(
+                'Lazer',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: apple.label,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -.5,
+                ),
               ),
             ),
             Expanded(
@@ -506,8 +484,7 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _desktopToolbar(AppleSemanticColors apple) {
-    final bool canGoBack =
-        _playlist != null || _comments || _query.isNotEmpty;
+    final bool canGoBack = _playlist != null || _comments || _query.isNotEmpty;
     return SizedBox(
       height: 64,
       child: Padding(
@@ -563,31 +540,22 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _mobileToolbar(AppleSemanticColors apple) {
-    final bool canGoBack =
-        _playlist != null || _comments || _query.isNotEmpty;
+    final bool canGoBack = _playlist != null || _comments || _query.isNotEmpty;
     return SizedBox(
       height: 50,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
           children: <Widget>[
-            if (canGoBack)
+            if (canGoBack) ...<Widget>[
               _ToolbarButton(
                 tooltip: '返回',
                 icon: Icons.chevron_left_rounded,
                 onPressed: _backToRoot,
-              )
-            else
-              const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: AppleIconTile(
-                  icon: Icons.graphic_eq_rounded,
-                  size: 28,
-                  iconSize: 17,
-                  radius: 7,
-                ),
               ),
-            const SizedBox(width: 10),
+              const SizedBox(width: 10),
+            ] else
+              const SizedBox(width: 8),
             Expanded(
               child: Text(
                 canGoBack ? _pageTitle : 'Lazer',
@@ -601,7 +569,9 @@ class _LegacyShellState extends State<LegacyShell>
             ),
             _ToolbarButton(
               tooltip: _mobileSearchOpen ? '关闭搜索' : '搜索',
-              icon: _mobileSearchOpen ? Icons.close_rounded : Icons.search_rounded,
+              icon: _mobileSearchOpen
+                  ? Icons.close_rounded
+                  : Icons.search_rounded,
               selected: _mobileSearchOpen,
               onPressed: _toggleMobileSearch,
             ),
@@ -651,9 +621,9 @@ class _LegacyShellState extends State<LegacyShell>
         padding: const EdgeInsets.fromLTRB(9, 5, 9, 8),
         child: Text(
           state.isGuest ? '登录后同步你的歌单' : '暂无歌单',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: apple.tertiaryLabel,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: apple.tertiaryLabel),
         ),
       );
     }
@@ -697,10 +667,7 @@ class _LegacyShellState extends State<LegacyShell>
     return name.characters.first;
   }
 
-  Widget _accountButton(
-    AppleSemanticColors apple, {
-    double radius = 15,
-  }) {
+  Widget _accountButton(AppleSemanticColors apple, {double radius = 15}) {
     return PopupMenuButton<String>(
       tooltip: state.isGuest ? '登录' : state.user.name,
       offset: const Offset(0, 42),
@@ -725,9 +692,9 @@ class _LegacyShellState extends State<LegacyShell>
             state.isGuest
                 ? '游客模式'
                 : '${state.user.name} · ${state.user.vipLabel ?? '普通用户'}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: apple.secondaryLabel,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
           ),
         ),
         if (state.isGuest)
@@ -749,6 +716,49 @@ class _LegacyShellState extends State<LegacyShell>
   // -- content --------------------------------------------------------------
 
   Widget _content() {
+    final Widget page = _contentPage();
+    final bool motion = !MediaQuery.disableAnimationsOf(context);
+    return AnimatedSwitcher(
+      duration: motion ? const Duration(milliseconds: 280) : Duration.zero,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
+        alignment: Alignment.topCenter,
+        children: <Widget>[...previous, ?current],
+      ),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        final Animation<double> eased = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: eased,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.04, 0),
+              end: Offset.zero,
+            ).animate(eased),
+            child: child,
+          ),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<String>(_contentKey),
+        child: page,
+      ),
+    );
+  }
+
+  String get _contentKey {
+    if (_comments) return 'comments';
+    if (_query.isNotEmpty) return 'search:$_query';
+    final Playlist? playlist = _playlist;
+    if (playlist != null) return 'playlist:${playlist.id}';
+    return 'section:${_section.name}';
+  }
+
+  Widget _contentPage() {
     if (_comments) {
       final Track? track = state.current;
       final SongCommentsController? controller = _commentsController;
@@ -831,7 +841,7 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
         message: widget.tooltip,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: widget.onPressed,
+          onTap: feedbackAction(context, widget.onPressed),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             width: 34,
@@ -905,11 +915,7 @@ class _Avatar extends StatelessWidget {
     final String? url = enlargedArtworkUrl(avatarUrl, sizePx: 96);
     final Widget fallback = Center(
       child: signedIn
-          ? Icon(
-              Icons.person_rounded,
-              size: radius * 1.15,
-              color: Colors.white,
-            )
+          ? Icon(Icons.person_rounded, size: radius * 1.15, color: Colors.white)
           : Text(
               label,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -988,7 +994,7 @@ class _RailPlaylistState extends State<_RailPlaylist> {
       onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: feedbackAction(context, widget.onTap),
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),

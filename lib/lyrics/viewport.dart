@@ -683,6 +683,13 @@ class _LyricViewportState extends State<LyricViewport>
       fontSize: (_fontSize * 16 / 22).clamp(12, 30),
       height: 1.45,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
+      // A soft halo keeps the quieter translation readable over the cover
+      // wash. It is painted outside the row's colour filter, which would
+      // otherwise dye the shadow the same colour as the glyphs.
+      shadows: const <Shadow>[
+        Shadow(color: Color(0xE6000000), blurRadius: 10),
+        Shadow(color: Color(0x99000000), blurRadius: 3, offset: Offset(0, 1)),
+      ],
     );
   }
 
@@ -739,10 +746,7 @@ class _LyricViewportState extends State<LyricViewport>
   Widget _rowBody(int index, ThemeData theme) {
     final LyricLine line = _lines[index];
     final TextStyle style = _mainStyle(context);
-    final TextStyle translationStyle = _translationStyle(context);
     final double brightness = _brightnessFor(index).clamp(0.0, 1.0);
-    final bool selected =
-        _selection.active && _selection.keys.contains(lyricSelectionKey(line));
     final Widget brightMain = line.words.isNotEmpty
         ? TimedLyricText(
             line: line,
@@ -797,24 +801,6 @@ class _LyricViewportState extends State<LyricViewport>
             ),
           ),
         ),
-        if (line.translation?.trim().isNotEmpty ?? false) ...<Widget>[
-          const SizedBox(height: 5),
-          _interactive(
-            index,
-            line.translation!,
-            translationStyle,
-            Opacity(
-              key: ValueKey<String>('lyric-translation-$index'),
-              opacity: selected ? 1 : .3,
-              child: Text(
-                line.translation!,
-                textAlign: TextAlign.left,
-                textDirection: TextDirection.ltr,
-                style: translationStyle,
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -822,21 +808,50 @@ class _LyricViewportState extends State<LyricViewport>
   Widget _row(int index, ThemeData theme) {
     final double sigma = _sigmaFor(index);
     final Color tone = _toneFor(index, theme);
+    final LyricLine line = _lines[index];
+    final String? translation = line.translation?.trim();
+    final bool translationSelected =
+        _selection.active && _selection.keys.contains(lyricSelectionKey(line));
     return SizedBox(
       key: ValueKey<String>('lyric-line-${_state.current?.id}-$index'),
       height: _heights[index],
       child: Transform.scale(
         scale: _scaleFor(index),
         alignment: Alignment.centerLeft,
-        child: ImageFiltered(
-          key: ValueKey<String>('lyric-blur-$index'),
-          enabled: sigma > .02,
-          imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-          child: ColorFiltered(
-            key: ValueKey<String>('lyric-color-$index'),
-            colorFilter: ColorFilter.mode(tone, BlendMode.srcIn),
-            child: RepaintBoundary(child: _rowBody(index, theme)),
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            ImageFiltered(
+              key: ValueKey<String>('lyric-blur-$index'),
+              enabled: sigma > .02,
+              imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+              child: ColorFiltered(
+                key: ValueKey<String>('lyric-color-$index'),
+                colorFilter: ColorFilter.mode(tone, BlendMode.srcIn),
+                child: RepaintBoundary(child: _rowBody(index, theme)),
+              ),
+            ),
+            // The translation stays outside the depth blur so its halo reads
+            // as a real shadow instead of smearing into the cover wash.
+            if (translation != null && translation.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 5),
+              _interactive(
+                index,
+                translation,
+                _translationStyle(context),
+                Opacity(
+                  key: ValueKey<String>('lyric-translation-$index'),
+                  opacity: translationSelected ? 1 : .72,
+                  child: Text(
+                    translation,
+                    textAlign: TextAlign.left,
+                    textDirection: TextDirection.ltr,
+                    style: _translationStyle(context),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

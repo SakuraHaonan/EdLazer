@@ -7,6 +7,7 @@ import '../data/models.dart';
 import '../state/app_state.dart';
 import '../theme/apple_design.dart';
 import '../widgets/apple_ui.dart';
+import '../widgets/interaction_feedback.dart';
 import '../widgets/playback_queue_view.dart';
 import 'legacy_widgets.dart';
 
@@ -331,7 +332,7 @@ class _CompactIcon extends StatelessWidget {
         iconSize: iconSize,
         visualDensity: VisualDensity.compact,
         tooltip: tooltip,
-        onPressed: onPressed,
+        onPressed: feedbackAction(context, onPressed),
         style: IconButton.styleFrom(
           foregroundColor: selected ? scheme.primary : scheme.onSurfaceVariant,
           disabledForegroundColor: scheme.onSurfaceVariant.withValues(

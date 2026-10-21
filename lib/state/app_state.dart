@@ -298,7 +298,7 @@ class AppState extends ChangeNotifier {
     await prefs.setDouble('lazer_dpi_scale', kDpiScaleDefault);
   }
 
-  double lyricControlsSeconds = 2.5;
+  double lyricControlsSeconds = 1.5;
   bool lyricBlurEnabled = true;
   bool showFrameStats = const bool.fromEnvironment('LAZER_FRAME_STATS');
   double lyricFontSize = 22;
@@ -532,7 +532,7 @@ class AppState extends ChangeNotifier {
                   (_volume > 0 ? _volume : 1))
               .clamp(0.01, 1);
       lyricControlsSeconds =
-          (prefs.getDouble('lazer_lyric_controls_seconds') ?? 2.5).clamp(1, 10);
+          (prefs.getDouble('lazer_lyric_controls_seconds') ?? 1.5).clamp(1, 10);
       lyricBlurEnabled = prefs.getBool('lazer_lyric_blur') ?? true;
       showFrameStats =
           prefs.getBool('lazer_show_frame_stats') ?? showFrameStats;

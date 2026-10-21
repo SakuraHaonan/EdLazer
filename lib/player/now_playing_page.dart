@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../data/models.dart';
+import '../interaction/app_haptics.dart';
 import '../legacy/legacy_login.dart';
 import '../lyrics/viewport.dart';
 import '../state/app_state.dart';
@@ -13,6 +14,7 @@ import '../state/song_comments_controller.dart';
 import '../theme/apple_design.dart';
 import '../utils/cover_save.dart';
 import '../widgets/apple_ui.dart';
+import '../widgets/interaction_feedback.dart';
 import '../legacy/legacy_widgets.dart';
 import '../widgets/playback_queue_view.dart';
 import '../widgets/song_comments_view.dart';
@@ -52,6 +54,8 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   _SidePanel _panel = _SidePanel.none;
   SongCommentsController? _comments;
   bool _fullscreen = false;
+  bool _controlsVisible = true;
+  Timer? _controlsTimer;
 
   AppState get state => widget.state;
 
@@ -59,13 +63,38 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   void initState() {
     super.initState();
     unawaited(_readFullscreen());
+    _armControlsTimer();
   }
 
   @override
   void dispose() {
+    _controlsTimer?.cancel();
     _comments?.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  /// Bottom transport on the phone player yields to the lyric sheet after the
+  /// listener stops touching it. Any tap, drag or panel brings it back and
+  /// restarts the wait, whose length is the settings slider.
+  void _revealControls() {
+    _controlsTimer?.cancel();
+    if (!_controlsVisible && mounted) {
+      setState(() => _controlsVisible = true);
+    }
+    _armControlsTimer();
+  }
+
+  void _armControlsTimer() {
+    _controlsTimer?.cancel();
+    final double seconds = state.lyricControlsSeconds;
+    _controlsTimer = Timer(
+      Duration(milliseconds: (seconds * 1000).round()),
+      () {
+        if (!mounted || _panel != _SidePanel.none) return;
+        setState(() => _controlsVisible = false);
+      },
+    );
   }
 
   Future<void> _readFullscreen() async {
@@ -87,6 +116,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
 
   void _closePanel() {
     if (_panel != _SidePanel.none) setState(() => _panel = _SidePanel.none);
+    _armControlsTimer();
   }
 
   void _openPanel(_SidePanel panel) {
@@ -97,7 +127,11 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     if (panel == _SidePanel.comments) {
       _comments ??= SongCommentsController(state.gateway);
     }
-    setState(() => _panel = panel);
+    _controlsTimer?.cancel();
+    setState(() {
+      _panel = panel;
+      _controlsVisible = true;
+    });
   }
 
   Future<void> _toggleFullscreen() async {
@@ -300,7 +334,6 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                       animationsEnabled: widget.entranceSettled,
                     ),
                     SafeArea(
-                      bottom: false,
                       child: track == null
                           ? _empty(context)
                           : wide
@@ -380,38 +413,60 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   Widget _mobile(BuildContext context, Track track) {
     final Size size = MediaQuery.sizeOf(context);
     final bool landscape = size.width > size.height;
-    return Column(
-      children: <Widget>[
-        _mobileTopBar(context, track, landscape: landscape),
-        Expanded(
-          child: landscape
-              ? Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(flex: 40, child: _mobileInfoCard(track)),
-                      const SizedBox(width: 10),
-                      Expanded(flex: 60, child: _lyricsPane(compact: true)),
-                    ],
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _revealControls(),
+      child: Column(
+        children: <Widget>[
+          _mobileTopBar(context, track, landscape: landscape),
+            Expanded(
+            child: landscape
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(flex: 40, child: _mobileInfoCard(track)),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 60, child: _lyricsPane(compact: true)),
+                      ],
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 4),
+                    child: Column(
+                      children: <Widget>[
+                        _compactHeader(context, track),
+                        const SizedBox(height: 8),
+                        Expanded(child: _lyricsPane(compact: true)),
+                      ],
+                    ),
                   ),
-                )
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 2, 8, 4),
-                  child: Column(
-                    children: <Widget>[
-                      _compactHeader(context, track),
-                      const SizedBox(height: 8),
-                      Expanded(child: _lyricsPane(compact: true)),
-                    ],
+          ),
+          ClipRect(
+            child: AnimatedAlign(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              heightFactor: _controlsVisible ? 1 : 0,
+              child: AnimatedOpacity(
+                key: const ValueKey<String>('mobile-transport-visibility'),
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOutCubic,
+                opacity: _controlsVisible ? 1 : 0,
+                child: IgnorePointer(
+                  ignoring: !_controlsVisible,
+                  child: _MobileTransport(
+                    state: state,
+                    landscape: landscape,
+                    onOpenPanel: _openPanel,
+                    onInteract: _revealControls,
                   ),
                 ),
-        ),
-        _MobileTransport(
-          state: state,
-          landscape: landscape,
-          onOpenPanel: _openPanel,
-        ),
-      ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -685,11 +740,18 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                 key: const ValueKey<String>('mobile-queue'),
                 tooltip: '播放队列',
                 icon: Icons.queue_music_rounded,
-                onPressed: () => _openPanel(_SidePanel.queue),
+                onPressed: () {
+                  final AppState? feedback = InteractionFeedback.of(context);
+                  if (feedback != null) unawaited(feedback.feedback());
+                  _openPanel(_SidePanel.queue);
+                },
               ),
               TextButton.icon(
                 key: const ValueKey<String>('mobile-comments'),
-                onPressed: () => _openPanel(_SidePanel.comments),
+                onPressed: feedbackAction(
+                  context,
+                  () => _openPanel(_SidePanel.comments),
+                ),
                 icon: const Icon(Icons.mode_comment_outlined, size: 17),
                 label: const Text('查看评论'),
                 style: TextButton.styleFrom(
@@ -1014,7 +1076,7 @@ class _TopIconButton extends StatelessWidget {
     final Color accent = Theme.of(context).colorScheme.secondary;
     return IconButton(
       tooltip: tooltip,
-      onPressed: onPressed,
+      onPressed: feedbackAction(context, onPressed),
       iconSize: 20,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(width: 40, height: 40),
@@ -1044,7 +1106,15 @@ class _MoreButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return PopupMenuButton<NowPlayingMenuAction>(
       tooltip: '更多',
-      onSelected: onSelected,
+      onOpened: () {
+        final AppState? state = InteractionFeedback.of(context);
+        if (state != null) unawaited(state.feedback());
+      },
+      onSelected: (NowPlayingMenuAction action) {
+        final AppState? state = InteractionFeedback.of(context);
+        if (state != null) unawaited(state.feedback());
+        onSelected(action);
+      },
       color: const Color(0xFF1C1C1E),
       surfaceTintColor: Colors.transparent,
       elevation: 18,
@@ -1239,7 +1309,10 @@ class _DesktopTransportState extends State<_DesktopTransport> {
                     children: <Widget>[
                       IconButton(
                         tooltip: widget.state.volume <= .001 ? '取消静音' : '静音',
-                        onPressed: () => unawaited(widget.state.toggleMute()),
+                        onPressed: feedbackAction(
+                          context,
+                          () => unawaited(widget.state.toggleMute()),
+                        ),
                         iconSize: 19,
                         color: const Color(0xB3FFFFFF),
                         icon: Icon(
@@ -1315,6 +1388,7 @@ class _DesktopTransportState extends State<_DesktopTransport> {
                   widget.state.seek(value);
                 },
                 onCancel: () => setState(() => _drag = null),
+                feedback: widget.state.feedback,
               ),
             ),
           ),
@@ -1333,11 +1407,13 @@ class _MobileTransport extends StatefulWidget {
     required this.state,
     required this.landscape,
     required this.onOpenPanel,
+    required this.onInteract,
   });
 
   final AppState state;
   final bool landscape;
   final ValueChanged<_SidePanel> onOpenPanel;
+  final VoidCallback onInteract;
 
   @override
   State<_MobileTransport> createState() => _MobileTransportState();
@@ -1384,7 +1460,10 @@ class _MobileTransportState extends State<_MobileTransport> {
                   Expanded(
                     child: TextButton.icon(
                       key: const ValueKey<String>('mobile-queue'),
-                      onPressed: () => widget.onOpenPanel(_SidePanel.queue),
+                      onPressed: feedbackAction(
+                        context,
+                        () => widget.onOpenPanel(_SidePanel.queue),
+                      ),
                       icon: const Icon(Icons.queue_music_rounded, size: 17),
                       label: const Text('播放队列'),
                       style: TextButton.styleFrom(
@@ -1400,7 +1479,10 @@ class _MobileTransportState extends State<_MobileTransport> {
                   Expanded(
                     child: TextButton.icon(
                       key: const ValueKey<String>('mobile-comments'),
-                      onPressed: () => widget.onOpenPanel(_SidePanel.comments),
+                      onPressed: feedbackAction(
+                        context,
+                        () => widget.onOpenPanel(_SidePanel.comments),
+                      ),
                       icon: const Icon(Icons.mode_comment_outlined, size: 17),
                       label: const Text('查看评论'),
                       style: TextButton.styleFrom(
@@ -1483,12 +1565,20 @@ class _MobileTransportState extends State<_MobileTransport> {
                 buffered: widget.state.bufferedFraction,
                 debugPrefix: 'now-playing',
                 height: widget.landscape ? 26 : 30,
-                onPreview: (double value) => setState(() => _drag = value),
+                onPreview: (double value) {
+                  widget.onInteract();
+                  setState(() => _drag = value);
+                },
                 onCommit: (double value) {
+                  widget.onInteract();
                   setState(() => _drag = null);
                   widget.state.seek(value);
                 },
-                onCancel: () => setState(() => _drag = null),
+                onCancel: () {
+                  widget.onInteract();
+                  setState(() => _drag = null);
+                },
+                feedback: widget.state.feedback,
               ),
             ),
           ),
@@ -1547,7 +1637,9 @@ class _TransportControls extends StatelessWidget {
         IconButton(
           key: const ValueKey<String>('now-playing-play'),
           tooltip: state.playing ? '暂停' : '播放',
-          onPressed: state.current == null ? null : state.togglePlay,
+          onPressed: state.current == null
+              ? null
+              : feedbackAction(context, state.togglePlay),
           iconSize: compact ? 25 : 28,
           style: IconButton.styleFrom(
             backgroundColor: Colors.white,
@@ -1607,7 +1699,7 @@ class _TransportIcon extends StatelessWidget {
     final Color accent = Theme.of(context).colorScheme.secondary;
     return IconButton(
       tooltip: tooltip,
-      onPressed: onPressed,
+      onPressed: feedbackAction(context, onPressed),
       iconSize: iconSize,
       padding: EdgeInsets.zero,
       constraints: BoxConstraints.tightFor(width: size, height: size),
@@ -1649,6 +1741,7 @@ class PlayerSeekBar extends StatefulWidget {
     required this.onPreview,
     required this.onCommit,
     required this.onCancel,
+    this.feedback,
     this.height = 30,
   });
 
@@ -1658,6 +1751,9 @@ class PlayerSeekBar extends StatefulWidget {
   final ValueChanged<double> onPreview;
   final ValueChanged<double> onCommit;
   final VoidCallback onCancel;
+
+  /// Detent ticks while the thumb moves, so dragging feels like a notched dial.
+  final Future<void> Function({bool detent, bool boundary})? feedback;
   final double height;
 
   @override
@@ -1667,6 +1763,23 @@ class PlayerSeekBar extends StatefulWidget {
 class _PlayerSeekBarState extends State<PlayerSeekBar> {
   double? _hover;
   double? _drag;
+  final SeekDetents _detents = SeekDetents();
+
+  void _tick(double value, {required bool grabbed}) {
+    final Future<void> Function({bool detent, bool boundary})? feedback =
+        widget.feedback;
+    if (feedback == null) return;
+    if (grabbed) {
+      _detents.begin(value);
+      unawaited(feedback(detent: true));
+      return;
+    }
+    if (_detents.update(value)) {
+      unawaited(
+        feedback(detent: true, boundary: value <= 0 || value >= 1),
+      );
+    }
+  }
 
   double _fractionAt(double dx, double width) =>
       width <= 0 ? 0 : (dx / width).clamp(0.0, 1.0);
@@ -1695,30 +1808,36 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
             onTapDown: (TapDownDetails details) {
               final double value = _fractionAt(details.localPosition.dx, width);
               setState(() => _drag = value);
+              _tick(value, grabbed: true);
               widget.onPreview(value);
             },
             onTapUp: (TapUpDetails details) {
               final double value = _fractionAt(details.localPosition.dx, width);
               setState(() => _drag = null);
+              _detents.end();
               widget.onCommit(value);
             },
             onHorizontalDragStart: (DragStartDetails details) {
               final double value = _fractionAt(details.localPosition.dx, width);
               setState(() => _drag = value);
+              _tick(value, grabbed: true);
               widget.onPreview(value);
             },
             onHorizontalDragUpdate: (DragUpdateDetails details) {
               final double value = _fractionAt(details.localPosition.dx, width);
               setState(() => _drag = value);
+              _tick(value, grabbed: false);
               widget.onPreview(value);
             },
             onHorizontalDragEnd: (_) {
               final double value = _drag ?? played;
               setState(() => _drag = null);
+              _detents.end();
               widget.onCommit(value);
             },
             onHorizontalDragCancel: () {
               setState(() => _drag = null);
+              _detents.end();
               widget.onCancel();
             },
             child: SizedBox(

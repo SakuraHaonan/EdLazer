@@ -378,6 +378,7 @@ ThemeData buildAppleTheme({
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
         TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
         TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
         TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
       },
