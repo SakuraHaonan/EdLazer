@@ -107,7 +107,25 @@ void main() {
     final rootBefore = tester.getSemantics(rootFinder);
     await tester.tap(find.byTooltip('歌词'));
     await tester.pump();
+    final playerSlide = find
+        .ancestor(
+          of: find.byType(NowPlayingPage),
+          matching: find.byType(SlideTransition),
+        )
+        .first;
+    expect(
+      tester.widget<SlideTransition>(playerSlide).position.value.dy,
+      closeTo(1, .001),
+      reason: 'the player must start below the window',
+    );
     await tester.pump(const Duration(milliseconds: 100));
+    final midY = tester
+        .widget<SlideTransition>(playerSlide)
+        .position
+        .value
+        .dy;
+    expect(midY, greaterThan(0));
+    expect(midY, lessThan(1));
     expect(find.byType(NowPlayingPage), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('desktop-now-playing')),
@@ -117,6 +135,10 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await tester.pump(const Duration(milliseconds: 380));
+    expect(
+      tester.widget<SlideTransition>(playerSlide).position.value.dy,
+      closeTo(0, .001),
+    );
     expect(tester.getSemantics(rootFinder).id, rootBefore.id);
     await tester.tap(find.byKey(const ValueKey<String>('desktop-close')));
     await tester.pump();

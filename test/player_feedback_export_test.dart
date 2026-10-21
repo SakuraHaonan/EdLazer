@@ -400,7 +400,7 @@ void main() {
   );
 
   testWidgets(
-    'plain LRC follows within 5ms and eases color with scale across a line boundary',
+    'plain LRC follows within 5ms and eases AMLL brightness and scale',
     (tester) async {
       final engine = _Engine();
       final state = AppState(catalog: _Catalog(), audioEngine: engine);
@@ -413,9 +413,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      ColorFilter color(int i) => tester
-          .widget<ColorFiltered>(find.byKey(ValueKey('lyric-color-$i')))
-          .colorFilter;
+      double bright(int i) => tester
+          .widget<Opacity>(find.byKey(ValueKey('lyric-bright-$i')))
+          .opacity;
+      double dim(int i) => tester
+          .widget<Opacity>(find.byKey(ValueKey('lyric-dim-$i')))
+          .opacity;
       double scale(int i) => tester
           .widget<Transform>(
             find
@@ -427,8 +430,16 @@ void main() {
           )
           .transform
           .storage[0];
-      final oldColor = color(0);
-      final nextColor = color(1);
+
+      final oldBright = bright(0);
+      final oldDim = dim(0);
+      final nextBright = bright(1);
+      final nextDim = dim(1);
+      expect(oldBright, closeTo(1, .001));
+      expect(oldDim, closeTo(0, .001));
+      expect(nextBright, closeTo(0, .001));
+      expect(nextDim, closeTo(.2, .001));
+
       engine.position = const Duration(milliseconds: 1001);
       await tester.pump(const Duration(milliseconds: 5));
       expect(
@@ -437,39 +448,41 @@ void main() {
         reason: 'transport has not reached its next 100ms tick',
       );
       expect(
-        color(0),
-        oldColor,
-        reason: 'outgoing color stays continuous at retarget',
+        bright(0),
+        oldBright,
+        reason: 'outgoing bright layer stays continuous at retarget',
       );
-      expect(color(1), nextColor);
+      expect(bright(1), nextBright);
+
       await tester.pump(const Duration(milliseconds: 16));
       final firstScale = scale(0);
+      final firstBright = bright(0);
       await tester.pump(const Duration(milliseconds: 16));
       final secondScale = scale(0);
+      final secondBright = bright(0);
       expect(secondScale, lessThan(firstScale));
+      expect(secondBright, lessThan(firstBright));
       expect(
         1 - firstScale,
         lessThan(firstScale - secondScale),
-        reason: 'the spring accelerates nonlinearly',
+        reason: 'the scale spring accelerates nonlinearly',
       );
-      expect(color(0), isNot(oldColor));
-      expect(color(1), isNot(nextColor));
-      expect(
-        color(0),
-        isNot(nextColor),
-        reason: 'outgoing line has not snapped to grey',
-      );
+
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(bright(0), lessThan(oldBright));
+      expect(bright(1), greaterThan(nextBright));
+      expect(dim(0), greaterThan(oldDim));
+      expect(dim(1), lessThan(nextDim));
+
       await tester.pumpAndSettle();
-      expect(color(0), nextColor);
-      expect(color(1), oldColor);
+      expect(bright(0), closeTo(0, .001));
+      expect(bright(1), closeTo(1, .001));
+      expect(dim(0), closeTo(.2, .001));
+      expect(dim(1), closeTo(0, .001));
       state.pause();
       await tester.pumpAndSettle();
-      expect(
-        color(0),
-        nextColor,
-        reason: 'pausing preserves the inactive tone',
-      );
-      expect(color(1), oldColor);
+      expect(bright(0), closeTo(0, .001));
+      expect(bright(1), closeTo(1, .001));
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

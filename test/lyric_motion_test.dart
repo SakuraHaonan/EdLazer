@@ -191,6 +191,55 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('manual lyric scrolling stops at the first and last line', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    state.playQueue([_track]);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(),
+        home: Scaffold(body: LyricViewport(state: state)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final first = find.byKey(
+      ValueKey<String>('lyric-line-${_track.id}-0'),
+    );
+    final firstTop = tester.getTopLeft(first).dy;
+
+    // Pulling down at the first line must not reveal empty space above it.
+    final down = await tester.startGesture(const Offset(195, 250));
+    await down.moveBy(const Offset(0, 600));
+    await tester.pump();
+    expect(tester.getTopLeft(first).dy, closeTo(firstTop, .1));
+    await down.up();
+    await tester.pump();
+
+    // Scrolling to the end stops with the last line in the focus band.
+    final up = await tester.startGesture(const Offset(195, 250));
+    await up.moveBy(const Offset(0, -6000));
+    await tester.pump();
+    final last = find.byKey(
+      ValueKey<String>('lyric-line-${_track.id}-29'),
+    );
+    expect(last, findsOneWidget);
+    final lastTop = tester.getTopLeft(last).dy;
+    await up.moveBy(const Offset(0, -600));
+    await tester.pump();
+    expect(tester.getTopLeft(last).dy, closeTo(lastTop, .1));
+    await up.up();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    state.pause();
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets('manual scrolling mounts only nearby lyric rows', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -267,6 +316,45 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('automatic lyric follow springs rows and settles', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    state.playQueue([_track]);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(),
+        home: Scaffold(body: LyricViewport(state: state)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final row = find.byKey(
+      ValueKey<String>('lyric-line-${_track.id}-0'),
+    );
+    final before = tester.getTopLeft(row).dy;
+
+    // Jump to the third line. Row 0 remains in the render range and is moved
+    // by its own AMLL position spring rather than a ScrollController animation.
+    state.seek(4 / 120);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 48));
+    final moving = tester.getTopLeft(row).dy;
+    expect(moving, isNot(closeTo(before, .1)));
+
+    await tester.pumpAndSettle();
+    final settled = tester.getTopLeft(row).dy;
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.getTopLeft(row).dy, closeTo(settled, .01));
+    expect(tester.takeException(), isNull);
+    state.pause();
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets('wheel scrolling has momentum and no framework scrollbar', (
     tester,
   ) async {

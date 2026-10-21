@@ -8,6 +8,7 @@ import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:lazer_nextgen/widgets/apple_ui.dart';
 
 const Track _track = Track(
   id: '1939575649',
@@ -57,6 +58,24 @@ class _Catalog extends Catalog {
     tracks: <Track>[_track],
     playlists: <Playlist>[_playlist],
   );
+}
+
+class _SignedInState extends AppState {
+  _SignedInState() : super(catalog: _Catalog());
+
+  @override
+  SessionUser get user => const SessionUser(
+    name: 'CYP2D6_Official',
+    handle: '@23',
+    method: AuthMethod.cookie,
+    detail: '3 个字段',
+    userId: 23,
+    avatarUrl: 'https://example.com/avatar.jpg',
+    vipType: 11,
+  );
+
+  @override
+  bool get isGuest => false;
 }
 
 /// The legacy shell under a theme whose backdrop animation is disabled, so
@@ -274,4 +293,36 @@ void main() {
     expect(find.text('まにまに'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('signed-in rail shows the artwork avatar and VIP status', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final AppState state = _SignedInState();
+    addTearDown(state.dispose);
+    await tester.pumpWidget(_legacyApp(state));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('CYP2D6_Official'), findsOneWidget);
+    expect(find.text('黑胶会员'), findsOneWidget);
+    expect(find.text('3 个字段'), findsNothing);
+    final tile = find.ancestor(
+      of: find.text('CYP2D6_Official'),
+      matching: find.byType(AppleListTile),
+    );
+    expect(tile, findsOneWidget);
+    expect(
+      find.descendant(of: tile, matching: find.byType(Image)),
+      findsOneWidget,
+      reason: 'the signed-in account must use its avatar, not an initial',
+    );
+    expect(
+      find.descendant(of: tile, matching: find.text('C')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
 }

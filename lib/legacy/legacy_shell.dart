@@ -7,7 +7,9 @@ import '../state/app_state.dart';
 import '../state/song_comments_controller.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
+import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
+import '../widgets/artwork_image.dart';
 import '../widgets/song_comments_view.dart';
 import 'legacy_background.dart';
 import 'legacy_login.dart';
@@ -56,17 +58,17 @@ class _LegacyShellState extends State<LegacyShell>
     super.initState();
     _nowPlayingMotion = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 300),
       reverseDuration: const Duration(milliseconds: 300),
     )..addStatusListener(_onNowPlayingStatus);
     _nowPlayingSlide = Tween<Offset>(
-      begin: const Offset(0, .07),
+      begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
         parent: _nowPlayingMotion,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
+        curve: Curves.fastOutSlowIn,
+        reverseCurve: Curves.fastOutSlowIn,
       ),
     );
   }
@@ -669,13 +671,21 @@ class _LegacyShellState extends State<LegacyShell>
 
   Widget _accountRow(AppleSemanticColors apple) {
     final String name = state.isGuest ? '游客' : state.user.name;
-    final String detail = state.isGuest ? '登录以同步资料库' : state.user.detail;
+    final String detail = state.isGuest
+        ? '登录以同步资料库'
+        : state.user.vipLabel ?? '普通用户';
     return AppleListTile(
       title: name,
       subtitle: detail,
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       minHeight: 40,
-      leading: _Avatar(apple: apple, radius: 14, label: _accountInitial),
+      leading: _Avatar(
+        apple: apple,
+        radius: 14,
+        label: _accountInitial,
+        avatarUrl: state.isGuest ? null : state.user.avatarUrl,
+        signedIn: !state.isGuest,
+      ),
       onTap: () => unawaited(showLegacyLoginDialog(context, state)),
     );
   }
@@ -714,7 +724,7 @@ class _LegacyShellState extends State<LegacyShell>
           child: Text(
             state.isGuest
                 ? '游客模式'
-                : '${state.user.name} · ${state.user.detail}',
+                : '${state.user.name} · ${state.user.vipLabel ?? '普通用户'}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: apple.secondaryLabel,
             ),
@@ -730,6 +740,8 @@ class _LegacyShellState extends State<LegacyShell>
         apple: apple,
         radius: radius,
         label: _accountInitial,
+        avatarUrl: state.isGuest ? null : state.user.avatarUrl,
+        signedIn: !state.isGuest,
       ),
     );
   }
@@ -874,18 +886,43 @@ class _SidebarIconButton extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.apple, required this.radius, required this.label});
+  const _Avatar({
+    required this.apple,
+    required this.radius,
+    required this.label,
+    this.avatarUrl,
+    this.signedIn = false,
+  });
 
   final AppleSemanticColors apple;
   final double radius;
   final String label;
+  final String? avatarUrl;
+  final bool signedIn;
 
   @override
   Widget build(BuildContext context) {
+    final String? url = enlargedArtworkUrl(avatarUrl, sizePx: 96);
+    final Widget fallback = Center(
+      child: signedIn
+          ? Icon(
+              Icons.person_rounded,
+              size: radius * 1.15,
+              color: Colors.white,
+            )
+          : Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+    );
     return Container(
       width: radius * 2,
       height: radius * 2,
       alignment: Alignment.center,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -897,13 +934,30 @@ class _Avatar extends StatelessWidget {
         ),
         shape: BoxShape.circle,
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+      child: url == null
+          ? fallback
+          : Image(
+              image: ArtworkImage(url),
+              fit: BoxFit.cover,
+              width: radius * 2,
+              height: radius * 2,
+              gaplessPlayback: true,
+              frameBuilder:
+                  (
+                    BuildContext context,
+                    Widget child,
+                    int? frame,
+                    bool wasSynchronouslyLoaded,
+                  ) => wasSynchronouslyLoaded || frame != null
+                  ? child
+                  : fallback,
+              errorBuilder:
+                  (
+                    BuildContext context,
+                    Object error,
+                    StackTrace? stackTrace,
+                  ) => fallback,
+            ),
     );
   }
 }

@@ -13,11 +13,13 @@ class LyricEdgeFade extends StatelessWidget {
     super.key,
     required this.child,
     required this.verticalExtent,
+    this.horizontal = true,
   });
 
   static const double horizontalExtent = 18;
   final Widget child;
   final double verticalExtent;
+  final bool horizontal;
 
   ui.Shader _mask(Rect bounds, double extent, bool vertical) {
     final double length = vertical ? bounds.height : bounds.width;
@@ -39,17 +41,18 @@ class LyricEdgeFade extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: ShaderMask(
-        blendMode: BlendMode.dstIn,
-        shaderCallback: (Rect bounds) => _mask(bounds, verticalExtent, true),
-        child: ShaderMask(
-          blendMode: BlendMode.dstIn,
-          shaderCallback: (Rect bounds) =>
-              _mask(bounds, horizontalExtent, false),
-          child: child,
-        ),
-      ),
+    final Widget vertical = ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (Rect bounds) => _mask(bounds, verticalExtent, true),
+      child: horizontal
+          ? ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (Rect bounds) =>
+                  _mask(bounds, horizontalExtent, false),
+              child: child,
+            )
+          : child,
     );
+    return ClipRect(child: vertical);
   }
 }

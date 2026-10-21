@@ -44,7 +44,7 @@ navigation chrome and transient panels.
 - Full 84 dp transport with now-playing tile, centre transport controls, thin
   seek rail, volume popover and queue/comments actions.
 - The immersive now-playing overlay follows the AMLL Player/Apple Music
-  composition: a real blurred cover under the album-colour flow canvas, a
+  composition: an AMLL mesh-gradient flow canvas, a
   large shadowed cover, metadata and actions on the left, a borderless lyric
   column on the right, and a dark Apple transport shelf. Queue and comments
   open as docked glass panels. Keyboard shortcuts (Space, arrows, M, L, Q, C,
@@ -75,8 +75,8 @@ independently of those thresholds.
 | --- | --- |
 | 现在就听 | Large title, edge-to-edge featured playlist hero, horizontal recommendation shelf, grouped quick-pick track rows |
 | 资料库 | Large title, owned playlists, recommendation grid with 2–6 adaptive columns |
-| 我喜欢 | Playlist hero and grouped track list, guest sign-in state |
-| 歌单详情 | Album-style hero, metadata and play/shuffle controls, grouped track list |
+| 我喜欢 | Playlist hero and grouped track list, guest sign-in state; the shared playlist page's floating locate-current button |
+| 歌单详情 | Album-style hero, metadata and play/shuffle controls, grouped track list, floating locate-current-track button |
 | 搜索 | Capsule search field, artist/search result sections, track rows and playlist grid |
 | 设置 | iOS inset grouped cards: interface, appearance, playback, interaction, lyrics, scrolling, performance, account, about |
 | 登录 | Apple sheet card, QR code, status messaging, Cookie mode |

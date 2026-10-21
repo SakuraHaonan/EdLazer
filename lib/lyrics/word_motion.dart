@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 double _cubicAxis(double t, double a, double b) =>
     3 * (1 - t) * (1 - t) * t * a + 3 * (1 - t) * t * t * b + t * t * t;
@@ -57,20 +57,52 @@ class LyricWordMotion {
     double textWidth,
   ) => elapsedMs / math.max(1, durationMs) * textWidth;
 
-  static LyricWordMotion ordinary(double elapsedMs, double durationMs) {
-    final double progress =
-        (elapsedMs / math.max(1000, durationMs)).clamp(0.0, 1.0);
+  static LyricWordMotion ordinary(
+    double elapsedMs,
+    double durationMs, {
+    bool isBG = false,
+  }) {
+    final double progress = (elapsedMs / math.max(1000, durationMs)).clamp(
+      0.0,
+      1.0,
+    );
+    // AMLL createFloatAnimation: easing "ease-out" to -0.05em (background
+    // lines use twice the displacement).
     return LyricWordMotion(
-      yEm: -.05 * _cubic(progress, 0, 0, .58, 1),
+      yEm: -.05 * (isBG ? 2 : 1) * _cubic(progress, 0, 0, .58, 1),
     );
   }
 
+  /// The independent float animation attached to every word by AMLL.
+  ///
+  /// Emphasized words also receive the per-character glow animation below;
+  /// this base float is added on top of it, matching the two Web Animations
+  /// instances created by the reference implementation.
+  static LyricWordMotion baseFloat(
+    double elapsedMs,
+    double durationMs, {
+    bool isBG = false,
+  }) => ordinary(elapsedMs, durationMs, isBG: isBG);
+
+  /// Port of `createEmphasizeAnimation` + `calculateEmphasizeParams`.
+  ///
+  /// [elapsedMs] is measured from the line start by the painter.
+  /// [wordDelayMs] is the word start relative to the line. With both left at
+  /// zero this method is source-compatible with the original unit fixtures.
+  ///
+  /// Set [holdFloat] for ordinary words: they still use the long emphasis
+  /// timing and stagger, but rise monotonically to the float target and stay
+  /// there instead of peaking and dropping back to the baseline.
   static LyricWordMotion emphasized(
     double elapsedMs,
     double durationMs,
     int index,
     int count, {
     bool last = false,
+    bool isBG = false,
+    int? rubyCharCount,
+    double wordDelayMs = 0,
+    bool holdFloat = false,
   }) {
     double duration = math.max(1000, durationMs);
     double amount = duration / 2000;
@@ -85,19 +117,34 @@ class LyricWordMotion {
     }
     amount = math.min(1.2, amount);
     blur = math.min(.8, blur);
-    final double delay = duration / 2.5 / math.max(1, count) * index;
+    final int anchor = math.max(
+      1,
+      rubyCharCount == null || rubyCharCount <= 0 ? count : rubyCharCount,
+    );
+    // AMLL staggers character animations from the word's absolute start time.
+    final double wordAnimationStart =
+        wordDelayMs + (duration / 2.5 / anchor) * index;
     final double emphasis = _sample(
-      (elapsedMs - delay) / duration,
+      (elapsedMs - wordAnimationStart) / duration,
       _emphasisTable,
     );
-    final double float = _sample(
-      (elapsedMs - delay + 400) / (duration * 1.4),
+    final double floatProgress = _sample(
+      (elapsedMs - wordAnimationStart + 400) / (duration * 1.4),
       _floatTable,
+    );
+    final double settled = _cubic(
+      ((elapsedMs - wordAnimationStart) / duration).clamp(0.0, 1.0),
+      0,
+      0,
+      .58,
+      1,
     );
     return LyricWordMotion(
       scale: 1 + emphasis * .1 * amount,
       xEm: -emphasis * .03 * amount * (count / 2 - index),
-      yEm: -emphasis * .025 * amount - float * .05,
+      yEm: holdFloat
+          ? -.05 * (isBG ? 2 : 1) * settled
+          : -emphasis * .025 * amount - floatProgress * .05 * (isBG ? 2 : 1),
       glow: emphasis * blur,
       glowRadiusEm: math.min(.3, blur * .3),
     );

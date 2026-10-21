@@ -52,71 +52,19 @@ List<Color> normalizeFlowPalette(List<Color> colors) {
   return List<Color>.generate(5, (int i) => colors[i % colors.length]);
 }
 
-/// One drifting gradient layer — the numbers are the legacy constants.
-class _FlowLayer {
-  const _FlowLayer({
-    required this.paletteIndex,
-    required this.phaseOffset,
-    required this.speed,
-    required this.orbitX,
-    required this.orbitY,
-    required this.scaleX,
-    required this.scaleY,
-    required this.rotationRange,
-  });
-
-  final int paletteIndex;
-  final double phaseOffset;
-  final double speed;
-  final double orbitX;
-  final double orbitY;
-  final double scaleX;
-  final double scaleY;
-  final double rotationRange;
-}
-
-const List<_FlowLayer> _flowLayers = <_FlowLayer>[
-  _FlowLayer(
-    paletteIndex: 0,
-    phaseOffset: 0.2,
-    speed: 0.19,
-    orbitX: 0.30,
-    orbitY: 0.24,
-    scaleX: 1.68,
-    scaleY: 1.18,
-    rotationRange: 8,
-  ),
-  _FlowLayer(
-    paletteIndex: 1,
-    phaseOffset: 2.1,
-    speed: 0.145,
-    orbitX: 0.25,
-    orbitY: 0.34,
-    scaleX: 1.34,
-    scaleY: 1.58,
-    rotationRange: -10,
-  ),
-  _FlowLayer(
-    paletteIndex: 3,
-    phaseOffset: 5.35,
-    speed: 0.12,
-    orbitX: 0.20,
-    orbitY: 0.38,
-    scaleX: 1.28,
-    scaleY: 1.62,
-    rotationRange: -6,
-  ),
-];
+/// Resolution of the GPU-style mesh used by the AMLL-derived cover flow.
+const int _meshColumns = 28;
+const int _meshRows = 18;
 
 /// The animated album-colour renderer.
 ///
-/// The whole canvas is one [CustomPaint]: three drifting gradients are
-/// drawn with transformed radial shaders in a single paint pass. The previous
-/// widget version wrapped every layer in three Transform widgets plus a
-/// DecoratedBox, and stepped the phase at 30 fps; that both capped the motion
-/// at 30 fps and allocated five composited layers per frame. The painter now
-/// runs at the display refresh rate and only marks itself dirty through the
-/// clock notifier — the widget tree is built once.
+/// This is a Flutter port of AMLL's `MeshGradientRenderer`: a dense triangle
+/// mesh is warped inside the viewport and painted with smoothly interpolated
+/// album-palette vertex colours. The original WebGL renderer samples a heavily
+/// treated cover texture through a bicubic Hermite mesh; here the already
+/// extracted cover palette supplies the colour field and the actual cover
+/// bloom continues to provide the photographic detail. The result keeps the
+/// characteristic slow Apple Music mesh flow without a per-layer widget tree.
 class AlbumFlowBackground extends StatefulWidget {
   const AlbumFlowBackground({
     super.key,
@@ -226,7 +174,9 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
     final double delta =
         (elapsed - _last).inMicroseconds / Duration.microsecondsPerSecond;
     _last = elapsed;
-    _phase = (_phase + delta.clamp(0.0, 0.1)) % 10000;
+    // Slowly rotating/breathing mesh: AMLL drives its WebGL mesh from a
+    // 10-second time base, with a volume-responsive UV rotation.
+    _phase = (_phase + delta.clamp(0.0, .1)) % 10000;
     _frames.value++;
   }
 
@@ -261,8 +211,7 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
   }
 }
 
-/// Paints the base, three transformed radial gradients and the veil in one
-/// pass. No per-layer widgets, no save layers.
+/// Paints the AMLL-derived animated mesh in one pass.
 class _FlowPainter extends CustomPainter {
   _FlowPainter({
     required this.palette,
@@ -276,9 +225,75 @@ class _FlowPainter extends CustomPainter {
   final double Function() phase;
   final Color veil;
   final bool solid;
-  List<Color>? _shaderColors;
-  double? _shaderRadius;
-  List<Paint>? _layerPaints;
+
+  static const int _columns = _meshColumns;
+  static const int _rows = _meshRows;
+  static const int _vertexCount = (_columns + 1) * (_rows + 1);
+
+  Float32List? _positions;
+  Int32List? _colors;
+  Uint16List? _indices;
+
+  void _ensureMesh() {
+    if (_positions != null) return;
+    _positions = Float32List(_vertexCount * 2);
+    _colors = Int32List(_vertexCount);
+    _indices = Uint16List(_columns * _rows * 6);
+    var cursor = 0;
+    for (var row = 0; row < _rows; row++) {
+      for (var column = 0; column < _columns; column++) {
+        final int topLeft = row * (_columns + 1) + column;
+        final int topRight = topLeft + 1;
+        final int bottomLeft = topLeft + _columns + 1;
+        final int bottomRight = bottomLeft + 1;
+        _indices![cursor++] = topLeft;
+        _indices![cursor++] = topRight;
+        _indices![cursor++] = bottomLeft;
+        _indices![cursor++] = topRight;
+        _indices![cursor++] = bottomRight;
+        _indices![cursor++] = bottomLeft;
+      }
+    }
+  }
+
+  Color _samplePalette(List<Color> colors, double amount) {
+    if (colors.length == 1) return colors.first;
+    final double scaled = amount.clamp(0.0, .999999) * (colors.length - 1);
+    final int low = scaled.floor();
+    final int high = (low + 1).clamp(0, colors.length - 1);
+    return Color.lerp(colors[low], colors[high], scaled - low) ?? colors[low];
+  }
+
+  Color _meshColor(List<Color> colors, double u, double v, double time) {
+    final double waveA =
+        .5 +
+        .5 *
+            math.sin(
+              u * 3.35 +
+                  math.sin(v * 2.75 - time * .19) * 1.15 +
+                  time * .21,
+            );
+    final double waveB =
+        .5 +
+        .5 *
+            math.cos(
+              v * 3.05 +
+                  math.sin(u * 3.7 + time * .17) * 1.05 -
+                  time * .16,
+            );
+    final double sampleA = (.08 + waveA * .58).clamp(0.0, 1.0);
+    final double sampleB = (.38 + waveB * .60).clamp(0.0, 1.0);
+    final Color upper = _samplePalette(colors, sampleA);
+    final Color lower = _samplePalette(colors, sampleB);
+    final double mix =
+        (.42 + .25 * math.sin((u - v) * 2.35 + time * .14)).clamp(0.0, 1.0);
+    final Color base = Color.lerp(upper, lower, mix) ?? lower;
+    final HSLColor hsl = HSLColor.fromColor(base);
+    return hsl
+        .withSaturation((hsl.saturation * 1.08).clamp(0.0, 1.0))
+        .withLightness((hsl.lightness * .92).clamp(0.0, 1.0))
+        .toColor();
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -287,60 +302,38 @@ class _FlowPainter extends CustomPainter {
     final Rect canvasRect = Offset.zero & size;
     canvas.drawRect(canvasRect, Paint()..color = colors[4]);
     if (!solid) {
-      final double timeBase = phase();
-      final double shortest = size.shortestSide;
-      final List<Color>? oldColors = _shaderColors;
-      if (_shaderRadius != shortest * .5 ||
-          oldColors == null ||
-          !_samePalette(oldColors, colors)) {
-        _shaderColors = List<Color>.of(colors);
-        _shaderRadius = shortest * .5;
-        _layerPaints = <Paint>[
-          for (final _FlowLayer layer in _flowLayers)
-            Paint()
-              ..shader = ui.Gradient.radial(
-                Offset.zero,
-                shortest * .5,
-                <Color>[
-                  colors[layer.paletteIndex].withValues(alpha: 0.68),
-                  colors[layer.paletteIndex].withValues(alpha: 0.68 * .56),
-                  colors[layer.paletteIndex].withValues(alpha: 0.68 * .16),
-                  colors[layer.paletteIndex].withValues(alpha: 0),
-                ],
-                const <double>[0, 1 / 3, 2 / 3, 1],
-              ),
-        ];
+      _ensureMesh();
+      final Float32List positions = _positions!;
+      final Int32List vertexColors = _colors!;
+      final double time = phase();
+      final double width = size.width;
+      final double height = size.height;
+      var vertex = 0;
+      for (var row = 0; row <= _rows; row++) {
+        final double v = row / _rows;
+        for (var column = 0; column <= _columns; column++) {
+          final double u = column / _columns;
+          final double envelope =
+              math.sin(math.pi * u) * math.sin(math.pi * v);
+          final double waveX =
+              math.sin(v * math.pi * 2.4 + time * .20 + 1.1) * .115 +
+              math.sin(u * math.pi * 4.2 - time * .13 + .7) * .055;
+          final double waveY =
+              math.cos(u * math.pi * 2.3 - time * .18 + 2.2) * .12 +
+              math.cos(v * math.pi * 3.7 + time * .11) * .065;
+          positions[vertex * 2] = (u + waveX * envelope) * width;
+          positions[vertex * 2 + 1] = (v + waveY * envelope) * height;
+          vertexColors[vertex] = _meshColor(colors, u, v, time).toARGB32();
+          vertex++;
+        }
       }
-      final List<Paint> paints = _layerPaints!;
-      for (var layerIndex = 0; layerIndex < _flowLayers.length; layerIndex++) {
-        final _FlowLayer layer = _flowLayers[layerIndex];
-        final double time = timeBase * layer.speed + layer.phaseOffset;
-        final double secondary =
-            timeBase * layer.speed * 0.73 + layer.phaseOffset * 1.37;
-        final double pulse = math.sin(time * 0.61) * 0.075;
-        canvas.save();
-        canvas.translate(
-          size.width * 0.5 + math.sin(time) * size.width * layer.orbitX,
-          size.height * 0.5 + math.cos(secondary) * size.height * layer.orbitY,
-        );
-        canvas.rotate(
-          math.sin(time * 0.43) * layer.rotationRange * math.pi / 180,
-        );
-        final double scaleX = layer.scaleX + pulse;
-        final double scaleY = layer.scaleY - pulse * 0.72;
-        canvas.scale(scaleX, scaleY);
-        // The shader reaches zero alpha at this radius; limiting rasterization
-        // to its transformed ellipse avoids shading the full window rectangle.
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset.zero,
-            width: size.width / scaleX,
-            height: size.height / scaleY,
-          ),
-          paints[layerIndex],
-        );
-        canvas.restore();
-      }
+      final ui.Vertices vertices = ui.Vertices.raw(
+        ui.VertexMode.triangles,
+        positions,
+        colors: vertexColors,
+        indices: _indices,
+      );
+      canvas.drawVertices(vertices, BlendMode.srcOver, Paint());
     }
     if (veil.a > 0) {
       final Rect bounds = Offset.zero & size;
@@ -452,6 +445,154 @@ Color albumSeedFromPixels(Uint8List rgba, int width, int height) {
     );
   }
   return kAlbumDefaultSeed;
+}
+
+/// Multi-colour mesh palette extracted from the artwork itself.
+///
+/// AMLL's mesh renderer uses the cover texture rather than a single-hue ramp.
+/// Flutter's `drawVertices` port paints with vertex colours, so we preserve the
+/// dominant cover hues here and let the flowing mesh interpolate between them.
+class _ColorBucket {
+  int count = 0;
+  double red = 0;
+  double green = 0;
+  double blue = 0;
+  double saturation = 0;
+  double lightness = 0;
+  double score = 0;
+}
+
+List<Color> albumMeshColorsFromPixels(
+  Uint8List rgba,
+  int width,
+  int height,
+) {
+  if (width <= 0 || height <= 0) {
+    return albumFlowColors(kAlbumDefaultSeed);
+  }
+  final int stepX = math.max(1, width ~/ 72);
+  final int stepY = math.max(1, height ~/ 72);
+  final Map<int, _ColorBucket> buckets = <int, _ColorBucket>{};
+  for (var y = 0; y < height; y += stepY) {
+    for (var x = 0; x < width; x += stepX) {
+      final int index = (y * width + x) * 4;
+      if (index + 3 >= rgba.length || rgba[index + 3] < 128) continue;
+      final int r = rgba[index];
+      final int g = rgba[index + 1];
+      final int b = rgba[index + 2];
+      final HSLColor hsl = HSLColor.fromColor(Color.fromARGB(255, r, g, b));
+      if (hsl.lightness < .07 || hsl.lightness > .95) continue;
+      // Quantise to 32 levels per channel. The bucket score favours vibrant
+      // pixels near mid-lightness, matching the contrast/saturation treatment
+      // used by AMLL's WebGL cover texture.
+      final int key = (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
+      final _ColorBucket bucket = buckets.putIfAbsent(
+        key,
+        _ColorBucket.new,
+      );
+      bucket
+        ..count += 1
+        ..red += r
+        ..green += g
+        ..blue += b
+        ..saturation += hsl.saturation
+        ..lightness += hsl.lightness;
+    }
+  }
+  if (buckets.isEmpty) return albumFlowColors(kAlbumDefaultSeed);
+
+  final List<_ColorBucket> candidates = <_ColorBucket>[];
+  for (final _ColorBucket bucket in buckets.values) {
+    final double saturation = bucket.saturation / bucket.count;
+    final double lightness = bucket.lightness / bucket.count;
+    bucket.score =
+        bucket.count *
+        (.28 + saturation * 1.25) *
+        (.35 + 1 - (lightness - .5).abs() * 1.4);
+    candidates.add(bucket);
+  }
+  candidates.sort((a, b) => b.score.compareTo(a.score));
+
+  final List<Color> selected = <Color>[];
+  for (final _ColorBucket bucket in candidates) {
+    final Color raw = Color.fromARGB(
+      255,
+      (bucket.red / bucket.count).round().clamp(0, 255),
+      (bucket.green / bucket.count).round().clamp(0, 255),
+      (bucket.blue / bucket.count).round().clamp(0, 255),
+    );
+    final HSLColor hsl = HSLColor.fromColor(raw);
+    final Color vivid = HSLColor.fromAHSL(
+      1,
+      hsl.hue,
+      (hsl.saturation * 1.32 + .06).clamp(0.0, 1.0),
+      (hsl.lightness * .84 + .16).clamp(.16, .78),
+    ).toColor();
+    if (selected.every(
+      (Color existing) => _colorDistance(existing, vivid) > 46,
+    )) {
+      selected.add(vivid);
+      if (selected.length == 5) break;
+    }
+  }
+
+  final List<Color> fallback = albumFlowColors(
+    selected.isEmpty ? kAlbumDefaultSeed : selected.first,
+  );
+  for (final Color color in fallback) {
+    if (selected.length == 5) break;
+    if (selected.every(
+      (Color existing) => _colorDistance(existing, color) > 28,
+    )) {
+      selected.add(color);
+    }
+  }
+  for (final Color color in fallback) {
+    if (selected.length == 5) break;
+    selected.add(color);
+  }
+  selected.sort(
+    (a, b) => HSLColor.fromColor(
+      b,
+    ).lightness.compareTo(HSLColor.fromColor(a).lightness),
+  );
+  return selected;
+}
+
+double _colorDistance(Color a, Color b) {
+  final double dr = (a.r - b.r) * 255;
+  final double dg = (a.g - b.g) * 255;
+  final double db = (a.b - b.b) * 255;
+  return math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+final Map<String, List<Color>> _meshPaletteCache = <String, List<Color>>{};
+
+Future<List<Color>?> albumMeshColorsForCover(String? coverUrl) async {
+  final String? url = albumPaletteArtworkUrl(coverUrl);
+  if (url == null) return null;
+  final List<Color>? cached = _meshPaletteCache[url];
+  if (cached != null) return cached;
+  final ui.Image? image = await _decode(ArtworkImage(url));
+  if (image == null) return null;
+  try {
+    final ByteData? pixels = await image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    );
+    if (pixels == null) return null;
+    final List<Color> colors = albumMeshColorsFromPixels(
+      pixels.buffer.asUint8List(),
+      image.width,
+      image.height,
+    );
+    if (_meshPaletteCache.length >= 24) {
+      _meshPaletteCache.remove(_meshPaletteCache.keys.first);
+    }
+    _meshPaletteCache[url] = colors;
+    return colors;
+  } finally {
+    image.dispose();
+  }
 }
 
 /// A 96 px rendition of the cover — enough for a palette, cheap to fetch.
@@ -572,9 +713,13 @@ class _LegacyAlbumBackdropState extends State<LegacyAlbumBackdrop> {
 
   Future<void> _load() async {
     final int generation = ++_generation;
-    final Color? seed = await albumSeedForCover(widget.track?.coverUrl);
+    final String? coverUrl = widget.track?.coverUrl;
+    final List<Color>? mesh = await albumMeshColorsForCover(coverUrl);
+    final Color? seed = await albumSeedForCover(coverUrl);
     if (!mounted || generation != _generation) return;
-    setState(() => _colors = albumFlowColors(seed ?? kAlbumDefaultSeed));
+    setState(
+      () => _colors = mesh ?? albumFlowColors(seed ?? kAlbumDefaultSeed),
+    );
     widget.onSeed?.call(seed ?? kAlbumDefaultSeed);
   }
 

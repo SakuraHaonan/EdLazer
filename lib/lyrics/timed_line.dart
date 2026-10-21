@@ -1,4 +1,5 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -7,10 +8,11 @@ import 'word_motion.dart';
 
 /// AMLL-style word-timed lyric line.
 ///
-/// The renderer uses the actual glyph boxes from a [TextPainter] so wrapping
-/// and grapheme clusters stay exact. Completed words paint once through a
-/// cached path; only the current word receives the per-character emphasis
-/// transform and glow. Inactive rows are a single cached raster.
+/// This is a direct port of the reference renderer: every grapheme keeps its
+/// own float/emphasis transform for the whole line, the karaoke sweep is a
+/// soft horizontal gradient, and the glow is a blurred white clone of the
+/// glyph composited underneath the bright text. Completed words keep their
+/// upward float instead of snapping back to the baseline.
 class TimedLyricText extends StatefulWidget {
   const TimedLyricText({
     super.key,
@@ -19,6 +21,7 @@ class TimedLyricText extends StatefulWidget {
     required this.active,
     required this.position,
     required this.repaint,
+    this.emphasis,
   });
 
   final LyricLine line;
@@ -27,12 +30,16 @@ class TimedLyricText extends StatefulWidget {
   final Duration Function() position;
   final Listenable repaint;
 
+  /// Line focus in `0..1`, driven by the row's scale spring. Without it the
+  /// line snaps between dim (`0`) and bright (`1`).
+  final double Function()? emphasis;
+
   @override
   State<TimedLyricText> createState() => _TimedLyricTextState();
 }
 
 class _TimedLyricTextState extends State<TimedLyricText> {
-  _LineLayout? _layout;
+  _WordLayout? _layout;
   Object? _layoutKey;
 
   @override
@@ -58,13 +65,13 @@ class _TimedLyricTextState extends State<TimedLyricText> {
         );
         if (_layoutKey != key) {
           _layout?.dispose();
-          _layout = _LineLayout(
-            line: widget.line,
-            style: widget.style,
-            width: constraints.maxWidth,
-            scaler: scaler,
-            direction: direction,
-            locale: locale,
+          _layout = _WordLayout(
+            widget.line,
+            widget.style,
+            constraints.maxWidth,
+            scaler,
+            direction,
+            locale,
           );
           _layoutKey = key;
         }
@@ -72,11 +79,11 @@ class _TimedLyricTextState extends State<TimedLyricText> {
           label: widget.line.text,
           child: ExcludeSemantics(
             child: CustomPaint(
-              size: Size(constraints.maxWidth, _layout!.height),
-              painter: _TimedLinePainter(
+              size: Size(constraints.maxWidth, _layout!.bright.height),
+              painter: _WordPainter(
                 layout: _layout!,
-                active: widget.active,
                 position: widget.position,
+                emphasis: widget.emphasis ?? () => widget.active ? 1.0 : 0.0,
                 repaint: widget.repaint,
               ),
             ),
@@ -87,59 +94,35 @@ class _TimedLyricTextState extends State<TimedLyricText> {
   }
 }
 
-class _Glyph {
-  const _Glyph({
-    required this.rect,
-    required this.word,
-    required this.character,
-    required this.startFraction,
-    required this.endFraction,
-  });
-
-  final Rect rect;
-  final _WordRun word;
-  final int character;
-  final double startFraction;
-  final double endFraction;
-}
-
-class _WordRun {
-  _WordRun({
-    required this.word,
-    required this.index,
-    required this.last,
-  });
-
-  final LyricWord word;
-  final int index;
-  final bool last;
-  final List<_Glyph> glyphs = <_Glyph>[];
-  final Path path = Path();
-  double width = 0;
-
-  static final RegExp _cjk = RegExp(
-    r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]',
+class _Segment {
+  const _Segment(
+    this.character,
+    this.count,
+    this.rect,
+    this.wordLeft,
+    this.consumed,
+    this.totalWidth,
+    this.startMs,
+    this.durationMs,
+    this.glow,
+    this.last,
   );
 
-  int get characterCount => glyphs.length;
-  double get startMs => word.start.inMicroseconds / 1000;
-  double get endMs => startMs + word.duration.inMicroseconds / 1000;
-  bool get emphasized {
-    final int length = word.text.trim().characters.length;
-    return word.duration >= const Duration(milliseconds: 1000) &&
-        (_cjk.hasMatch(word.text) || (length > 1 && length <= 7));
-  }
+  final int character, count;
+  final Rect rect;
+  final double wordLeft, consumed, totalWidth, startMs, durationMs;
+  final bool glow, last;
 }
 
-class _LineLayout {
-  _LineLayout({
-    required this.line,
-    required TextStyle style,
-    required double width,
-    required TextScaler scaler,
-    required TextDirection direction,
-    required Locale? locale,
-  }) {
+class _WordLayout {
+  _WordLayout(
+    this.line,
+    TextStyle style,
+    double width,
+    TextScaler scaler,
+    TextDirection direction,
+    Locale? locale,
+  ) {
     bright = TextPainter(
       text: TextSpan(text: line.text, style: style),
       textDirection: direction,
@@ -150,33 +133,15 @@ class _LineLayout {
       text: TextSpan(
         text: line.text,
         style: style.copyWith(
-          color: (style.color ?? Colors.black).withValues(alpha: .26),
+          color: (style.color ?? Colors.black).withValues(alpha: .28),
         ),
       ),
       textDirection: direction,
       textScaler: scaler,
       locale: locale,
     )..layout(maxWidth: width);
-    glow = TextPainter(
-      text: TextSpan(
-        text: line.text,
-        style: style.copyWith(
-          color: Colors.transparent,
-          shadows: <Shadow>[
-            Shadow(
-              color: (style.color ?? Colors.white).withValues(alpha: .3),
-              blurRadius: math.max(6, (style.fontSize ?? 22) * .32),
-            ),
-          ],
-        ),
-      ),
-      textDirection: direction,
-      textScaler: scaler,
-      locale: locale,
-    )..layout(maxWidth: width);
-    height = bright.height;
-
-    final List<LyricWord> sourceWords = line.words.isNotEmpty
+    fontSize = scaler.scale(style.fontSize ?? 22);
+    final List<LyricWord> words = line.words.isNotEmpty
         ? line.words
         : <LyricWord>[
             LyricWord(
@@ -186,180 +151,205 @@ class _LineLayout {
             ),
           ];
     var offset = 0;
-    for (var wi = 0; wi < sourceWords.length; wi++) {
-      final LyricWord word = sourceWords[wi];
-      final _WordRun run = _WordRun(
-        word: word,
-        index: wi,
-        last: wi == sourceWords.length - 1,
+    for (var wi = 0; wi < words.length; wi++) {
+      final LyricWord word = words[wi];
+      final List<Rect> rects = bright
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: offset,
+              extentOffset: offset + word.text.length,
+            ),
+          )
+          .map((TextBox box) => box.toRect())
+          .toList();
+      final double totalWidth = rects.fold<double>(
+        0,
+        (double sum, Rect rect) => sum + rect.width,
       );
-      var characterIndex = 0;
-      for (final String character in word.text.characters) {
-        final int end = offset + character.length;
+      final List<String> chars = word.text.characters.toList();
+      final int trimmedLength = word.text.trim().characters.length;
+      // Every word uses the long emphasis float for its motion, but only the
+      // AMLL-emphasized subset (long syllables/short words) gets the white
+      // blurred glow. Short ordinary words float without lighting up.
+      final bool glow =
+          word.duration >= const Duration(milliseconds: 1000) &&
+          (_cjk.hasMatch(word.text) || trimmedLength > 1 && trimmedLength <= 7);
+      for (var ci = 0; ci < chars.length; ci++) {
+        final int end = offset + chars[ci].length;
         for (final TextBox box in bright.getBoxesForSelection(
           TextSelection(baseOffset: offset, extentOffset: end),
         )) {
-          final Rect rect = box.toRect();
-          if (rect.width <= 0 || rect.height <= 0) continue;
-          final double start = run.width;
-          run.width += rect.width;
-          final _Glyph glyph = _Glyph(
-            rect: rect,
-            word: run,
-            character: characterIndex,
-            startFraction: start,
-            endFraction: run.width,
-          );
-          run.glyphs.add(glyph);
-          run.path.addRect(rect);
+          if (box.right > box.left) {
+            final Rect rect = box.toRect();
+            final Rect glyphClip = Rect.fromLTRB(
+              rect.left,
+              rect.top - fontSize * .15,
+              rect.right,
+              rect.bottom + fontSize * .15,
+            );
+            baseClip.addRect(glyphClip);
+            // Locate the wrapped line box this glyph belongs to so the
+            // gradient sweep is measured from the word's own left edge.
+            var consumed = 0.0;
+            var wordLeft = rect.left;
+            for (final Rect part in rects) {
+              if ((part.top - rect.top).abs() < 1 &&
+                  rect.left >= part.left - 1 &&
+                  rect.right <= part.right + 1) {
+                wordLeft = part.left;
+                break;
+              }
+              consumed += part.width;
+            }
+            segments.add(
+              _Segment(
+                ci,
+                chars.length,
+                rect,
+                wordLeft,
+                consumed,
+                totalWidth,
+                word.start.inMicroseconds / 1000,
+                word.duration.inMicroseconds / 1000,
+                glow,
+                wi == words.length - 1,
+              ),
+            );
+          }
         }
         offset = end;
-        characterIndex++;
       }
-      if (run.glyphs.isNotEmpty) runs.add(run);
     }
   }
+
+  static final RegExp _cjk = RegExp(r'[぀-ヿ㐀-鿿가-힯]');
 
   final LyricLine line;
-  late final TextPainter bright;
-  late final TextPainter dim;
-  late final TextPainter glow;
-  late final double height;
-  final List<_WordRun> runs = <_WordRun>[];
-
-  int? runAt(double milliseconds) {
-    if (runs.isEmpty) return null;
-    int low = 0;
-    int high = runs.length;
-    while (low < high) {
-      final int middle = (low + high) ~/ 2;
-      if (runs[middle].startMs <= milliseconds) {
-        low = middle + 1;
-      } else {
-        high = middle;
-      }
-    }
-    return low == 0 ? null : low - 1;
-  }
+  late final TextPainter bright, dim;
+  late final double fontSize;
+  final List<_Segment> segments = <_Segment>[];
+  final Path baseClip = Path();
 
   void dispose() {
     bright.dispose();
     dim.dispose();
-    glow.dispose();
   }
 }
 
-class _TimedLinePainter extends CustomPainter {
-  _TimedLinePainter({
+class _WordPainter extends CustomPainter {
+  _WordPainter({
     required this.layout,
-    required this.active,
     required this.position,
+    required this.emphasis,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
-  final _LineLayout layout;
-  final bool active;
+  final _WordLayout layout;
   final Duration Function() position;
+  final double Function() emphasis;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (!active) {
+    final double focus = emphasis().clamp(0.0, 1.0);
+    if (focus < 1) {
+      canvas.saveLayer(
+        null,
+        Paint()..color = Colors.white.withValues(alpha: 1 - focus),
+      );
       layout.bright.paint(canvas, Offset.zero);
-      return;
+      canvas.restore();
     }
+    if (focus <= 0) return;
 
-    final double nowMs = position().inMicroseconds / 1000;
+    // Retain the word painter while the row exits; fade its emphasis using
+    // the same spring as the row's scale and color instead of swapping to
+    // plain text.
+    canvas.saveLayer(
+      null,
+      Paint()..color = Colors.white.withValues(alpha: focus),
+    );
+    final double now = position().inMicroseconds / 1000;
+    canvas.save();
+    canvas.clipPath(layout.baseClip);
     layout.dim.paint(canvas, Offset.zero);
-
-    final Path settled = Path();
-    final List<_WordRun> animating = <_WordRun>[];
-    _WordRun? crossing;
-    for (final _WordRun run in layout.runs) {
-      if (nowMs >= run.endMs) {
-        if (nowMs - run.endMs >= 420) {
-          settled.addPath(run.path, Offset.zero);
-        } else {
-          animating.add(run);
-        }
-      } else if (nowMs >= run.startMs) {
-        crossing = run;
-        animating.add(run);
-        break;
-      } else {
-        break;
-      }
-    }
-    if (!settled.getBounds().isEmpty) {
+    canvas.restore();
+    for (final _Segment segment in layout.segments) {
+      final double elapsed = now - segment.startMs;
+      final double duration = segment.durationMs;
+      final LyricWordMotion motion = LyricWordMotion.emphasized(
+        elapsed,
+        duration,
+        segment.character,
+        segment.count,
+        last: segment.last,
+        // Ordinary (non-glowing) words settle at the float target instead of
+        // peaking and drifting back down like the glowing long syllables.
+        holdFloat: !segment.glow,
+      );
+      final Rect rect = segment.rect;
+      final double boundary =
+          segment.wordLeft +
+          LyricWordMotion.maskBoundary(elapsed, duration, segment.totalWidth) -
+          segment.consumed;
+      // Width of the soft karaoke edge. AMLL uses half a glyph height so the
+      // wipe reads as a moving glow rather than a hard rectangle.
+      final double fade = math.max(1.0, rect.height * .5);
       canvas.save();
-      canvas.clipPath(settled);
-      layout.bright.paint(canvas, Offset.zero);
-      canvas.restore();
-    }
-
-    if (crossing != null) {
-      canvas.save();
-      canvas.clipPath(crossing.path);
-      layout.glow.paint(canvas, Offset.zero);
-      canvas.restore();
-    }
-
-    final double fontSize = layout.bright.text?.style?.fontSize ?? 22;
-    for (final _WordRun run in animating) {
-      final double duration = math.max(1, run.endMs - run.startMs);
-      final double elapsed = (nowMs - run.startMs).clamp(0.0, duration);
-      final int count = math.max(1, run.characterCount);
-      final double totalWidth = math.max(.0001, run.width);
-      for (var i = 0; i < run.glyphs.length; i++) {
-        final _Glyph glyph = run.glyphs[i];
-        final double glyphEndMs =
-            run.startMs + duration * (glyph.endFraction / totalWidth);
-        final bool isCrossing = identical(run, crossing);
-        final bool settling = isCrossing || nowMs - glyphEndMs < 420;
-        if (!settling) continue;
-        double mask = 1;
-        if (isCrossing) {
-          final double sungWidth =
-              ((elapsed / duration).clamp(0.0, 1.0)) * totalWidth;
-          if (sungWidth <= glyph.startFraction) continue;
-          mask = ((sungWidth - glyph.startFraction) /
-                  math.max(.0001, glyph.endFraction - glyph.startFraction))
-              .clamp(0.0, 1.0);
-        }
-        final LyricWordMotion motion = run.emphasized
-            ? LyricWordMotion.emphasized(
-                elapsed,
-                duration,
-                i,
-                count,
-                last: run.last,
+      canvas.translate(
+        motion.xEm * layout.fontSize * focus,
+        motion.yEm * layout.fontSize * focus,
+      );
+      canvas.translate(rect.center.dx, rect.center.dy);
+      canvas.scale(1 + (motion.scale - 1) * focus);
+      canvas.translate(-rect.center.dx, -rect.center.dy);
+      final Rect clip = Rect.fromLTRB(
+        rect.left,
+        rect.top - layout.fontSize * .15,
+        rect.right,
+        rect.bottom + layout.fontSize * .15,
+      );
+      canvas.clipRect(clip);
+      if (boundary + fade / 2 >= rect.left) {
+        canvas.saveLayer(clip, Paint());
+        if (segment.glow && motion.glow > .001) {
+          // A blurred, pure-white clone of the glyph, masked by the current
+          // emphasis glow strength.
+          canvas.saveLayer(
+            clip,
+            Paint()
+              ..imageFilter = ui.ImageFilter.blur(
+                sigmaX: motion.glowRadiusEm * layout.fontSize,
+                sigmaY: motion.glowRadiusEm * layout.fontSize,
               )
-            : LyricWordMotion.ordinary(elapsed, duration);
-        final Rect rect = glyph.rect;
-        final double dx = motion.xEm * fontSize;
-        final double dy = motion.yEm * fontSize;
-        canvas.save();
-        if (motion.scale != 1 || dx != 0 || dy != 0) {
-          canvas.translate(rect.center.dx + dx, rect.center.dy + dy);
-          canvas.scale(motion.scale);
-          canvas.translate(-rect.center.dx, -rect.center.dy);
+              ..colorFilter = ColorFilter.mode(
+                Colors.white.withValues(alpha: motion.glow),
+                BlendMode.srcIn,
+              ),
+          );
+          layout.bright.paint(canvas, Offset.zero);
+          canvas.restore();
         }
-        canvas.clipRect(
-          Rect.fromLTRB(
-            rect.left,
-            rect.top - fontSize * .22,
-            rect.left + rect.width * mask,
-            rect.bottom + fontSize * .22,
-          ),
-        );
         layout.bright.paint(canvas, Offset.zero);
+        canvas.drawRect(
+          clip,
+          Paint()
+            ..blendMode = BlendMode.dstIn
+            ..shader = ui.Gradient.linear(
+              Offset(boundary - fade / 2, 0),
+              Offset(boundary + fade / 2, 0),
+              <Color>[Colors.white, Colors.transparent],
+            ),
+        );
         canvas.restore();
       }
+      canvas.restore();
     }
+    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _TimedLinePainter oldDelegate) =>
+  bool shouldRepaint(covariant _WordPainter oldDelegate) =>
       oldDelegate.layout != layout ||
-      oldDelegate.active != active ||
-      oldDelegate.position != position;
+      oldDelegate.position != position ||
+      oldDelegate.emphasis != emphasis;
 }

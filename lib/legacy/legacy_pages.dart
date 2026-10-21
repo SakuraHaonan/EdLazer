@@ -1,4 +1,5 @@
-﻿import 'dart:async';
+import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
@@ -213,7 +214,11 @@ class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
                         end: Alignment.bottomRight,
                         colors: <Color>[
                           apple.accent,
-                          Color.lerp(apple.accent, AppleColors.systemPurple, .38)!,
+                          Color.lerp(
+                            apple.accent,
+                            AppleColors.systemPurple,
+                            .38,
+                          )!,
                         ],
                       ),
                     ),
@@ -273,7 +278,9 @@ class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
-                                      color: Colors.white.withValues(alpha: .72),
+                                      color: Colors.white.withValues(
+                                        alpha: .72,
+                                      ),
                                     ),
                               ),
                             ],
@@ -351,9 +358,7 @@ class LegacyLibraryPage extends StatelessWidget {
           children: <Widget>[
             ApplePageTitle(
               title: '资料库',
-              subtitle: state.isGuest
-                  ? '登录后同步你的歌单'
-                  : '${state.user.name} 的音乐',
+              subtitle: state.isGuest ? '登录后同步你的歌单' : '${state.user.name} 的音乐',
               padding: const EdgeInsets.fromLTRB(0, 12, 0, 18),
             ),
             if (mine.isNotEmpty) ...<Widget>[
@@ -432,6 +437,8 @@ class LegacyPlaylistPage extends StatefulWidget {
 }
 
 class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
+  final ScrollController _scroll = ScrollController();
+  final GlobalKey _headerKey = GlobalKey();
   List<Track>? _tracks;
   String? _error;
 
@@ -439,6 +446,12 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
   void initState() {
     super.initState();
     unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -455,6 +468,64 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     }
   }
 
+  /// Natural height of one [LegacyTrackRow]: 44 px cover, three optional text
+  /// lines and the row's vertical padding/margin. Measured rather than
+  /// hard-coded so text scaling stays exact.
+  double _rowExtent(Track track, ThemeData theme, TextScaler scaler) {
+    double line(TextStyle? style, String text) {
+      final TextPainter painter = TextPainter(
+        text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final double height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    final double title = line(theme.textTheme.bodyMedium, track.title);
+    final double artist = line(theme.textTheme.bodySmall, track.artist);
+    final String? translated = track.translatedTitle?.trim();
+    final double translation = translated == null || translated.isEmpty
+        ? 0
+        : line(theme.textTheme.bodySmall, translated);
+    return math.max(44.0, title + artist + translation) + 16.0;
+  }
+
+  Future<void> _locateCurrent() async {
+    final List<Track>? tracks = _tracks;
+    if (tracks == null || tracks.isEmpty || !_scroll.hasClients) return;
+    final Track? current = widget.state.current;
+    final int index = current == null
+        ? -1
+        : tracks.indexWhere((Track track) => track.id == current.id);
+    if (index < 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前歌曲不在这个歌单中')));
+      return;
+    }
+    final ThemeData theme = Theme.of(context);
+    final TextScaler scaler = MediaQuery.textScalerOf(context);
+    final double header = _headerKey.currentContext?.size?.height ?? 0;
+    var top = 12 + header;
+    for (var i = 0; i < index; i++) {
+      top += _rowExtent(tracks[i], theme, scaler);
+    }
+    final double extent = _rowExtent(tracks[index], theme, scaler);
+    final double viewport = _scroll.position.viewportDimension;
+    final double target = (top - (viewport - extent) / 2).clamp(
+      0.0,
+      _scroll.position.maxScrollExtent,
+    );
+    await _scroll.animateTo(
+      target,
+      duration: const Duration(milliseconds: 360),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Track>? tracks = _tracks;
@@ -463,63 +534,87 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1100),
-        child: CustomScrollView(
-          slivers: <Widget>[
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(inset, 12, inset, 0),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    _PlaylistHeader(
-                      playlist: widget.playlist,
-                      compact: compact,
-                      onPlay: tracks == null || tracks.isEmpty
-                          ? null
-                          : () => widget.state.playQueue(tracks),
-                    ),
-                    const SizedBox(height: 22),
-                    if (_error != null)
-                      LegacyNotice(
-                        message: _error!,
-                        action: FilledButton(
-                          onPressed: () => unawaited(_load()),
-                          child: const Text('重试'),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            CustomScrollView(
+              controller: _scroll,
+              slivers: <Widget>[
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(inset, 12, inset, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      key: _headerKey,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        _PlaylistHeader(
+                          playlist: widget.playlist,
+                          compact: compact,
+                          onPlay: tracks == null || tracks.isEmpty
+                              ? null
+                              : () => widget.state.playQueue(tracks),
                         ),
-                      )
-                    else if (tracks == null)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 52),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (tracks.isEmpty)
-                      const LegacyNotice(message: '这个歌单还没有可播放的曲目。')
-                    else
-                      LegacySectionHeader(
-                        title: '歌曲',
-                        subtitle: '${tracks.length} 首',
-                      ),
-                    const SizedBox(height: 6),
-                  ],
-                ),
-              ),
-            ),
-            if (tracks != null && tracks.isNotEmpty)
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: inset),
-                sliver: SliverList.builder(
-                  itemCount: tracks.length,
-                  itemBuilder: (BuildContext context, int i) => LegacyTrackRow(
-                    track: tracks[i],
-                    index: i,
-                    current: widget.state.current?.id == tracks[i].id,
-                    playing: widget.state.playing,
-                    onTap: () =>
-                        widget.state.playQueue(tracks, startIndex: i),
+                        const SizedBox(height: 22),
+                        if (_error != null)
+                          LegacyNotice(
+                            message: _error!,
+                            action: FilledButton(
+                              onPressed: () => unawaited(_load()),
+                              child: const Text('重试'),
+                            ),
+                          )
+                        else if (tracks == null)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 52),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (tracks.isEmpty)
+                          const LegacyNotice(message: '这个歌单还没有可播放的曲目。')
+                        else
+                          LegacySectionHeader(
+                            title: '歌曲',
+                            subtitle: '${tracks.length} 首',
+                          ),
+                        const SizedBox(height: 6),
+                      ],
+                    ),
                   ),
                 ),
+                if (tracks != null && tracks.isNotEmpty)
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: inset),
+                    sliver: SliverList.builder(
+                      itemCount: tracks.length,
+                      itemBuilder: (BuildContext context, int i) =>
+                          LegacyTrackRow(
+                            key: ValueKey<String>('playlist-row-$i'),
+                            track: tracks[i],
+                            index: i,
+                            current: widget.state.current?.id == tracks[i].id,
+                            playing: widget.state.playing,
+                            onTap: () =>
+                                widget.state.playQueue(tracks, startIndex: i),
+                          ),
+                    ),
+                  ),
+                // Leave room for the floating locate button so the last row
+                // can scroll clear of it.
+                const SliverToBoxAdapter(child: SizedBox(height: 88)),
+              ],
+            ),
+            Positioned(
+              right: 18,
+              bottom: 18,
+              child: FloatingActionButton.small(
+                key: const ValueKey<String>('playlist-locate'),
+                heroTag: null,
+                tooltip: '定位正在播放',
+                backgroundColor: AppleSemanticColors.of(context).accent,
+                foregroundColor: Colors.white,
+                onPressed: () => unawaited(_locateCurrent()),
+                child: const Icon(Icons.my_location_rounded, size: 20),
               ),
-            const SliverToBoxAdapter(child: SizedBox(height: 28)),
+            ),
           ],
         ),
       ),
@@ -608,11 +703,7 @@ class _PlaylistHeader extends StatelessWidget {
     );
     if (compact) {
       return Column(
-        children: <Widget>[
-          cover,
-          const SizedBox(height: 18),
-          info,
-        ],
+        children: <Widget>[cover, const SizedBox(height: 18), info],
       );
     }
     return Row(
@@ -625,6 +716,7 @@ class _PlaylistHeader extends StatelessWidget {
     );
   }
 }
+
 class LegacySearchPage extends StatefulWidget {
   const LegacySearchPage({
     super.key,
@@ -858,8 +950,8 @@ class LegacySettingsPage extends StatelessWidget {
                     value: shownScale.clamp(minScale, kDpiScaleMax),
                     min: minScale,
                     max: kDpiScaleMax,
-                    divisions:
-                        ((kDpiScaleMax - minScale) / kDpiScaleStep).round(),
+                    divisions: ((kDpiScaleMax - minScale) / kDpiScaleStep)
+                        .round(),
                     onChanged: (double value) =>
                         unawaited(state.setDpiScale(value)),
                     action: TextButton(
@@ -1101,9 +1193,7 @@ class LegacySettingsPage extends StatelessWidget {
                         unawaited(state.setScrollRetention(value)),
                     action: TextButton(
                       onPressed: () => unawaited(
-                        state.setScrollRetention(
-                          ScrollMotion.defaultRetention,
-                        ),
+                        state.setScrollRetention(ScrollMotion.defaultRetention),
                       ),
                       child: const Text('恢复默认'),
                     ),
@@ -1167,7 +1257,7 @@ class LegacySettingsPage extends StatelessWidget {
                     label: state.isGuest ? '游客' : state.user.name,
                     subtitle: state.isGuest
                         ? '登录后同步歌单和每日推荐'
-                        : '${state.user.methodLabel} · ${state.user.detail}',
+                        : state.user.vipLabel ?? '普通用户',
                     trailing: state.isGuest
                         ? FilledButton(
                             onPressed: () => unawaited(
@@ -1268,9 +1358,7 @@ class _LegacySettingRow extends StatelessWidget {
     );
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: apple.separator, width: .5),
-        ),
+        border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: stacked
@@ -1354,9 +1442,7 @@ class _LegacySliderRow extends StatelessWidget {
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: apple.separator, width: .5),
-        ),
+        border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 13, 12, 4),
       child: Column(
@@ -1372,7 +1458,10 @@ class _LegacySliderRow extends StatelessWidget {
                   ),
                 ),
               ),
-              if (action != null) ...<Widget>[action!, const SizedBox(width: 4)],
+              if (action != null) ...<Widget>[
+                action!,
+                const SizedBox(width: 4),
+              ],
               Text(
                 valueText,
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -1432,9 +1521,7 @@ class _LegacyChoiceRow extends StatelessWidget {
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: apple.separator, width: .5),
-        ),
+        border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 13, 16, 12),
       child: Column(

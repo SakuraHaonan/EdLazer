@@ -1,13 +1,10 @@
 ﻿import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../legacy/legacy_background.dart';
 import '../state/ui_preferences.dart';
-import '../utils/artwork.dart';
-import '../widgets/artwork_image.dart';
 
 /// The immersive player canvas: album-colour flow + a real, heavily blurred
 /// cover bloom + Apple Music's dark vignette.
@@ -50,9 +47,13 @@ class _AlbumBlurFlowState extends State<AlbumBlurFlow> {
 
   Future<void> _updatePalette() async {
     final int generation = ++_generation;
-    final Color? seed = await albumSeedForCover(widget.track?.coverUrl);
+    final String? coverUrl = widget.track?.coverUrl;
+    final List<Color>? mesh = await albumMeshColorsForCover(coverUrl);
+    final Color? seed = mesh == null ? await albumSeedForCover(coverUrl) : null;
     if (!mounted || generation != _generation) return;
-    setState(() => _colors = albumFlowColors(seed ?? kAlbumDefaultSeed));
+    setState(
+      () => _colors = mesh ?? albumFlowColors(seed ?? kAlbumDefaultSeed),
+    );
   }
 
   @override
@@ -70,10 +71,6 @@ class _AlbumBlurFlowState extends State<AlbumBlurFlow> {
                     widget.mode == LegacyBackgroundMode.nowPlayingDynamic,
                 solid: widget.mode == LegacyBackgroundMode.nowPlayingStatic,
               ),
-            if (widget.animationsEnabled &&
-                widget.mode != LegacyBackgroundMode.off &&
-                (widget.track?.coverUrl?.isNotEmpty ?? false))
-              _CoverBloom(url: widget.track!.coverUrl!),
             const IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -104,46 +101,6 @@ class _AlbumBlurFlowState extends State<AlbumBlurFlow> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CoverBloom extends StatelessWidget {
-  const _CoverBloom({required this.url});
-
-  final String url;
-
-  @override
-  Widget build(BuildContext context) {
-    final String? resolved = artworkUrlForSize(
-      url,
-      logicalEdge: 192,
-      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-    );
-    if (resolved == null || resolved.isEmpty) return const SizedBox.shrink();
-    return IgnorePointer(
-      child: ClipRect(
-        child: Transform.scale(
-          scale: 1.18,
-          child: Opacity(
-            opacity: .42,
-            child: ImageFiltered(
-              imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Image(
-                image: ArtworkImage(resolved),
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                errorBuilder:
-                    (
-                      BuildContext context,
-                      Object? error,
-                      StackTrace? stackTrace,
-                    ) => const SizedBox.shrink(),
-              ),
-            ),
-          ),
         ),
       ),
     );

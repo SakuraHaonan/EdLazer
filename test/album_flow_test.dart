@@ -141,6 +141,40 @@ void main() {
     expect(albumSeedFromPixels(Uint8List(0), 0, 0), kAlbumDefaultSeed);
   });
 
+  test('mesh palette preserves distinct cover hues', () {
+    const int size = 16;
+    final Uint8List pixels = Uint8List(size * size * 4);
+    const List<Color> source = <Color>[
+      Color(0xFFD12A3A),
+      Color(0xFF2768D8),
+      Color(0xFF38A85A),
+      Color(0xFFE0B33A),
+    ];
+    for (var y = 0; y < size; y++) {
+      for (var x = 0; x < size; x++) {
+        final Color color = source[
+            (y ~/ 8) * 2 + (x ~/ 8)
+        ];
+        final int offset = (y * size + x) * 4;
+        pixels[offset] = (color.r * 255).round();
+        pixels[offset + 1] = (color.g * 255).round();
+        pixels[offset + 2] = (color.b * 255).round();
+        pixels[offset + 3] = 255;
+      }
+    }
+    final List<Color> palette = albumMeshColorsFromPixels(
+      pixels,
+      size,
+      size,
+    );
+    expect(palette, hasLength(5));
+    final Set<int> hueBuckets = <int>{
+      for (final Color color in palette)
+        (HSLColor.fromColor(color).hue / 45).floor(),
+    };
+    expect(hueBuckets.length, greaterThanOrEqualTo(3));
+  });
+
   testWidgets('the flow background paints its layers and can be frozen', (
     tester,
   ) async {

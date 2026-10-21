@@ -1,0 +1,106 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:lazer_nextgen/data/catalog.dart';
+import 'package:lazer_nextgen/data/models.dart';
+import 'package:lazer_nextgen/gateway/gateway.dart';
+import 'package:lazer_nextgen/legacy/legacy_pages.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
+import 'package:lazer_nextgen/state/app_state.dart';
+
+List<Track> _tracks() => <Track>[
+  for (var i = 0; i < 40; i++)
+    Track(
+      id: 'track-$i',
+      title: 'Track $i',
+      artist: 'Artist $i',
+      album: 'Album',
+      duration: const Duration(minutes: 3),
+      coverSeed: i,
+      // Every other row carries an extra translated-title line so the list
+      // has variable heights; the locator must still land exactly.
+      translatedTitle: i.isEven ? '译名 $i' : null,
+    ),
+];
+
+class _Catalog extends Catalog {
+  @override
+  Future<String?> audioUrlFor(Track track) async => null;
+  @override
+  Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics();
+  @override
+  Future<List<Track>> playlistTracks(String id) async => _tracks();
+}
+
+Future<void> _locateCurrentTrack(WidgetTester tester, Size size) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  final List<Track> tracks = _tracks();
+  final state = AppState(catalog: _Catalog());
+  addTearDown(state.dispose);
+  state.playQueue(tracks, startIndex: 30);
+  const playlist = Playlist(
+    id: 'playlist-fixture',
+    name: 'Playlist fixture',
+    trackIds: <String>[],
+    coverSeed: 1,
+  );
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: buildLegacyTheme(),
+      home: Scaffold(
+        body: LegacyPlaylistPage(state: state, playlist: playlist),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  final locate = find.byKey(const ValueKey<String>('playlist-locate'));
+  expect(locate, findsOneWidget);
+  final button = tester.getRect(locate);
+  final list = tester.getRect(find.byType(CustomScrollView));
+  expect(button.right, closeTo(list.right - 18, 1));
+  expect(button.bottom, closeTo(list.bottom - 18, 1));
+  expect(
+    find.byKey(const ValueKey<String>('playlist-row-30')),
+    findsNothing,
+    reason: 'the current track starts far outside the lazy list window',
+  );
+
+  await tester.tap(locate);
+  await tester.pumpAndSettle();
+
+  final current = find.byKey(const ValueKey<String>('playlist-row-30'));
+  expect(current, findsOneWidget);
+  final row = tester.getRect(current);
+  final viewport = tester.getRect(find.byType(CustomScrollView));
+  expect(row.top, greaterThanOrEqualTo(viewport.top - .5));
+  expect(row.bottom, lessThanOrEqualTo(viewport.bottom + .5));
+  expect(
+    row.center.dy,
+    closeTo(viewport.center.dy, 24),
+    reason: 'locating centres the current row in the list viewport',
+  );
+  expect(tester.takeException(), isNull);
+  state.pause();
+  await tester.pump();
+}
+
+void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('the floating locate button centres the current track (phone)', (
+    tester,
+  ) async {
+    await _locateCurrentTrack(tester, const Size(390, 844));
+  });
+
+  testWidgets(
+    'the floating locate button centres the current track (desktop)',
+    (tester) async {
+      await _locateCurrentTrack(tester, const Size(1280, 800));
+    },
+  );
+}

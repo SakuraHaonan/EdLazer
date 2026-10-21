@@ -3,8 +3,8 @@
 import '../state/app_state.dart';
 import 'now_playing_page.dart';
 
-/// New presentation route. It expands the player from a soft, slightly
-/// recessed card into the full window instead of the old bottom-sheet route.
+/// Material open-upwards presentation: the player rises from the window
+/// bottom to the top and reverses on close.
 Future<void> openNowPlayingPage(BuildContext context, AppState state) {
   return Navigator.of(context).push<void>(NowPlayingRoute(state: state));
 }
@@ -18,10 +18,10 @@ class NowPlayingRoute extends PageRoute<void> {
   bool get opaque => true;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 380);
+  Duration get transitionDuration => const Duration(milliseconds: 300);
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 280);
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 300);
 
   @override
   Color? get barrierColor => null;
@@ -49,22 +49,15 @@ class NowPlayingRoute extends PageRoute<void> {
     if (MediaQuery.disableAnimationsOf(context)) return child;
     final Animation<double> enter = CurvedAnimation(
       parent: animation,
-      curve: const Cubic(.2, .82, .2, 1),
-      reverseCurve: const Cubic(.4, 0, 1, .7),
+      curve: Curves.fastOutSlowIn,
+      reverseCurve: Curves.fastOutSlowIn,
     );
-    return FadeTransition(
-      opacity: CurvedAnimation(
-        parent: animation,
-        curve: const Interval(.08, 1, curve: Curves.easeOut),
-        reverseCurve: Curves.easeIn,
-      ),
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, .035),
-          end: Offset.zero,
-        ).animate(enter),
-        child: RepaintBoundary(child: child),
-      ),
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0, 1),
+        end: Offset.zero,
+      ).animate(enter),
+      child: RepaintBoundary(child: child),
     );
   }
 }

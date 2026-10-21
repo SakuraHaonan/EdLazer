@@ -1,10 +1,9 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -47,18 +46,29 @@ class LyricViewport extends StatefulWidget {
 
 class _LyricViewportState extends State<LyricViewport>
     with TickerProviderStateMixin {
-  late final ScrollController _scroll;
   late final Ticker _motionTicker;
-  late final LyricSpring _scrollSpring;
+  late final Ticker _wordTicker;
   Duration _lastMotionTick = Duration.zero;
+  bool _seeking = false;
+  double _manualVelocity = 0;
+  VelocityTracker? _pointerVelocity;
   Timer? _pollTimer;
-  late final AnimationController _focus;
   late final AnimationController _blurGate;
+  final ValueNotifier<int> _motionTick = ValueNotifier<int>(0);
+  final ValueNotifier<int> _brightnessTick = ValueNotifier<int>(0);
   final ValueNotifier<int> _wordTick = ValueNotifier<int>(0);
 
+  /// Never ticked; inactive rows paint a static bright layer, so they must not
+  /// re-rasterise (and re-blur) on every word frame.
+  final ValueNotifier<int> _idleTick = ValueNotifier<int>(0);
+  final Map<int, AnimationController> _brightnessControllers =
+      <int, AnimationController>{};
+  List<LyricSpring> _scaleSprings = <LyricSpring>[];
+  List<LyricSpring> _rowYSprings = <LyricSpring>[];
+
   List<LyricLine> _lines = const <LyricLine>[];
+  bool _hasWordTimings = false;
   int _active = 0;
-  int _previousActive = -1;
   String? _trackId;
   (double, int, bool)? _styleSnapshot;
   List<double> _heights = const <double>[];
@@ -68,6 +78,8 @@ class _LyricViewportState extends State<LyricViewport>
   double _measuredFont = -1;
   int _measuredWeight = -1;
   TextScaler? _measuredScaler;
+  double _viewportHeight = 0;
+  double _rowUnit = 0;
 
   bool _positioned = false;
   bool _manual = false;
@@ -88,14 +100,8 @@ class _LyricViewportState extends State<LyricViewport>
   @override
   void initState() {
     super.initState();
-    _scroll = ScrollController();
-    _scrollSpring = LyricSpring(0, params: lyricPositionPolicy());
     _motionTicker = createTicker(_onMotionTick);
-    _focus = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 280),
-      value: 1,
-    );
+    _wordTicker = createTicker(_onWordTick);
     _blurGate = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 320),
@@ -103,8 +109,11 @@ class _LyricViewportState extends State<LyricViewport>
     );
     _trackId = _state.current?.id;
     _lines = _state.lyrics;
+    _hasWordTimings = _lines.any((LyricLine line) => line.words.isNotEmpty);
     _styleSnapshot = (_fontSize, _fontWeight, _blurEnabled);
     _active = _activeAt(_state.precisePosition);
+    _rebuildScaleSprings();
+    _resetBrightnessControllers();
     _state.all.addListener(_onState);
     if (_state.playing) _startPolling();
   }
@@ -117,6 +126,8 @@ class _LyricViewportState extends State<LyricViewport>
       widget.state.all.addListener(_onState);
       _lines = widget.state.lyrics;
       _active = _activeAt(widget.state.precisePosition);
+      _rebuildScaleSprings();
+      _resetBrightnessControllers();
     }
   }
 
@@ -128,10 +139,13 @@ class _LyricViewportState extends State<LyricViewport>
     _state.all.removeListener(_onState);
     _stopPolling();
     _motionTicker.dispose();
-    _focus.dispose();
+    _wordTicker.dispose();
     _blurGate.dispose();
-    _scroll.dispose();
+    _disposeBrightnessControllers();
+    _motionTick.dispose();
+    _brightnessTick.dispose();
     _wordTick.dispose();
+    _idleTick.dispose();
     super.dispose();
   }
 
@@ -169,20 +183,24 @@ class _LyricViewportState extends State<LyricViewport>
     if (documentChanged || trackChanged) {
       _trackId = nextTrack;
       _lines = nextLines;
+      _hasWordTimings = _lines.any((LyricLine line) => line.words.isNotEmpty);
       _selection = const LyricSelection();
       _manual = false;
-      _previousActive = -1;
       _active = nextActive;
-      _focus.value = 1;
       _blurGate.value = 1;
       _positioned = false;
-      _scrollSpring.setPosition(_scroll.hasClients ? _scroll.offset : 0);
+      _rebuildScaleSprings();
+      _resetBrightnessControllers();
+      if (_motionTicker.isActive) _motionTicker.stop();
       needsBuild = true;
     } else if (activeChanged) {
-      _previousActive = _active;
+      _seeking = (nextActive - _active).abs() > 1;
       _active = nextActive;
-      _focus.forward(from: 0);
-      if (!_manual && !_selection.active) _scheduleCenter();
+      _setLineBrightnessActive(nextActive);
+      if (!_manual && !_selection.active) {
+        _setRowTargets();
+        _setScaleTargets();
+      }
       needsBuild = true;
     }
     if (styleChanged) {
@@ -201,70 +219,217 @@ class _LyricViewportState extends State<LyricViewport>
     if (needsBuild) setState(() {});
   }
 
+  /// The 8 ms timer only tracks the engine clock for line changes. Word
+  /// repaints are driven by [Ticker] so every frame is vsync-aligned; a timer
+  /// based repaint pump aliases against the display refresh and makes the
+  /// per-glyph float animation visibly stutter.
   void _startPolling() {
-    if (_pollTimer != null) return;
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 8), (_) {
-      if (!mounted) return;
-      if (!_state.playing) {
-        _stopPolling();
-        return;
-      }
-      final int active = _activeAt(_state.precisePosition);
-      if (active != _active) {
-        _previousActive = _active;
-        setState(() => _active = active);
-        _focus.forward(from: 0);
-        if (!_manual && !_selection.active) _scheduleCenter();
-      }
-      if (_active >= 0 &&
-          _active < _lines.length &&
-          _lines[_active].words.isNotEmpty) {
-        _wordTick.value++;
-      }
+    _pollTimer ??= Timer.periodic(const Duration(milliseconds: 8), (_) {
+      _pollActiveLine();
     });
+    if (_hasWordTimings && _state.playing) {
+      if (!_wordTicker.isActive) _wordTicker.start();
+    } else if (_wordTicker.isActive) {
+      _wordTicker.stop();
+    }
+  }
+
+  void _pollActiveLine() {
+    if (!mounted) {
+      _stopPolling();
+      return;
+    }
+    if (!_state.playing) {
+      _stopPolling();
+      return;
+    }
+    final int active = _activeAt(_state.precisePosition);
+    if (active != _active) {
+      _seeking = (active - _active).abs() > 1;
+      setState(() => _active = active);
+      _setLineBrightnessActive(active);
+      if (!_manual && !_selection.active) {
+        _setRowTargets();
+        _setScaleTargets();
+      }
+    }
+  }
+
+  /// One repaint per displayed frame while word-timed lyrics are playing.
+  void _onWordTick(Duration elapsed) {
+    if (!mounted || !_state.playing) {
+      _stopPolling();
+      return;
+    }
+    if (_active >= 0 &&
+        _active < _lines.length &&
+        _lines[_active].words.isNotEmpty) {
+      _wordTick.value++;
+    }
   }
 
   void _stopPolling() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    if (_wordTicker.isActive) _wordTicker.stop();
   }
 
-  void _scheduleCenter({bool animate = true}) {
-    if (_manual || _selection.active) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients || _manual || _selection.active) {
-        return;
-      }
-      final double target = _scrollTargetFor(_active).clamp(
-        0.0,
-        _scroll.position.maxScrollExtent,
+  AnimationController _brightnessControllerFor(int index, {double value = 0}) {
+    return _brightnessControllers.putIfAbsent(index, () {
+      final AnimationController controller = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 300),
+        reverseDuration: const Duration(milliseconds: 450),
+        value: value,
       );
-      if ((_scroll.offset - target).abs() < .5 && !_motionTicker.isActive) {
-        return;
-      }
-      if (!animate || MediaQuery.disableAnimationsOf(context)) {
-        _scroll.jumpTo(target);
-        _scrollSpring.setPosition(target);
-        if (_motionTicker.isActive) _motionTicker.stop();
-        return;
-      }
-      if (!_motionTicker.isActive &&
-          (_scrollSpring.value - _scroll.offset).abs() > .5) {
-        _scrollSpring.setPosition(_scroll.offset);
-      }
-      final int? interval = _lyricIntervalMs();
-      _scrollSpring
-        ..setParameters(lyricPositionPolicy(intervalMs: interval))
-        ..setTarget(target);
-      _lastMotionTick = Duration.zero;
-      if (!_motionTicker.isActive) _motionTicker.start();
+      controller.addListener(() => _brightnessTick.value++);
+      return controller;
     });
   }
 
-  double _scrollTargetFor(int index) {
-    if (_heights.isEmpty) return 0;
-    final int focus = index.clamp(0, _heights.length - 1);
-    return _prefix[focus] + (_heights[focus] - _heights.first) / 2;
+  void _disposeBrightnessControllers() {
+    for (final AnimationController controller
+        in _brightnessControllers.values) {
+      controller.dispose();
+    }
+    _brightnessControllers.clear();
+  }
+
+  void _resetBrightnessControllers() {
+    _disposeBrightnessControllers();
+    if (_lines.isEmpty) return;
+    final int active = _active.clamp(0, _lines.length - 1);
+    _brightnessControllerFor(active, value: 1);
+  }
+
+  void _setLineBrightnessActive(int active) {
+    if (_lines.isEmpty) return;
+    for (final MapEntry<int, AnimationController> entry
+        in _brightnessControllers.entries) {
+      if (entry.key == active) continue;
+      final AnimationController controller = entry.value;
+      if (controller.value > 0) {
+        controller.animateTo(
+          0,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOut,
+        );
+      }
+    }
+    final AnimationController current = _brightnessControllerFor(active);
+    current.animateTo(
+      1,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  double _brightnessFor(int index) {
+    final double normal = _brightnessControllers[index]?.value ?? 0;
+    if (_selection.active) {
+      final bool selected = _selection.keys.contains(
+        lyricSelectionKey(_lines[index]),
+      );
+      // Selection only raises the selected rows to full alpha; every other
+      // row keeps exactly the brightness it had before selection began.
+      return selected ? 1 : normal;
+    }
+    return normal;
+  }
+
+  void _rebuildScaleSprings() {
+    _scaleSprings = <LyricSpring>[
+      for (var i = 0; i < _lines.length; i++)
+        LyricSpring(
+          i == _active ? 100 : 97,
+          params: const LyricSpringParams(mass: 2, damping: 25, stiffness: 100),
+        ),
+    ];
+    _rowYSprings = <LyricSpring>[
+      for (var i = 0; i < _lines.length; i++) LyricSpring(0),
+    ];
+  }
+
+  void _startMotion() {
+    _lastMotionTick = Duration.zero;
+    if (!_motionTicker.isActive) _motionTicker.start();
+  }
+
+  List<double> _lineYDelays(int active) {
+    final List<double> positions = _heights.length == _lines.length
+        ? <double>[
+            for (var i = 0; i < _lines.length; i++)
+              _prefix[i] - _prefix[active],
+          ]
+        : <double>[for (var i = 0; i < _lines.length; i++) (i - active) * 80];
+    final List<double> heights = _heights.length == _lines.length
+        ? _heights
+        : List<double>.filled(_lines.length, 80);
+    return lyricStaggerDelays(
+      positions,
+      heights,
+      active,
+      disabled: _seeking || _manual || MediaQuery.disableAnimationsOf(context),
+    );
+  }
+
+  double _targetYFor(int index, int active) {
+    final double activeTop = _viewportHeight * .35 - _heights[active] / 2;
+    return activeTop + (_prefix[index] - _prefix[active]);
+  }
+
+  void _setRowTargets({bool snap = false}) {
+    if (_heights.length != _lines.length || _viewportHeight <= 0) return;
+    if (_rowYSprings.length != _lines.length) _rebuildScaleSprings();
+    final int active = _active.clamp(0, _lines.length - 1);
+    final Track? track = _state.current;
+    final bool endOfSong =
+        track != null &&
+        track.duration > Duration.zero &&
+        _state.position >= track.duration;
+    final LyricSpringParams params = lyricPositionPolicy(
+      seeking: _seeking,
+      intervalMs: _lyricIntervalMs(),
+      endOfSong: endOfSong,
+    );
+    final List<double> delays = snap
+        ? List<double>.filled(_lines.length, 0)
+        : _lineYDelays(active);
+    final bool immediate =
+        snap || _seeking || _manual || MediaQuery.disableAnimationsOf(context);
+    // The focus row must start rising on the same frame it becomes active.
+    // AMLL's stagger schedule otherwise queues it behind the rows above, so
+    // the blur/scale/word animations lead the float by one step.
+    if (!immediate) delays[active] = 0;
+    for (var i = 0; i < _rowYSprings.length; i++) {
+      final LyricSpring spring = _rowYSprings[i];
+      spring.setParameters(params);
+      final double target = _targetYFor(i, active);
+      if (immediate) {
+        spring.setPosition(target);
+      } else {
+        spring.setTarget(target, delay: delays[i]);
+      }
+    }
+    if (!immediate) _startMotion();
+  }
+
+  void _setScaleTargets() {
+    if (_scaleSprings.length != _lines.length) _rebuildScaleSprings();
+    if (_scaleSprings.isEmpty) {
+      _motionTicker.stop();
+      return;
+    }
+    final int active = _active.clamp(0, _lines.length - 1);
+    for (var i = 0; i < _scaleSprings.length; i++) {
+      final LyricSpring spring = _scaleSprings[i];
+      spring
+        ..setParameters(
+          const LyricSpringParams(mass: 2, damping: 25, stiffness: 100),
+        )
+        ..setTarget(i == active ? 100 : 97);
+    }
+    _startMotion();
   }
 
   int? _lyricIntervalMs() {
@@ -276,7 +441,7 @@ class _LyricViewportState extends State<LyricViewport>
   }
 
   void _onMotionTick(Duration elapsed) {
-    if (!mounted || !_scroll.hasClients) {
+    if (!mounted) {
       _motionTicker.stop();
       return;
     }
@@ -284,19 +449,66 @@ class _LyricViewportState extends State<LyricViewport>
       _lastMotionTick = elapsed;
       return;
     }
-    final double dt = ((elapsed - _lastMotionTick).inMicroseconds / 1e6)
-        .clamp(0.0, .05);
-    _lastMotionTick = elapsed;
-    _scrollSpring.update(dt);
-    final double offset = _scrollSpring.value.clamp(
+    final double dt = ((elapsed - _lastMotionTick).inMicroseconds / 1e6).clamp(
       0.0,
-      _scroll.position.maxScrollExtent,
+      .05,
     );
-    _scroll.jumpTo(offset);
-    if (_scrollSpring.arrived) {
-      _scrollSpring.setPosition(offset);
+    _lastMotionTick = elapsed;
+    var moving = false;
+    if (_manual) {
+      if (_manualVelocity.abs() > 5) {
+        final double deltaY = _manualVelocity * dt;
+        final double moved = _shiftRows(deltaY);
+        if (moved.abs() < deltaY.abs() - .001) {
+          _manualVelocity = 0;
+        } else {
+          _manualVelocity *= math
+              .pow(_state.scrollRetention, dt * 60)
+              .toDouble();
+        }
+        moving = _manualVelocity.abs() > 5;
+      }
+    } else {
+      for (final LyricSpring spring in _rowYSprings) {
+        spring.update(dt);
+        moving = moving || !spring.arrived;
+      }
+      for (final LyricSpring spring in _scaleSprings) {
+        spring.update(dt);
+        moving = moving || !spring.arrived;
+      }
+      _motionTick.value++;
+    }
+    if (!moving) {
+      _seeking = false;
       _motionTicker.stop();
     }
+  }
+
+  /// Clamp manual content movement to the first/last lyric.
+  ///
+  /// The top limit pins the first line to the focus band; the bottom limit
+  /// pins the last line there as well. This is the same safe scroll interval
+  /// AMLL's LayoutCalculator exposes to its scroll engine.
+  double _shiftRows(double requested) {
+    if (_rowYSprings.isEmpty ||
+        _rowYSprings.length != _heights.length ||
+        _viewportHeight <= 0) {
+      return 0;
+    }
+    final double focusY = _viewportHeight * .35;
+    final double maxShift =
+        focusY - _heights.first / 2 - _rowYSprings.first.value;
+    final double minShift =
+        focusY - _heights.last / 2 - _rowYSprings.last.value;
+    if (minShift > maxShift) return 0;
+    final double shift = requested.clamp(minShift, maxShift);
+    if (shift.abs() < .001) return 0;
+    for (final LyricSpring spring in _rowYSprings) {
+      spring.setPosition(spring.value + shift);
+    }
+    _motionTick.value++;
+    return shift;
   }
 
   void _beginManual() {
@@ -309,43 +521,71 @@ class _LyricViewportState extends State<LyricViewport>
 
   void _scheduleResume({Duration? after}) {
     _resumeTimer?.cancel();
-    final Duration delay = after ??
-        Duration(
-          milliseconds: (_state.lyricResumeSeconds * 1000).round(),
-        );
+    final Duration delay =
+        after ??
+        Duration(milliseconds: (_state.lyricResumeSeconds * 1000).round());
     _resumeTimer = Timer(delay, () {
       if (!mounted || _selection.active) return;
       setState(() => _manual = false);
+      _manualVelocity = 0;
       _blurGate.animateTo(1, curve: Curves.easeOutCubic);
-      _scheduleCenter();
+      _setRowTargets();
+      _setScaleTargets();
     });
   }
 
   void _onPointerDown(PointerDownEvent event) {
     _pointerDown = true;
     _pointerTravel = 0;
+    _pointerVelocity = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.position);
   }
 
   void _onPointerMove(PointerMoveEvent event) {
     if (!_pointerDown) return;
     _pointerTravel += event.delta.distance;
-    if (_pointerTravel > 6) _beginManual();
+    _pointerVelocity?.addPosition(event.timeStamp, event.position);
+    if (_pointerTravel > 6 && !_manual) _beginManual();
+    if (_manual) {
+      _manualVelocity = 0;
+      _shiftRows(event.delta.dy);
+    }
   }
 
   void _onPointerUp(PointerUpEvent event) {
     if (!_pointerDown) return;
     _pointerDown = false;
-    if (_manual) _scheduleResume();
+    final Velocity? velocity = _pointerVelocity?.getVelocity();
+    _pointerVelocity = null;
+    if (_manual) {
+      final double dy = velocity?.pixelsPerSecond.dy ?? 0;
+      if (dy.abs() > 40) {
+        _manualVelocity = dy;
+        _lastMotionTick = Duration.zero;
+        if (!_motionTicker.isActive) _motionTicker.start();
+      } else {
+        _manualVelocity = 0;
+      }
+      _scheduleResume();
+    }
   }
 
   void _onPointerCancel(PointerCancelEvent event) {
     _pointerDown = false;
+    _pointerVelocity = null;
+    _manualVelocity = 0;
     if (_manual) _scheduleResume();
   }
 
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
+    _resumeTimer?.cancel();
     _beginManual();
+    final double delta = _shiftRows(-event.scrollDelta.dy);
+    _manualVelocity = delta * 18;
+    _lastMotionTick = Duration.zero;
+    if (!_motionTicker.isActive) _motionTicker.start();
+    _motionTick.value++;
     _wheelTimer?.cancel();
     _wheelTimer = Timer(
       const Duration(milliseconds: 820),
@@ -357,9 +597,9 @@ class _LyricViewportState extends State<LyricViewport>
     final Track? track = _state.current;
     if (track == null || track.duration <= Duration.zero) return;
     final double fraction =
-        (_lines[index].time.inMilliseconds /
-                track.duration.inMilliseconds)
+        (_lines[index].time.inMilliseconds / track.duration.inMilliseconds)
             .clamp(0.0, 1.0);
+    _seeking = true;
     _state.seek(fraction);
     _wordTick.value++;
   }
@@ -392,7 +632,8 @@ class _LyricViewportState extends State<LyricViewport>
     });
     widget.onSelectionChanged?.call(false);
     _blurGate.animateTo(1, curve: Curves.easeOutCubic);
-    _scheduleCenter();
+    _setRowTargets();
+    _setScaleTargets();
   }
 
   Future<void> _copySelection() async {
@@ -445,68 +686,51 @@ class _LyricViewportState extends State<LyricViewport>
     );
   }
 
+  double _emphasisFor(int index) {
+    if (index < 0 || index >= _scaleSprings.length) return 0;
+    return ((_scaleSprings[index].value - 97) / 3).clamp(0.0, 1.0);
+  }
+
   double _sigmaFor(int index) {
-    if (!_blurEnabled || _blurGate.value <= 0.001) return 0;
-    final double gate = Curves.easeOutCubic.transform(_blurGate.value);
-    final double focus = Curves.easeOutCubic.transform(
-      _focus.value.clamp(0.0, 1.0),
-    );
-    double base;
-    if (index == _active) {
-      base = 1.55 * (1 - focus);
-    } else if (index == _previousActive) {
-      base = 1.55 * focus;
-    } else {
-      final int distance = (index - _active).abs().clamp(1, 6);
-      base = math.min(4.5, distance * 1.55);
+    if (!_blurEnabled ||
+        _blurGate.value <= 0.001 ||
+        _rowUnit <= 0 ||
+        index >= _rowYSprings.length ||
+        index >= _heights.length) {
+      return 0;
     }
-    return (base * gate).clamp(0.0, 4.5);
+    // Derive blur from the row's actual spring position instead of its index:
+    // a row stays soft until it physically arrives in the 35% focus band, so
+    // the blur clears exactly in step with the upward float rather than
+    // finishing ahead of it.
+    final double centre = _rowYSprings[index].value + _heights[index] * 0.5;
+    final double distance = (centre - _viewportHeight * .35).abs() / _rowUnit;
+    final double gate = Curves.easeOutCubic.transform(_blurGate.value);
+    return (math.min(5.0, distance * 1.55) * gate).clamp(0.0, 5.0);
   }
 
   double _scaleFor(int index) {
-    final double t = _focus.value.clamp(0.0, 1.0);
-    if (index == _active) {
-      return .97 + .03 * Curves.easeOutCubic.transform(t);
-    }
-    if (index == _previousActive) {
-      return 1 - .03 * Curves.easeInCubic.transform(t);
-    }
-    return .97;
+    if (index < 0 || index >= _scaleSprings.length) return .97;
+    return _scaleSprings[index].value / 100;
   }
-
-
 
   Color _toneFor(int index, ThemeData theme) {
-    final bool selected = _selection.keys.contains(lyricSelectionKey(_lines[index]));
     if (_selection.active) {
-      return selected
-          ? theme.colorScheme.secondary
-          : theme.colorScheme.onSurfaceVariant.withValues(alpha: .45);
+      final bool selected = _selection.keys.contains(
+        lyricSelectionKey(_lines[index]),
+      );
+      // The long-press highlight is plain bright white, not the theme accent.
+      return selected ? Colors.white : theme.colorScheme.onSurface;
     }
-    final double t = _focus.value.clamp(0.0, 1.0);
-    final double emphasis = index == _active
-        ? Curves.easeOutCubic.transform(t)
-        : index == _previousActive
-        ? 1 - Curves.easeOutCubic.transform(t)
-        : 0;
-    return Color.lerp(
-      theme.colorScheme.onSurfaceVariant,
-      theme.colorScheme.onSurface,
-      emphasis,
-    )!;
+    // Line depth is produced by the AMLL bright/dim brightness layers, not by
+    // changing the semantic text colour per line.
+    return theme.colorScheme.onSurface;
   }
 
-  Widget _interactive(
-    int index,
-    String text,
-    TextStyle style,
-    Widget child,
-  ) {
+  Widget _interactive(int index, String text, TextStyle style, Widget child) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => _selection.active
-          ? _toggleSelection(index)
-          : _seekTo(index),
+      onTap: () => _selection.active ? _toggleSelection(index) : _seekTo(index),
       onLongPress: () => _beginSelection(index),
       child: child,
     );
@@ -516,13 +740,17 @@ class _LyricViewportState extends State<LyricViewport>
     final LyricLine line = _lines[index];
     final TextStyle style = _mainStyle(context);
     final TextStyle translationStyle = _translationStyle(context);
-    final Widget main = line.words.isNotEmpty
+    final double brightness = _brightnessFor(index).clamp(0.0, 1.0);
+    final bool selected =
+        _selection.active && _selection.keys.contains(lyricSelectionKey(line));
+    final Widget brightMain = line.words.isNotEmpty
         ? TimedLyricText(
             line: line,
             style: style,
             active: index == _active,
+            emphasis: () => _emphasisFor(index),
             position: () => _state.precisePosition,
-            repaint: _wordTick,
+            repaint: index == _active ? _wordTick : _idleTick,
           )
         : Text(
             line.text.isEmpty ? ' ' : line.text,
@@ -530,33 +758,70 @@ class _LyricViewportState extends State<LyricViewport>
             textDirection: TextDirection.ltr,
             style: style,
           );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          _interactive(index, line.text, style, main),
-          if (line.translation?.trim().isNotEmpty ?? false) ...<Widget>[
-            const SizedBox(height: 5),
-            _interactive(
-              index,
-              line.translation!,
-              translationStyle,
-              Text(
+    // AMLL LineBrightness: the dim copy is a plain, unmasked clone at 0.2
+    // opacity; the bright original cross-fades above it. The timed painter
+    // keeps its own 0.4 dark-mask content for unsung words inside the bright
+    // layer, so no second animated copy is needed.
+    final Widget dimMain = IgnorePointer(
+      // RichText keeps the dim clone out of `find.text`/selection hit targets
+      // while matching the exact layout of the bright line.
+      child: RichText(
+        textAlign: TextAlign.left,
+        textDirection: TextDirection.ltr,
+        text: TextSpan(text: line.text.isEmpty ? ' ' : line.text, style: style),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _interactive(
+          index,
+          line.text,
+          style,
+          SizedBox(
+            key: ValueKey<String>('lyric-main-$index'),
+            width: double.infinity,
+            child: Stack(
+              children: <Widget>[
+                Opacity(
+                  key: ValueKey<String>('lyric-dim-$index'),
+                  opacity: .2 * (1 - brightness),
+                  child: dimMain,
+                ),
+                Opacity(
+                  key: ValueKey<String>('lyric-bright-$index'),
+                  opacity: brightness,
+                  child: brightMain,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (line.translation?.trim().isNotEmpty ?? false) ...<Widget>[
+          const SizedBox(height: 5),
+          _interactive(
+            index,
+            line.translation!,
+            translationStyle,
+            Opacity(
+              key: ValueKey<String>('lyric-translation-$index'),
+              opacity: selected ? 1 : .3,
+              child: Text(
                 line.translation!,
                 textAlign: TextAlign.left,
                 textDirection: TextDirection.ltr,
                 style: translationStyle,
               ),
             ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 
   Widget _row(int index, ThemeData theme) {
     final double sigma = _sigmaFor(index);
+    final Color tone = _toneFor(index, theme);
     return SizedBox(
       key: ValueKey<String>('lyric-line-${_state.current?.id}-$index'),
       height: _heights[index],
@@ -569,10 +834,7 @@ class _LyricViewportState extends State<LyricViewport>
           imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
           child: ColorFiltered(
             key: ValueKey<String>('lyric-color-$index'),
-            colorFilter: ColorFilter.mode(
-              _toneFor(index, theme),
-              BlendMode.srcIn,
-            ),
+            colorFilter: ColorFilter.mode(tone, BlendMode.srcIn),
             child: RepaintBoundary(child: _rowBody(index, theme)),
           ),
         ),
@@ -610,13 +872,7 @@ class _LyricViewportState extends State<LyricViewport>
       final String? translated = line.translation?.trim();
       final double translatedHeight = translated == null || translated.isEmpty
           ? 0
-          : 5 +
-                _measureText(
-                  translated,
-                  translation,
-                  textWidth,
-                  scaler,
-                );
+          : 5 + _measureText(translated, translation, textWidth, scaler);
       final double height = math.max(52, mainHeight + translatedHeight + 20);
       prefix.add(sum);
       heights.add(height);
@@ -624,6 +880,7 @@ class _LyricViewportState extends State<LyricViewport>
     }
     _heights = heights;
     _prefix = prefix;
+    _rowUnit = heights.isEmpty ? 0 : sum / heights.length;
     _positioned = false;
   }
 
@@ -634,10 +891,7 @@ class _LyricViewportState extends State<LyricViewport>
     TextScaler scaler,
   ) {
     final TextPainter painter = TextPainter(
-      text: TextSpan(
-        text: text.isEmpty ? ' ' : text,
-        style: style,
-      ),
+      text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.left,
       textScaler: scaler,
@@ -680,6 +934,41 @@ class _LyricViewportState extends State<LyricViewport>
     );
   }
 
+  Widget _lineStack(BoxConstraints constraints, ThemeData theme) {
+    if (_heights.length != _lines.length ||
+        _rowYSprings.length != _lines.length) {
+      _rebuildScaleSprings();
+      _setRowTargets(snap: true);
+    }
+    // AMLL keeps a 40% motion buffer around the viewport so fast springs do
+    // not reveal a row only after it has already entered the visible frame.
+    final double overscan = 72 + constraints.maxHeight * .4;
+    final double width = math.max(0, constraints.maxWidth - 36);
+    final Widget stack = Stack(
+      clipBehavior: Clip.none,
+      children: <Widget>[
+        for (var i = 0; i < _lines.length; i++)
+          if (_rowYSprings[i].value + _heights[i] >= -overscan &&
+              _rowYSprings[i].value <= constraints.maxHeight + overscan)
+            Positioned(
+              key: ValueKey<String>('lyric-position-$i'),
+              top: _rowYSprings[i].value,
+              left: 18,
+              width: width,
+              height: _heights[i],
+              child: _row(i, theme),
+            ),
+      ],
+    );
+    return LyricEdgeFade(
+      verticalExtent: _blurEnabled
+          ? math.min(constraints.maxHeight * .18, 64)
+          : math.min(constraints.maxHeight * .11, 44),
+      horizontal: _blurEnabled,
+      child: stack,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
@@ -693,17 +982,11 @@ class _LyricViewportState extends State<LyricViewport>
           return const SizedBox.shrink();
         }
         _measureLines(context, constraints.maxWidth);
-        final double centerPad = math.max(
-          0,
-          constraints.maxHeight * .35 - _heights.first / 2,
-        );
-        final double averageHeight =
-            _heights.fold<double>(0, (double sum, double value) => sum + value) /
-                _heights.length;
+        _viewportHeight = constraints.maxHeight;
         if (_active >= _lines.length) _active = _lines.length - 1;
         if (!_positioned) {
           _positioned = true;
-          _scheduleCenter(animate: false);
+          _setRowTargets(snap: true);
         }
 
         return PopScope<void>(
@@ -721,6 +1004,7 @@ class _LyricViewportState extends State<LyricViewport>
                 label: _semanticLabel,
                 child: ExcludeSemantics(
                   child: Listener(
+                    behavior: HitTestBehavior.opaque,
                     onPointerDown: _onPointerDown,
                     onPointerMove: _onPointerMove,
                     onPointerUp: _onPointerUp,
@@ -728,37 +1012,12 @@ class _LyricViewportState extends State<LyricViewport>
                     onPointerSignal: _onPointerSignal,
                     child: AnimatedBuilder(
                       animation: Listenable.merge(<Listenable>[
-                        _focus,
+                        _motionTick,
+                        _brightnessTick,
                         _blurGate,
                       ]),
-                      builder: (BuildContext context, Widget? _) {
-                        Widget list = ListView.builder(
-                          controller: _scroll,
-                          physics: const ClampingScrollPhysics(
-                            parent: AlwaysScrollableScrollPhysics(),
-                          ),
-                          padding: EdgeInsets.only(
-                            top: centerPad,
-                            bottom: constraints.maxHeight,
-                          ),
-                          scrollCacheExtent: ScrollCacheExtent.pixels(
-                            averageHeight * 2,
-                          ),
-                          itemCount: _lines.length,
-                          itemBuilder: (BuildContext context, int index) =>
-                              _row(index, theme),
-                        );
-                        if (_blurEnabled) {
-                          list = LyricEdgeFade(
-                            verticalExtent: math.min(
-                              constraints.maxHeight * .18,
-                              64,
-                            ),
-                            child: list,
-                          );
-                        }
-                        return list;
-                      },
+                      builder: (BuildContext context, Widget? _) =>
+                          _lineStack(constraints, theme),
                     ),
                   ),
                 ),
@@ -774,19 +1033,18 @@ class _LyricViewportState extends State<LyricViewport>
                       duration: const Duration(milliseconds: 220),
                       switchInCurve: Curves.easeOutCubic,
                       switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (
-                        Widget child,
-                        Animation<double> animation,
-                      ) => FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(0, .3),
-                            end: Offset.zero,
-                          ).animate(animation),
-                          child: child,
-                        ),
-                      ),
+                      transitionBuilder:
+                          (Widget child, Animation<double> animation) =>
+                              FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(0, .3),
+                                    end: Offset.zero,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              ),
                       child: _selection.active
                           ? LyricSelectionToolbar(
                               key: const ValueKey<String>(

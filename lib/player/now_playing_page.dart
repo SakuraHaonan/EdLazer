@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -52,7 +52,6 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   _SidePanel _panel = _SidePanel.none;
   SongCommentsController? _comments;
   bool _fullscreen = false;
-  bool _showLargeArtwork = false;
 
   AppState get state => widget.state;
 
@@ -133,9 +132,34 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     if (track == null || url == null || url.isEmpty) return;
     final bool saved = await saveCover(url, track.title);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(saved ? '封面已保存' : '封面保存失败，请稍后重试')),
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(saved ? '封面已保存' : '封面保存失败，请稍后重试')));
+  }
+
+  Future<void> _confirmSaveCover() async {
+    final Track? track = state.current;
+    final String? url = track?.coverUrl;
+    if (track == null || url == null || url.isEmpty) return;
+    unawaited(state.feedback());
+    final bool? save = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('保存封面'),
+        content: Text('是否保存「${track.title}」的封面？'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
     );
+    if (save == true) await _saveCover();
   }
 
   Future<void> _copy(String value, String message) async {
@@ -221,8 +245,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
           final bool wide = width >= 840;
           return CallbackShortcuts(
             bindings: <ShortcutActivator, VoidCallback>{
-              const SingleActivator(LogicalKeyboardKey.space):
-                  state.togglePlay,
+              const SingleActivator(LogicalKeyboardKey.space): state.togglePlay,
               const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
                   _seekBy(const Duration(seconds: -5)),
               const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
@@ -230,11 +253,13 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
               const SingleActivator(
                 LogicalKeyboardKey.arrowLeft,
                 shift: true,
-              ): () => _seekBy(const Duration(seconds: -15)),
+              ): () =>
+                  _seekBy(const Duration(seconds: -15)),
               const SingleActivator(
                 LogicalKeyboardKey.arrowRight,
                 shift: true,
-              ): () => _seekBy(const Duration(seconds: 15)),
+              ): () =>
+                  _seekBy(const Duration(seconds: 15)),
               const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
                   unawaited(
                     state.setVolume((state.volume + .05).clamp(0.0, 1.0)),
@@ -286,9 +311,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                               child: _desktop(context, track),
                             )
                           : KeyedSubtree(
-                              key: const ValueKey<String>(
-                                'mobile-now-playing',
-                              ),
+                              key: const ValueKey<String>('mobile-now-playing'),
                               child: _mobile(context, track),
                             ),
                     ),
@@ -366,15 +389,9 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                   padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
                   child: Row(
                     children: <Widget>[
-                      Expanded(
-                        flex: 40,
-                        child: _mobileInfoCard(track),
-                      ),
+                      Expanded(flex: 40, child: _mobileInfoCard(track)),
                       const SizedBox(width: 10),
-                      Expanded(
-                        flex: 60,
-                        child: _lyricsPane(compact: true),
-                      ),
+                      Expanded(flex: 60, child: _lyricsPane(compact: true)),
                     ],
                   ),
                 )
@@ -384,37 +401,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     children: <Widget>[
                       _compactHeader(context, track),
                       const SizedBox(height: 8),
-                      Expanded(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: <Widget>[
-                            _lyricsPane(compact: true),
-                            if (_showLargeArtwork)
-                              Positioned.fill(
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => setState(
-                                    () => _showLargeArtwork = false,
-                                  ),
-                                  child: ColoredBox(
-                                    color: Colors.black.withValues(alpha: .42),
-                                    child: Center(
-                                      child: _Artwork(
-                                        track: track,
-                                        size: math.min(
-                                          size.width - 72,
-                                          size.height * .48,
-                                        ),
-                                        radius: 16,
-                                        iconSize: 42,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
+                      Expanded(child: _lyricsPane(compact: true)),
                     ],
                   ),
                 ),
@@ -516,11 +503,15 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                _Artwork(
-                  track: track,
-                  size: cover,
-                  radius: 10,
-                  iconSize: cover * .14,
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onLongPress: () => unawaited(_confirmSaveCover()),
+                  child: _Artwork(
+                    track: track,
+                    size: cover,
+                    radius: 10,
+                    iconSize: cover * .14,
+                  ),
                 ),
                 SizedBox(height: constraints.maxHeight < 620 ? 16 : 22),
                 Text(
@@ -543,9 +534,8 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     ],
                   ),
                 ),
-                if (track.translatedTitle?.trim().isNotEmpty ?? false) ...<
-                  Widget
-                >[
+                if (track.translatedTitle?.trim().isNotEmpty ??
+                    false) ...<Widget>[
                   const SizedBox(height: 4),
                   Text(
                     track.translatedTitle!,
@@ -622,10 +612,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     : state.lyrics.isEmpty
                     ? '暂无歌词'
                     : '${state.lyrics.length} 行',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0x4DFFFFFF),
-                ),
+                style: const TextStyle(fontSize: 11, color: Color(0x4DFFFFFF)),
               ),
             ],
           ),
@@ -741,15 +728,8 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
           GestureDetector(
             key: const ValueKey<String>('legacy-now-playing-cover'),
             behavior: HitTestBehavior.opaque,
-            onTap: () => setState(
-              () => _showLargeArtwork = !_showLargeArtwork,
-            ),
-            child: _Artwork(
-              track: track,
-              size: 56,
-              radius: 8,
-              iconSize: 20,
-            ),
+            onLongPress: () => unawaited(_confirmSaveCover()),
+            child: _Artwork(track: track, size: 56, radius: 8, iconSize: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -811,11 +791,15 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  _Artwork(
-                    track: track,
-                    size: side,
-                    radius: 12,
-                    iconSize: 26,
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onLongPress: () => unawaited(_confirmSaveCover()),
+                    child: _Artwork(
+                      track: track,
+                      size: side,
+                      radius: 12,
+                      iconSize: 26,
+                    ),
                   ),
                   const SizedBox(height: 9),
                   Text(
@@ -849,10 +833,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   }
 
   Widget _desktopPanel(BuildContext context, Track track) {
-    final double width = math.min(
-      430,
-      MediaQuery.sizeOf(context).width * .38,
-    );
+    final double width = math.min(430, MediaQuery.sizeOf(context).width * .38);
     return Positioned.fill(
       child: Stack(
         children: <Widget>[
@@ -909,10 +890,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     const Divider(height: .5, color: Color(0x33FFFFFF)),
                     Expanded(
                       child: _panel == _SidePanel.queue
-                          ? PlaybackQueueView(
-                              state: state,
-                              showHeader: false,
-                            )
+                          ? PlaybackQueueView(state: state, showHeader: false)
                           : SongCommentsView(
                               state: state,
                               track: track,
@@ -928,8 +906,6 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       ),
     );
   }
-
-
 
   Widget _mobilePanel(BuildContext context, Track track) {
     final Size size = MediaQuery.sizeOf(context);
@@ -977,9 +953,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                             children: <Widget>[
                               Expanded(
                                 child: Text(
-                                  _panel == _SidePanel.queue
-                                      ? '播放队列'
-                                      : '评论',
+                                  _panel == _SidePanel.queue ? '播放队列' : '评论',
                                   style: const TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w700,
@@ -993,10 +967,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                                 ),
                                 tooltip: '关闭',
                                 onPressed: _closePanel,
-                                icon: const Icon(
-                                  Icons.close_rounded,
-                                  size: 19,
-                                ),
+                                icon: const Icon(Icons.close_rounded, size: 19),
                               ),
                             ],
                           ),
@@ -1005,10 +976,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                       const Divider(height: .5, color: Color(0x33FFFFFF)),
                       Expanded(
                         child: _panel == _SidePanel.queue
-                            ? PlaybackQueueView(
-                                state: state,
-                                showHeader: false,
-                              )
+                            ? PlaybackQueueView(state: state, showHeader: false)
                             : SongCommentsView(
                                 state: state,
                                 track: track,
@@ -1025,7 +993,6 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       ),
     );
   }
-
 }
 
 class _TopIconButton extends StatelessWidget {
@@ -1087,25 +1054,32 @@ class _MoreButton extends StatelessWidget {
         color: Color(0xB3FFFFFF),
         size: 22,
       ),
-      itemBuilder: (BuildContext context) => <PopupMenuEntry<NowPlayingMenuAction>>[
-        const PopupMenuItem<NowPlayingMenuAction>(
-          value: NowPlayingMenuAction.saveCover,
-          child: _MenuRow(icon: Icons.download_rounded, label: '保存封面'),
-        ),
-        const PopupMenuItem<NowPlayingMenuAction>(
-          value: NowPlayingMenuAction.copyTitle,
-          child: _MenuRow(icon: Icons.copy_rounded, label: '复制歌曲名'),
-        ),
-        const PopupMenuItem<NowPlayingMenuAction>(
-          value: NowPlayingMenuAction.copyArtist,
-          child: _MenuRow(icon: Icons.person_outline_rounded, label: '复制歌手名'),
-        ),
-        if (includeShortcuts)
-          const PopupMenuItem<NowPlayingMenuAction>(
-            value: NowPlayingMenuAction.shortcuts,
-            child: _MenuRow(icon: Icons.keyboard_alt_outlined, label: '键盘快捷键'),
-          ),
-      ],
+      itemBuilder: (BuildContext context) =>
+          <PopupMenuEntry<NowPlayingMenuAction>>[
+            const PopupMenuItem<NowPlayingMenuAction>(
+              value: NowPlayingMenuAction.saveCover,
+              child: _MenuRow(icon: Icons.download_rounded, label: '保存封面'),
+            ),
+            const PopupMenuItem<NowPlayingMenuAction>(
+              value: NowPlayingMenuAction.copyTitle,
+              child: _MenuRow(icon: Icons.copy_rounded, label: '复制歌曲名'),
+            ),
+            const PopupMenuItem<NowPlayingMenuAction>(
+              value: NowPlayingMenuAction.copyArtist,
+              child: _MenuRow(
+                icon: Icons.person_outline_rounded,
+                label: '复制歌手名',
+              ),
+            ),
+            if (includeShortcuts)
+              const PopupMenuItem<NowPlayingMenuAction>(
+                value: NowPlayingMenuAction.shortcuts,
+                child: _MenuRow(
+                  icon: Icons.keyboard_alt_outlined,
+                  label: '键盘快捷键',
+                ),
+              ),
+          ],
     );
   }
 }
@@ -1246,9 +1220,7 @@ class _DesktopTransportState extends State<_DesktopTransport> {
                     style: const TextStyle(
                       fontSize: 11,
                       color: Color(0x66FFFFFF),
-                      fontFeatures: <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
+                      fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
                     ),
                   ),
                 ),
@@ -1266,11 +1238,8 @@ class _DesktopTransportState extends State<_DesktopTransport> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: <Widget>[
                       IconButton(
-                        tooltip: widget.state.volume <= .001
-                            ? '取消静音'
-                            : '静音',
-                        onPressed: () =>
-                            unawaited(widget.state.toggleMute()),
+                        tooltip: widget.state.volume <= .001 ? '取消静音' : '静音',
+                        onPressed: () => unawaited(widget.state.toggleMute()),
                         iconSize: 19,
                         color: const Color(0xB3FFFFFF),
                         icon: Icon(
@@ -1283,9 +1252,8 @@ class _DesktopTransportState extends State<_DesktopTransport> {
                         width: 96,
                         child: Slider(
                           value: widget.state.volume.clamp(0.0, 1.0),
-                          onChanged: (double value) => unawaited(
-                            widget.state.setVolume(value),
-                          ),
+                          onChanged: (double value) =>
+                              unawaited(widget.state.setVolume(value)),
                         ),
                       ),
                     ],
@@ -1341,8 +1309,7 @@ class _DesktopTransportState extends State<_DesktopTransport> {
                 progress: fraction,
                 buffered: widget.state.bufferedFraction,
                 debugPrefix: 'desktop',
-                onPreview: (double value) =>
-                    setState(() => _drag = value),
+                onPreview: (double value) => setState(() => _drag = value),
                 onCommit: (double value) {
                   setState(() => _drag = null);
                   widget.state.seek(value);
@@ -1354,10 +1321,7 @@ class _DesktopTransportState extends State<_DesktopTransport> {
         ),
         SizedBox(
           width: 62,
-          child: _TimeLabel(
-            legacyDuration(duration),
-            align: TextAlign.end,
-          ),
+          child: _TimeLabel(legacyDuration(duration), align: TextAlign.end),
         ),
       ],
     );
@@ -1381,8 +1345,6 @@ class _MobileTransport extends StatefulWidget {
 
 class _MobileTransportState extends State<_MobileTransport> {
   double? _drag;
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -1438,12 +1400,8 @@ class _MobileTransportState extends State<_MobileTransport> {
                   Expanded(
                     child: TextButton.icon(
                       key: const ValueKey<String>('mobile-comments'),
-                      onPressed: () =>
-                          widget.onOpenPanel(_SidePanel.comments),
-                      icon: const Icon(
-                        Icons.mode_comment_outlined,
-                        size: 17,
-                      ),
+                      onPressed: () => widget.onOpenPanel(_SidePanel.comments),
+                      icon: const Icon(Icons.mode_comment_outlined, size: 17),
                       label: const Text('查看评论'),
                       style: TextButton.styleFrom(
                         foregroundColor: const Color(0xB3FFFFFF),
@@ -1465,8 +1423,7 @@ class _MobileTransportState extends State<_MobileTransport> {
             SizedBox(height: widget.landscape ? 1 : 2),
             _TransportControls(state: widget.state, compact: true),
             if ((widget.state.playbackError ?? widget.state.likeError)
-                    case final String issue
-                when issue.isNotEmpty)
+                case final String issue when issue.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 3),
                 child: Text(
@@ -1526,8 +1483,7 @@ class _MobileTransportState extends State<_MobileTransport> {
                 buffered: widget.state.bufferedFraction,
                 debugPrefix: 'now-playing',
                 height: widget.landscape ? 26 : 30,
-                onPreview: (double value) =>
-                    setState(() => _drag = value),
+                onPreview: (double value) => setState(() => _drag = value),
                 onCommit: (double value) {
                   setState(() => _drag = null);
                   widget.state.seek(value);
@@ -1539,17 +1495,11 @@ class _MobileTransportState extends State<_MobileTransport> {
         ),
         SizedBox(
           width: widget.landscape ? 34 : 40,
-          child: _TimeLabel(
-            legacyDuration(duration),
-            align: TextAlign.end,
-          ),
+          child: _TimeLabel(legacyDuration(duration), align: TextAlign.end),
         ),
       ],
     );
   }
-
-
-
 }
 
 class _TransportControls extends StatelessWidget {
@@ -1727,7 +1677,10 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
       builder: (BuildContext context, BoxConstraints constraints) {
         final double width = constraints.maxWidth;
         final double played = (_drag ?? widget.progress).clamp(0.0, 1.0);
-        final double preview = (_drag ?? _hover ?? played).clamp(0.0, 1.0);
+        // Hovering only enlarges the thumb; it must not preview the seek
+        // position, so the thumb stays on the real playback progress until a
+        // tap or drag starts.
+        final double thumbFraction = (_drag ?? played).clamp(0.0, 1.0);
         const double thumbSlot = 12;
         final double travel = math.max(0, width - thumbSlot);
         final double trackTop = widget.height / 2 - 1.5;
@@ -1813,7 +1766,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
                     ),
                   ),
                   Positioned(
-                    left: travel * preview,
+                    left: travel * thumbFraction,
                     top: (widget.height - thumbSlot) / 2,
                     width: thumbSlot,
                     height: thumbSlot,

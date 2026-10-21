@@ -251,6 +251,14 @@ void main() {
 
       expect(find.byType(AlbumBlurFlow), findsOneWidget);
       expect(find.byType(AlbumFlowBackground), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlbumBlurFlow),
+          matching: find.byType(Image),
+        ),
+        findsNothing,
+        reason: 'the player background is mesh flow only, not a cover image',
+      );
 
       // The four top-bar actions live against the right edge, and the lyric
       // header no longer carries its own options button.
@@ -308,7 +316,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('seek hover previews without moving the played fill', (
+  testWidgets('seek hover enlarges the thumb without previewing a position', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 900);
@@ -327,7 +335,11 @@ void main() {
     final Finder playedFinder = find.byKey(
       const ValueKey<String>('desktop-seek-played'),
     );
+    final Finder thumbFinder = find.byKey(
+      const ValueKey<String>('desktop-seek-thumb'),
+    );
     final double playedWidth = tester.getRect(playedFinder).width;
+    final double thumbCenter = tester.getRect(thumbFinder).center.dx;
     await tester.sendEventToBinding(
       PointerHoverEvent(
         position: Offset(rail.left + rail.width * .82, rail.center.dy),
@@ -337,11 +349,9 @@ void main() {
 
     expect(tester.getRect(playedFinder).width, closeTo(playedWidth, .01));
     expect(
-      tester
-          .getRect(find.byKey(const ValueKey<String>('desktop-seek-thumb')))
-          .center
-          .dx,
-      greaterThan(rail.left + rail.width * .6),
+      tester.getRect(thumbFinder).center.dx,
+      closeTo(thumbCenter, .01),
+      reason: 'hovering must not preview the seek position',
     );
     expect(tester.takeException(), isNull);
   });

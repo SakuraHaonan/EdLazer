@@ -152,6 +152,32 @@ void main() {
       expect(LyricWordMotion.maskBoundary(250, 500, 120), 60);
       expect(LyricWordMotion.ordinary(-10, 300).yEm, closeTo(0, 1e-10));
       expect(LyricWordMotion.ordinary(1000, 300).yEm, closeTo(-.05, 1e-10));
+      // Ordinary words keep the long emphasis timing but settle at the float
+      // target instead of rising past it and drifting back to the baseline.
+      final LyricWordMotion rising = LyricWordMotion.emphasized(
+        500,
+        2000,
+        0,
+        1,
+        holdFloat: true,
+      );
+      final LyricWordMotion late = LyricWordMotion.emphasized(
+        1800,
+        2000,
+        0,
+        1,
+        holdFloat: true,
+      );
+      final LyricWordMotion settled = LyricWordMotion.emphasized(
+        4000,
+        2000,
+        0,
+        1,
+        holdFloat: true,
+      );
+      expect(rising.yEm, greaterThan(late.yEm));
+      expect(late.yEm, greaterThanOrEqualTo(-.05));
+      expect(settled.yEm, closeTo(-.05, 1e-9));
     },
   );
   test(
