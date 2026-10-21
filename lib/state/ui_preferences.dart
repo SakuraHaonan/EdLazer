@@ -14,8 +14,8 @@ const double kCompactBreakpoint = 720;
 
 /// How the shell picks its accent palette.
 ///
-/// [fixed] is the Lazer blue-grey scheme. [nowPlaying] derives a Material 3
-/// scheme from the current cover — the legacy `LazerPalette.NowPlaying`.
+/// [fixed] is the Apple Music red accent. [nowPlaying] derives the accent and
+/// ambient tint from the current cover, matching the app's album-led chrome.
 enum LegacyPaletteMode {
   fixed,
   nowPlaying,
@@ -29,8 +29,8 @@ extension LegacyPaletteModeLabels on LegacyPaletteMode {
   };
 
   String get detail => switch (this) {
-    LegacyPaletteMode.fixed => 'Lazer 的蓝灰配色',
-    LegacyPaletteMode.nowPlaying => '由当前封面主色生成整套配色',
+    LegacyPaletteMode.fixed => 'Apple Music 红色强调色',
+    LegacyPaletteMode.nowPlaying => '由当前封面主色生成强调色与浏览背景',
   };
 
   /// Parses a persisted [name]; unknown or missing values keep the fixed

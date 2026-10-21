@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../state/ui_preferences.dart';
+import '../theme/apple_design.dart';
+import '../widgets/apple_ui.dart';
 import '../widgets/playback_queue_view.dart';
 import 'legacy_widgets.dart';
 
@@ -42,64 +43,66 @@ class LegacyPlayerBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
     return AnimatedBuilder(
       animation: state,
       builder: (BuildContext context, _) {
         final Track? track = state.current;
-        final double uiAlpha =
-            state.legacyBackground == LegacyBackgroundMode.off
-            ? 1
-            : state.legacyUiAlpha;
-        final Color barColor = scheme.surface.withValues(alpha: 0.96 * uiAlpha);
-        final BorderSide edge = BorderSide(
-          color: scheme.outlineVariant.withValues(alpha: 0.7),
-        );
         if (compact) {
-          return Container(
-            height: 64,
-            decoration: BoxDecoration(
-              color: barColor,
-              border: Border(top: edge, left: edge, right: edge),
+          final AppleSemanticColors apple = AppleSemanticColors.of(context);
+          return AppleGlass(
+            borderRadius: BorderRadius.zero,
+            blurSigma: 28,
+            color: apple.glassStrong,
+            border: Border(
+              top: BorderSide(color: apple.separator, width: .5),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _NowPlayingTile(
-                    track: track,
-                    onTap: onOpen,
-                    artworkSize: 44,
-                  ),
+            child: SizedBox(
+              height: 60,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _NowPlayingTile(
+                        track: track,
+                        onTap: onOpen,
+                        artworkSize: 42,
+                      ),
+                    ),
+                    _CompactIcon(
+                      icon: state.playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      tooltip: state.playing ? '暂停' : '播放',
+                      iconSize: 27,
+                      onPressed: track == null ? null : state.togglePlay,
+                    ),
+                    const SizedBox(width: 2),
+                    _CompactIcon(
+                      icon: Icons.skip_next_rounded,
+                      tooltip: '下一首',
+                      iconSize: 25,
+                      onPressed: track == null ? null : state.next,
+                    ),
+                  ],
                 ),
-                _CompactIcon(
-                  icon: state.playing
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  tooltip: state.playing ? '暂停' : '播放',
-                  iconSize: 26,
-                  onPressed: track == null ? null : state.togglePlay,
-                ),
-                _CompactIcon(
-                  icon: Icons.skip_next_rounded,
-                  tooltip: '下一首',
-                  iconSize: 26,
-                  onPressed: track == null ? null : state.next,
-                ),
-                LegacyQueueButton(state: state),
-              ],
+              ),
             ),
           );
         }
-        return Container(
-          height: 84,
-          decoration: BoxDecoration(
-            color: barColor,
-            border: Border(top: edge, left: edge, right: edge),
+        final AppleSemanticColors apple = AppleSemanticColors.of(context);
+        return AppleGlass(
+          borderRadius: BorderRadius.zero,
+          blurSigma: 30,
+          color: apple.glassStrong,
+          border: Border(
+            top: BorderSide(color: apple.separator, width: .5),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
+          child: SizedBox(
+            height: 84,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
             children: [
               SizedBox(
                 width: 250,
@@ -185,6 +188,8 @@ class LegacyPlayerBar extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+            ),
           ),
         );
       },

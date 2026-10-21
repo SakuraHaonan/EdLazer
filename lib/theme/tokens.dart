@@ -52,7 +52,7 @@ abstract final class AppShape {
 }
 
 /// Material 3 motion tokens. Durations are deliberately short: the interface
-/// targets a 120 Hz frame budget, and M3 expressive transitions still read as
+/// targets a 100 Hz minimum frame budget, and M3 expressive transitions still read as
 /// immediate at 90–320 ms.
 abstract final class AppMotion {
   static const Duration instant = Duration(milliseconds: 90);
@@ -67,8 +67,8 @@ abstract final class AppMotion {
   static const Curve emphasizedDecelerate = Cubic(0.05, 0.7, 0.1, 1);
   static const Curve emphasizedAccelerate = Cubic(0.3, 0, 0.8, 0.15);
 
-  /// The finest frame budget the app is tuned for: 120 fps.
-  static const double frameBudgetMs = 1000 / 120;
+  /// The minimum frame budget the app is tuned for: 100 fps.
+  static const double frameBudgetMs = 1000 / 100;
 }
 
 /// The design tokens the shell is built from.

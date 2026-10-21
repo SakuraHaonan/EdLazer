@@ -10,6 +10,7 @@ import 'package:lazer_nextgen/legacy/legacy_now_playing.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
+import 'package:lazer_nextgen/widgets/timed_lyric_text.dart';
 import 'package:lazer_nextgen/widgets/app_scroll_behavior.dart';
 
 const _track = Track(
@@ -190,6 +191,38 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('manual scrolling mounts only nearby lyric rows', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    state.playQueue([_track]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: LyricViewport(state: state)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(const Offset(180, 700));
+    await gesture.moveBy(const Offset(0, -4000));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    expect(
+      find.byKey(ValueKey<String>('lyric-line-${_track.id}-0')),
+      findsNothing,
+      reason: 'the old playback focus must not keep the gap mounted',
+    );
+    expect(
+      find.byType(TimedLyricText).evaluate().length,
+      lessThan(20),
+      reason: 'only viewport rows should remain mounted while browsing',
+    );
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'mobile lyric entry survives quick toggles, hiding and rotation',
     (tester) async {

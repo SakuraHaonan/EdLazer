@@ -1,17 +1,27 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../state/app_state.dart';
+import '../state/ui_preferences.dart';
+import '../theme/apple_design.dart';
 
-/// Sign-in for the legacy shell: the scan card the Lazer login overlay shows,
-/// drawn with the legacy palette, plus the cookie escape hatch.
+/// Present the sign-in card in the Apple sheet language.
 Future<void> showLegacyLoginDialog(BuildContext context, AppState state) {
+  final Brightness brightness = Theme.of(context).brightness;
+  final Color accent =
+      state.legacyPalette == LegacyPaletteMode.nowPlaying &&
+          state.legacySeed != null
+      ? state.legacySeed!
+      : AppleColors.musicRed;
   return showDialog<void>(
     context: context,
-    barrierColor: Colors.black54,
-    builder: (BuildContext context) => _LegacyLoginDialog(state: state),
+    barrierColor: Colors.black.withValues(alpha: .32),
+    builder: (BuildContext context) => Theme(
+      data: buildAppleTheme(brightness: brightness, seedAccent: accent),
+      child: _LegacyLoginDialog(state: state),
+    ),
   );
 }
 
@@ -114,75 +124,96 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return Dialog(
-      backgroundColor: scheme.surface,
+      backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Text('登录', style: theme.textTheme.titleLarge),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '取消',
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.close_rounded, size: 20),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 370),
+        decoration: BoxDecoration(
+          color: apple.tertiaryBackground,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: apple.separator, width: .5),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: .3),
+              blurRadius: 44,
+              offset: const Offset(0, 18),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(22, 16, 22, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    '登录',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: apple.label,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ],
-              ),
-              Text(
-                _cookieMode ? '粘贴浏览器里网易云音乐的登录 Cookie。' : '使用网易云音乐 App 扫描二维码登录。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
                 ),
+                IconButton(
+                  tooltip: '取消',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+              ],
+            ),
+            Text(
+              _cookieMode
+                  ? '粘贴浏览器里网易云音乐的登录 Cookie。'
+                  : '使用网易云音乐 App 扫描二维码登录。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: apple.secondaryLabel,
               ),
-              const SizedBox(height: 18),
-              if (_cookieMode) ..._cookieFields(theme) else ..._qrFields(theme),
-            ],
-          ),
+            ),
+            const SizedBox(height: 18),
+            if (_cookieMode) ..._cookieFields(theme) else ..._qrFields(theme),
+          ],
         ),
       ),
     );
   }
 
   List<Widget> _qrFields(ThemeData theme) {
-    final ColorScheme scheme = theme.colorScheme;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final String? url = _url;
     return [
       Center(
         child: Container(
-          width: 208,
-          height: 208,
+          width: 204,
+          height: 204,
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(18),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: apple.separator, width: .5),
           ),
           clipBehavior: Clip.antiAlias,
           child: url == null
               ? Center(
                   child: _phase == _Phase.creating
                       ? const SizedBox.square(
-                          dimension: 24,
+                          dimension: 22,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : Icon(
                           Icons.qr_code_2_rounded,
                           size: 40,
-                          color: scheme.onSurfaceVariant,
+                          color: apple.tertiaryLabel,
                         ),
                 )
               : QrImageView(
                   data: url,
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.zero,
                   backgroundColor: Colors.white,
                 ),
         ),
@@ -199,22 +230,20 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
           },
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: _phase == _Phase.scanned
-                ? scheme.primary
-                : scheme.onSurfaceVariant,
+            color: _phase == _Phase.scanned ? apple.accent : apple.secondaryLabel,
           ),
         ),
       ),
-      if (_phase == _Phase.expired || _phase == _Phase.error) ...[
+      if (_phase == _Phase.expired || _phase == _Phase.error) ...<Widget>[
         const SizedBox(height: 12),
         Center(
-          child: FilledButton.tonal(
+          child: FilledButton(
             onPressed: _start,
             child: const Text('刷新二维码'),
           ),
         ),
       ],
-      const SizedBox(height: 10),
+      const SizedBox(height: 8),
       Center(
         child: TextButton(
           onPressed: () => setState(() => _cookieMode = true),
@@ -235,9 +264,9 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
           fontFamily: 'monospace',
           height: 1.5,
         ),
-        decoration: const InputDecoration(hintText: 'MUSIC_U=…; __csrf=…'),
+        decoration: const InputDecoration(hintText: 'MUSIC_U=…  __csrf=…'),
       ),
-      if (_error != null) ...[
+      if (_error != null) ...<Widget>[
         const SizedBox(height: 8),
         Text(
           _error!,

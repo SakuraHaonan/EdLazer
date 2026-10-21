@@ -267,6 +267,10 @@ void main() {
         );
       }
       expect(find.text('Aa'), findsNothing);
+      // Queue and fullscreen remain in the top bar only; the transport keeps
+      // just the always-visible volume control on its right end.
+      expect(find.byTooltip('播放队列 (Q)'), findsOneWidget);
+      expect(find.byTooltip('全屏 (F)'), findsOneWidget);
 
       final Rect rail = tester.getRect(
         find.byKey(const ValueKey<String>('desktop-seek-bar')),
@@ -301,6 +305,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SongCommentsView), findsOneWidget);
     expect(find.textContaining('桌面评论'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('seek hover previews without moving the played fill', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final AppState state = _state();
+    addTearDown(state.dispose);
+    state.seek(.25);
+    await tester.pumpWidget(_app(state));
+    await tester.pumpAndSettle();
+
+    final Finder railFinder = find.byKey(
+      const ValueKey<String>('desktop-seek-bar'),
+    );
+    final Rect rail = tester.getRect(railFinder);
+    final Finder playedFinder = find.byKey(
+      const ValueKey<String>('desktop-seek-played'),
+    );
+    final double playedWidth = tester.getRect(playedFinder).width;
+    await tester.sendEventToBinding(
+      PointerHoverEvent(
+        position: Offset(rail.left + rail.width * .82, rail.center.dy),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.getRect(playedFinder).width, closeTo(playedWidth, .01));
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey<String>('desktop-seek-thumb')))
+          .center
+          .dx,
+      greaterThan(rail.left + rail.width * .6),
+    );
     expect(tester.takeException(), isNull);
   });
 

@@ -331,15 +331,20 @@ void main() {
         final frame = await codec.getNextFrame();
         expect(frame.image.width, 1080);
         final rgba = await frame.image.toByteData();
-        final Color canvas = buildLegacyTheme(
-          brightness: Brightness.dark,
-        ).colorScheme.surfaceContainerLowest;
-        final int argb = canvas.toARGB32();
+        int pixel(double x, double y) =>
+            rgba!.getUint32(((y * frame.image.width + x) * 4).round());
+        final int firstFlowColor = pixel(
+          frame.image.width * .08,
+          frame.image.height * .12,
+        );
+        final int secondFlowColor = pixel(
+          frame.image.width * .92,
+          frame.image.height * .88,
+        );
         expect(
-          rgba!.getUint32(0),
-          ((argb & 0x00FFFFFF) << 8) | 0x000000FF,
-          reason:
-              'dialog borders and animations must not enter the exported image',
+          firstFlowColor,
+          isNot(secondFlowColor),
+          reason: 'the exported card includes its flowing Material backdrop',
         );
         frame.image.dispose();
         codec.dispose();

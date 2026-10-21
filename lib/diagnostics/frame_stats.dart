@@ -46,6 +46,19 @@ class FrameStats extends ChangeNotifier {
     return (_frames.length - 1) * 1000000 / span;
   }
 
+  /// Fifth-percentile refresh rate over the rolling window. This exposes
+  /// sustained low-frame behavior that an average FPS can hide.
+  double get lowFps {
+    if (_frames.length < 3) return 0;
+    final List<int> intervals = <int>[
+      for (var i = 1; i < _frames.length; i++)
+        _frames[i].timestampInMicroseconds(ui.FramePhase.vsyncStart) -
+            _frames[i - 1].timestampInMicroseconds(ui.FramePhase.vsyncStart),
+    ]..sort();
+    final int p95 = intervals[((intervals.length - 1) * .95).ceil()];
+    return p95 <= 0 ? 0 : 1000000 / p95;
+  }
+
   double get buildMs =>
       _average(ui.FramePhase.buildFinish, ui.FramePhase.buildStart);
   double get rasterMs =>
@@ -126,8 +139,8 @@ class FrameStats extends ChangeNotifier {
   }
 }
 
-/// The opt-in frame meter. Green means the whole frame fits the 120 fps
-/// budget, amber means it still fits 60 fps, red means it does neither.
+/// The opt-in frame meter. Green means the whole frame fits the 100 fps
+/// budget, amber means it stays above the 90 fps floor, red means it does not.
 class FrameStatsOverlay extends StatefulWidget {
   const FrameStatsOverlay({super.key});
 
@@ -162,8 +175,13 @@ class _FrameStatsOverlayState extends State<FrameStatsOverlay> {
               final bool live = stats.live;
               final double budget = AppMotion.frameBudgetMs;
               final double total = stats.totalMs;
+              final double lowFps = stats.lowFps;
               final Color tone = !live
                   ? const Color(0xFF87949A)
+                  : lowFps > 0 && lowFps < 90
+                  ? const Color(0xFFE88A8A)
+                  : lowFps > 0 && lowFps < 100
+                  ? const Color(0xFFE8C46A)
                   : total <= budget
                   ? const Color(0xFF66D39B)
                   : total <= 1000 / 60
@@ -204,6 +222,13 @@ class _FrameStatsOverlayState extends State<FrameStatsOverlay> {
                               : '帧率 —',
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
+                        const SizedBox(width: 8),
+                        Text(
+                          stats.live && lowFps > 0
+                              ? '低帧 ${lowFps.toStringAsFixed(0)}'
+                              : '低帧 —',
+                          style: TextStyle(color: tone),
+                        ),
                         const SizedBox(width: 12),
                         Text(
                           'UI ${FrameStats.formatMs(live ? stats.buildMs : 0)}',
@@ -234,17 +259,17 @@ class _FrameStatsOverlayState extends State<FrameStatsOverlay> {
   }
 }
 
-/// A one-line verdict for the settings page, measured against the 120 fps
+/// A one-line verdict for the settings page, measured against the 100 fps
 /// budget the animations are tuned for.
 String frameBudgetVerdict(FrameStats stats) {
   if (!stats.running || !stats.live) return '等待播放或动画的帧数据';
   final double budget = AppMotion.frameBudgetMs;
   final double total = stats.totalMs;
   if (total <= budget) {
-    return '余量 ${(budget - total).toStringAsFixed(1)} ms，可支撑 120 fps';
+    return '余量 ${(budget - total).toStringAsFixed(1)} ms，可支撑 100 fps';
   }
-  if (total <= 1000 / 60) return '可支撑 60 fps，未达到 120 fps 预算';
-  return '当前帧超过 60 fps 预算';
+  if (stats.lowFps >= 90) return '低帧达到 90 fps，未达到 100 fps 预算';
+  return '低帧低于 90 fps';
 }
 
 /// Clamp a measured rate for display.

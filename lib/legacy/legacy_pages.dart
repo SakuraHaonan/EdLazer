@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
@@ -10,22 +10,20 @@ import '../l10n/app_language.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
 import '../state/ui_preferences.dart';
+import '../theme/apple_design.dart';
 import '../widgets/accessible_controls.dart';
+import '../widgets/apple_ui.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
-import 'legacy_theme.dart';
 import 'legacy_widgets.dart';
 
-/// Scroll padding shared by every legacy page.
-const EdgeInsets _pagePadding = EdgeInsets.fromLTRB(
-  LegacyTokens.pagePadding,
-  18,
-  LegacyTokens.pagePadding,
-  28,
-);
+/// Horizontal page margin. Phones use the 16 pt iOS inset; windowed layouts
+/// breathe with a 24 pt margin, while the content itself is capped below.
+double _pageInset(BuildContext context) =>
+    MediaQuery.sizeOf(context).width < 720 ? 16 : 24;
 
-/// `今天为你整理` — the discovery page: a rail of recommended playlists and the
-/// quick-pick track list, as the Lazer home screen lays it out.
+/// Apple-style browse page: a large title, one featured card, a horizontal
+/// recommendation shelf and the quick-pick track list.
 class LegacyHomePage extends StatelessWidget {
   const LegacyHomePage({
     super.key,
@@ -40,14 +38,13 @@ class LegacyHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
     final HomeFeed? feed = state.home;
     if (feed == null) {
       return LegacyNotice(
         message: state.homeError ?? '正在加载曲库…',
         action: state.homeError == null
             ? null
-            : FilledButton.tonal(
+            : FilledButton(
                 onPressed: () => unawaited(state.refreshHome(force: true)),
                 child: const Text('重试'),
               ),
@@ -61,83 +58,257 @@ class LegacyHomePage extends StatelessWidget {
         ? feed.quick
         : feed.featuredTracks;
     final String? likedName = state.collections.liked?.name;
-    // The track list is the long, data-driven part of the page: a sliver
-    // builder only materialises the rows on screen instead of the whole
-    // playlist on entry.
-    return CustomScrollView(
-      slivers: <Widget>[
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            LegacyTokens.pagePadding,
-            18,
-            LegacyTokens.pagePadding,
-            0,
-          ),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate(<Widget>[
-              if (rail.isNotEmpty) ...<Widget>[
-                const LegacySectionHeader(
-                  title: '今天为你整理',
-                  subtitle: '来自你的听歌偏好',
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 200,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
-                    itemCount: rail.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 16),
-                    itemBuilder: (BuildContext context, int index) =>
-                        LegacyPlaylistCard(
-                          playlist: rail[index],
-                          onTap: () => onOpenPlaylist(rail[index]),
-                        ),
+    final double inset = _pageInset(context);
+    final bool compact = MediaQuery.sizeOf(context).width < 720;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: CustomScrollView(
+          slivers: <Widget>[
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(inset, 8, inset, 0),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate(<Widget>[
+                  const ApplePageTitle(
+                    title: '现在就听',
+                    subtitle: '今天为你整理',
+                    padding: EdgeInsets.fromLTRB(0, 12, 0, 16),
                   ),
-                ),
-                const SizedBox(height: 22),
-              ],
-              LegacySectionHeader(
-                title: likedName ?? '继续播放',
-                subtitle: tracks.isEmpty ? null : '${tracks.length} 首',
-              ),
-              const SizedBox(height: 10),
-              if (tracks.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 32),
-                  child: Text(
-                    '曲库还没有返回可播放的曲目。',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  if (rail.isNotEmpty) ...<Widget>[
+                    _FeaturedPlaylistCard(
+                      playlist: rail.first,
+                      onTap: () => onOpenPlaylist(rail.first),
+                      compact: compact,
                     ),
+                    const SizedBox(height: 8),
+                    const LegacySectionHeader(
+                      title: '为你推荐',
+                      subtitle: '根据你的聆听偏好',
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      height: compact ? 202 : 224,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        clipBehavior: Clip.none,
+                        itemCount: rail.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 16),
+                        itemBuilder: (BuildContext context, int index) {
+                          final Playlist playlist = rail[index];
+                          return LegacyPlaylistCard(
+                            playlist: playlist,
+                            width: compact ? 144 : 168,
+                            onTap: () => onOpenPlaylist(playlist),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 26),
+                  LegacySectionHeader(
+                    title: likedName ?? '继续播放',
+                    subtitle: tracks.isEmpty ? null : '${tracks.length} 首',
                   ),
-                ),
-            ]),
-          ),
-        ),
-        if (tracks.isNotEmpty)
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: LegacyTokens.pagePadding,
-            ),
-            sliver: SliverList.builder(
-              itemCount: tracks.length,
-              itemBuilder: (BuildContext context, int i) => LegacyTrackRow(
-                track: tracks[i],
-                index: i,
-                current: state.current?.id == tracks[i].id,
-                playing: state.playing,
-                onTap: () => onPlayTrack(tracks, i),
+                  const SizedBox(height: 8),
+                  if (tracks.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Text(
+                        '曲库还没有返回可播放的曲目。',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppleSemanticColors.of(context).secondaryLabel,
+                        ),
+                      ),
+                    ),
+                ]),
               ),
             ),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: 28)),
-      ],
+            if (tracks.isNotEmpty)
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: inset),
+                sliver: SliverList.builder(
+                  itemCount: tracks.length,
+                  itemBuilder: (BuildContext context, int i) => LegacyTrackRow(
+                    track: tracks[i],
+                    index: i,
+                    current: state.current?.id == tracks[i].id,
+                    playing: state.playing,
+                    onTap: () => onPlayTrack(tracks, i),
+                  ),
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 28)),
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// `音乐库` — the signed-in collections and the public recommended playlists.
+/// Large recommendation hero. Album art is the content; a bottom scrim keeps
+/// white typography legible over any cover.
+class _FeaturedPlaylistCard extends StatefulWidget {
+  const _FeaturedPlaylistCard({
+    required this.playlist,
+    required this.onTap,
+    required this.compact,
+  });
+
+  final Playlist playlist;
+  final VoidCallback onTap;
+  final bool compact;
+
+  @override
+  State<_FeaturedPlaylistCard> createState() => _FeaturedPlaylistCardState();
+}
+
+class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final String subtitle = <String>[
+      if (widget.playlist.trackCount > 0) '${widget.playlist.trackCount} 首歌曲',
+      if (widget.playlist.description.isNotEmpty) widget.playlist.description,
+    ].join(' · ');
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _hovering ? 1.004 : 1,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            height: widget.compact ? 190 : 248,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: apple.separator.withValues(alpha: .4),
+                width: .5,
+              ),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: .16),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                if (widget.playlist.coverUrl?.isNotEmpty ?? false)
+                  LegacyCover(url: widget.playlist.coverUrl, radius: 0)
+                else
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: <Color>[
+                          apple.accent,
+                          Color.lerp(apple.accent, AppleColors.systemPurple, .38)!,
+                        ],
+                      ),
+                    ),
+                  ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[
+                        Color(0x00000000),
+                        Color(0x33000000),
+                        Color(0xD9000000),
+                      ],
+                      stops: <double>[.2, .54, 1],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: widget.compact ? 18 : 24,
+                  right: widget.compact ? 18 : 24,
+                  bottom: widget.compact ? 16 : 22,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text(
+                              '为你精选',
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: Colors.white.withValues(alpha: .72),
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: .4,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.playlist.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -.4,
+                                  ),
+                            ),
+                            if (subtitle.isNotEmpty) ...<Widget>[
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Colors.white.withValues(alpha: .72),
+                                    ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(
+                            alpha: _hovering ? 1 : .86,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          size: 27,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Library: owned playlists followed by public recommendations.
 class LegacyLibraryPage extends StatelessWidget {
   const LegacyLibraryPage({
     super.key,
@@ -171,37 +342,53 @@ class LegacyLibraryPage extends StatelessWidget {
             : null,
       );
     }
-    return ListView(
-      padding: _pagePadding,
-      children: [
-        if (mine.isNotEmpty) ...[
-          LegacySectionHeader(
-            title: '我的音乐',
-            subtitle: state.isGuest ? '游客模式' : state.user.name,
-            trailing: state.signedIn
-                ? IconButton(
-                    tooltip: '刷新歌单',
-                    onPressed: () =>
-                        unawaited(state.refreshCollections(force: true)),
-                    icon: const Icon(Icons.refresh_rounded, size: 20),
-                  )
-                : null,
-          ),
-          const SizedBox(height: 16),
-          LegacyPlaylistGrid(playlists: mine, onOpen: onOpenPlaylist),
-          const SizedBox(height: 32),
-        ],
-        if (publicLists.isNotEmpty) ...[
-          const LegacySectionHeader(title: '推荐歌单'),
-          const SizedBox(height: 16),
-          LegacyPlaylistGrid(playlists: publicLists, onOpen: onOpenPlaylist),
-        ],
-      ],
+    final double inset = _pageInset(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(inset, 8, inset, 28),
+          children: <Widget>[
+            ApplePageTitle(
+              title: '资料库',
+              subtitle: state.isGuest
+                  ? '登录后同步你的歌单'
+                  : '${state.user.name} 的音乐',
+              padding: const EdgeInsets.fromLTRB(0, 12, 0, 18),
+            ),
+            if (mine.isNotEmpty) ...<Widget>[
+              LegacySectionHeader(
+                title: '我的音乐',
+                subtitle: state.isGuest ? '游客模式' : null,
+                trailing: state.signedIn
+                    ? IconButton(
+                        tooltip: '刷新歌单',
+                        onPressed: () =>
+                            unawaited(state.refreshCollections(force: true)),
+                        icon: const Icon(Icons.sync_rounded, size: 19),
+                      )
+                    : null,
+              ),
+              const SizedBox(height: 14),
+              LegacyPlaylistGrid(playlists: mine, onOpen: onOpenPlaylist),
+              const SizedBox(height: 34),
+            ],
+            if (publicLists.isNotEmpty) ...<Widget>[
+              const LegacySectionHeader(title: '推荐歌单'),
+              const SizedBox(height: 14),
+              LegacyPlaylistGrid(
+                playlists: publicLists,
+                onOpen: onOpenPlaylist,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// `我喜欢` — the liked-songs playlist.
+/// The liked-songs library entry.
 class LegacyLikesPage extends StatelessWidget {
   const LegacyLikesPage({super.key, required this.state});
 
@@ -221,13 +408,13 @@ class LegacyLikesPage extends StatelessWidget {
     }
     final Playlist? liked = state.collections.liked;
     if (liked == null) {
-      return const LegacyNotice(message: '正在读取喜欢的音乐…');
+      return const Center(child: CircularProgressIndicator());
     }
     return LegacyPlaylistPage(state: state, playlist: liked, embedded: true);
   }
 }
 
-/// One playlist: header with cover and play-all, then its tracks.
+/// One playlist with the Apple Music large album header and track list.
 class LegacyPlaylistPage extends StatefulWidget {
   const LegacyPlaylistPage({
     super.key,
@@ -270,116 +457,174 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
     final List<Track>? tracks = _tracks;
-    return CustomScrollView(
-      slivers: <Widget>[
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            LegacyTokens.pagePadding,
-            18,
-            LegacyTokens.pagePadding,
-            0,
-          ),
-          sliver: SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+    final double inset = _pageInset(context);
+    final bool compact = MediaQuery.sizeOf(context).width < 680;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1100),
+        child: CustomScrollView(
+          slivers: <Widget>[
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(inset, 12, inset, 0),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    LegacyCover(
-                      url: widget.playlist.coverUrl,
-                      size: 160,
-                      radius: 20,
+                    _PlaylistHeader(
+                      playlist: widget.playlist,
+                      compact: compact,
+                      onPlay: tracks == null || tracks.isEmpty
+                          ? null
+                          : () => widget.state.playQueue(tracks),
                     ),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            widget.playlist.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.headlineMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            <String>[
-                              if (widget.playlist.trackCount > 0)
-                                '${widget.playlist.trackCount} 首',
-                              if (widget.playlist.description.isNotEmpty)
-                                widget.playlist.description,
-                            ].join(' · '),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: FilledButton.icon(
-                              onPressed: tracks == null || tracks.isEmpty
-                                  ? null
-                                  : () => widget.state.playQueue(tracks),
-                              icon: const Icon(
-                                Icons.play_arrow_rounded,
-                                size: 20,
-                              ),
-                              label: const Text('播放全部'),
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 22),
+                    if (_error != null)
+                      LegacyNotice(
+                        message: _error!,
+                        action: FilledButton(
+                          onPressed: () => unawaited(_load()),
+                          child: const Text('重试'),
+                        ),
+                      )
+                    else if (tracks == null)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 52),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (tracks.isEmpty)
+                      const LegacyNotice(message: '这个歌单还没有可播放的曲目。')
+                    else
+                      LegacySectionHeader(
+                        title: '歌曲',
+                        subtitle: '${tracks.length} 首',
                       ),
-                    ),
+                    const SizedBox(height: 6),
                   ],
                 ),
-                const SizedBox(height: 24),
-                if (_error != null)
-                  LegacyNotice(
-                    message: _error!,
-                    action: FilledButton.tonal(
-                      onPressed: () => unawaited(_load()),
-                      child: const Text('重试'),
-                    ),
-                  )
-                else if (tracks == null)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 48),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (tracks.isEmpty)
-                  const LegacyNotice(message: '这个歌单还没有可播放的曲目。'),
-              ],
-            ),
-          ),
-        ),
-        if (tracks != null && tracks.isNotEmpty)
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: LegacyTokens.pagePadding,
-            ),
-            sliver: SliverList.builder(
-              itemCount: tracks.length,
-              itemBuilder: (BuildContext context, int i) => LegacyTrackRow(
-                track: tracks[i],
-                index: i,
-                current: widget.state.current?.id == tracks[i].id,
-                playing: widget.state.playing,
-                onTap: () => widget.state.playQueue(tracks, startIndex: i),
               ),
             ),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: 28)),
-      ],
+            if (tracks != null && tracks.isNotEmpty)
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: inset),
+                sliver: SliverList.builder(
+                  itemCount: tracks.length,
+                  itemBuilder: (BuildContext context, int i) => LegacyTrackRow(
+                    track: tracks[i],
+                    index: i,
+                    current: widget.state.current?.id == tracks[i].id,
+                    playing: widget.state.playing,
+                    onTap: () =>
+                        widget.state.playQueue(tracks, startIndex: i),
+                  ),
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 28)),
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// Search results for the top bar query.
+class _PlaylistHeader extends StatelessWidget {
+  const _PlaylistHeader({
+    required this.playlist,
+    required this.compact,
+    required this.onPlay,
+  });
+
+  final Playlist playlist;
+  final bool compact;
+  final VoidCallback? onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final Widget cover = RepaintBoundary(
+      child: LegacyCover(
+        url: playlist.coverUrl,
+        size: compact ? 168 : 190,
+        radius: 14,
+      ),
+    );
+    final Widget info = Column(
+      crossAxisAlignment: compact
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          playlist.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: compact ? TextAlign.center : TextAlign.start,
+          style: theme.textTheme.headlineLarge?.copyWith(
+            color: apple.label,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -.6,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          <String>[
+            if (playlist.trackCount > 0) '${playlist.trackCount} 首歌曲',
+            if (playlist.description.isNotEmpty) playlist.description,
+          ].join(' · '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: compact ? TextAlign.center : TextAlign.start,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: apple.secondaryLabel,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            FilledButton.icon(
+              onPressed: onPlay,
+              icon: const Icon(Icons.play_arrow_rounded, size: 20),
+              label: const Text('播放全部'),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: apple.fill,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.shuffle_rounded,
+                size: 19,
+                color: onPlay == null ? apple.tertiaryLabel : apple.accent,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+    if (compact) {
+      return Column(
+        children: <Widget>[
+          cover,
+          const SizedBox(height: 18),
+          info,
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: <Widget>[
+        cover,
+        const SizedBox(width: 24),
+        Expanded(child: info),
+      ],
+    );
+  }
+}
 class LegacySearchPage extends StatefulWidget {
   const LegacySearchPage({
     super.key,
@@ -446,7 +691,6 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
     final SearchResults? results = _results;
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
@@ -455,7 +699,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
       return LegacyNotice(
         message: _error!,
         icon: Icons.search_off_rounded,
-        action: FilledButton.tonal(
+        action: FilledButton(
           onPressed: () => unawaited(_run()),
           child: const Text('重试'),
         ),
@@ -467,77 +711,52 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
         icon: Icons.search_rounded,
       );
     }
-    return ListView(
-      padding: _pagePadding,
-      children: [
-        if (results.tracks.isNotEmpty) ...[
-          LegacySectionHeader(
-            title: '单曲',
-            subtitle: '${results.tracks.length} 首',
-          ),
-          const SizedBox(height: 10),
-          for (int i = 0; i < results.tracks.length; i++)
-            LegacyTrackRow(
-              track: results.tracks[i],
-              index: i,
-              current: widget.state.current?.id == results.tracks[i].id,
-              playing: widget.state.playing,
-              onTap: () =>
-                  widget.state.playQueue(results.tracks, startIndex: i),
+    final double inset = _pageInset(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(inset, 8, inset, 28),
+          children: <Widget>[
+            ApplePageTitle(
+              title: '搜索',
+              subtitle: widget.query,
+              padding: const EdgeInsets.fromLTRB(0, 12, 0, 14),
             ),
-          const SizedBox(height: 28),
-        ],
-        if (results.playlists.isNotEmpty) ...[
-          const LegacySectionHeader(title: '歌单'),
-          const SizedBox(height: 16),
-          LegacyPlaylistGrid(
-            playlists: results.playlists,
-            onOpen: widget.onOpenPlaylist,
-          ),
-          const SizedBox(height: 28),
-        ],
-        if (results.albums.isNotEmpty) ...[
-          const LegacySectionHeader(title: '专辑'),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 18,
-            runSpacing: 18,
-            children: [
-              for (final Album album in results.albums)
-                SizedBox(
-                  width: 160,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      LegacyCover(url: album.coverUrl, size: 160, radius: 16),
-                      const SizedBox(height: 8),
-                      Text(
-                        album.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      Text(
-                        album.artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
+            if (results.tracks.isNotEmpty) ...<Widget>[
+              LegacySectionHeader(
+                title: '单曲',
+                subtitle: '${results.tracks.length} 首',
+              ),
+              const SizedBox(height: 8),
+              for (int i = 0; i < results.tracks.length; i++)
+                LegacyTrackRow(
+                  track: results.tracks[i],
+                  index: i,
+                  current: widget.state.current?.id == results.tracks[i].id,
+                  playing: widget.state.playing,
+                  onTap: () =>
+                      widget.state.playQueue(results.tracks, startIndex: i),
                 ),
+              const SizedBox(height: 28),
             ],
-          ),
-        ],
-      ],
+            if (results.playlists.isNotEmpty) ...<Widget>[
+              const LegacySectionHeader(title: '歌单'),
+              const SizedBox(height: 14),
+              LegacyPlaylistGrid(
+                playlists: results.playlists,
+                onOpen: widget.onOpenPlaylist,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// `设置` for the legacy shell: the interface switch, appearance, language and
-/// the account, laid out as the legacy settings rows.
+/// A single-column, inset-grouped Settings page, following the iOS Settings
+/// information architecture rather than a desktop form grid.
 class LegacySettingsPage extends StatelessWidget {
   const LegacySettingsPage({super.key, required this.state});
 
@@ -546,362 +765,446 @@ class LegacySettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final double minScale = UiMetrics.minScaleOf(context);
     final double shownScale = UiMetrics.scaleOf(context);
     final bool car = UiMetrics.carOf(context);
-    return ListView(
-      padding: _pagePadding,
-      children: [
-        Text('设置', style: theme.textTheme.headlineMedium),
-        const SizedBox(height: 5),
-        Text(
-          '外观、界面和账户。',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 22),
-        const _LegacySectionLabel('界面'),
-        _LegacySettingRow(
-          label: '配色',
-          subtitle: state.legacyPalette.detail,
-          trailing: DropdownButton<LegacyPaletteMode>(
-            value: state.legacyPalette,
-            underline: const SizedBox.shrink(),
-            borderRadius: BorderRadius.circular(16),
-            items: <DropdownMenuItem<LegacyPaletteMode>>[
-              for (final LegacyPaletteMode mode in LegacyPaletteMode.values)
-                DropdownMenuItem<LegacyPaletteMode>(
-                  value: mode,
-                  child: Text(mode.label),
-                ),
-            ],
-            onChanged: (LegacyPaletteMode? value) {
-              if (value != null) unawaited(state.setLegacyPalette(value));
-            },
-          ),
-        ),
-        _LegacySettingRow(
-          label: '设备形态',
-          subtitle: state.surface.detail,
-          trailing: DropdownButton<AppSurface>(
-            value: state.surface,
-            underline: const SizedBox.shrink(),
-            borderRadius: BorderRadius.circular(16),
-            items: <DropdownMenuItem<AppSurface>>[
-              for (final AppSurface surface in AppSurface.values)
-                DropdownMenuItem<AppSurface>(
-                  value: surface,
-                  child: Text(surface.label),
-                ),
-            ],
-            onChanged: (AppSurface? value) {
-              if (value != null) unawaited(state.setSurface(value));
-            },
-          ),
-        ),
-        _LegacySettingRow(
-          label: '界面布局',
-          subtitle: state.uiMode.detail,
-          trailing: DropdownButton<AppUiMode>(
-            value: state.uiMode,
-            underline: const SizedBox.shrink(),
-            borderRadius: BorderRadius.circular(16),
-            items: <DropdownMenuItem<AppUiMode>>[
-              for (final AppUiMode mode in AppUiMode.values)
-                DropdownMenuItem<AppUiMode>(
-                  value: mode,
-                  child: Text(mode.label),
-                ),
-            ],
-            onChanged: (AppUiMode? value) {
-              if (value != null) unawaited(state.setUiMode(value));
-            },
-          ),
-        ),
-        _LegacySliderRow(
-          key: const ValueKey('dpi-scale-slider'),
-          label: 'DPI 缩放',
-          valueText: '${(shownScale * 100).round()}%',
-          subtitle: state.autoDpiScale
-              ? '自动推算 · 拖动拉杆即改为手动'
-              : car
-              ? '车机形态已把界面放大到 ${(minScale * 100).round()}% 起'
-              : '按比例放大整块界面，适合高分屏',
-          value: shownScale.clamp(minScale, kDpiScaleMax),
-          min: minScale,
-          max: kDpiScaleMax,
-          divisions: ((kDpiScaleMax - minScale) / kDpiScaleStep).round(),
-          onChanged: (double value) => unawaited(state.setDpiScale(value)),
-          action: TextButton(
-            key: const ValueKey('dpi-scale-reset'),
-            onPressed: () => unawaited(state.resetDpiScale()),
-            child: const Text('恢复默认'),
-          ),
-        ),
-        _LegacySwitchRow(
-          key: const ValueKey('auto-dpi-switch'),
-          label: '自动调节 DPI 缩放',
-          subtitle: '按窗口可用空间自动推算',
-          value: state.autoDpiScale,
-          onChanged: (bool value) => unawaited(state.setAutoDpiScale(value)),
-        ),
-        _LegacySettingRow(
-          label: '背景',
-          subtitle: '使用当前歌曲封面主色渲染整页画布',
-          trailing: DropdownButton<LegacyBackgroundMode>(
-            value: state.legacyBackground,
-            underline: const SizedBox.shrink(),
-            borderRadius: BorderRadius.circular(16),
-            items: <DropdownMenuItem<LegacyBackgroundMode>>[
-              for (final LegacyBackgroundMode mode
-                  in LegacyBackgroundMode.values)
-                DropdownMenuItem<LegacyBackgroundMode>(
-                  value: mode,
-                  child: Text(mode.label),
-                ),
-            ],
-            onChanged: (LegacyBackgroundMode? value) {
-              if (value != null) unawaited(state.setLegacyBackground(value));
-            },
-          ),
-        ),
-        _LegacySliderRow(
-          key: const ValueKey('legacy-ui-alpha'),
-          label: '内容不透明度',
-          valueText: '${(state.legacyUiAlpha * 100).round()}%',
-          subtitle: '数值越小，封面主色越明显',
-          value: state.legacyUiAlpha.clamp(0.4, 1.0),
-          min: 0.4,
-          max: 1.0,
-          divisions: 12,
-          onChanged: state.legacyBackground == LegacyBackgroundMode.off
-              ? null
-              : (double value) => unawaited(state.setLegacyUiAlpha(value)),
-        ),
-        const _LegacySectionLabel('外观'),
-        _LegacySettingRow(
-          label: '主题',
-          subtitle: switch (state.themeMode) {
-            ThemeMode.system => '跟随系统',
-            ThemeMode.light => '浅色',
-            ThemeMode.dark => '深色',
-          },
-          trailing: DropdownButton<ThemeMode>(
-            value: state.themeMode,
-            underline: const SizedBox.shrink(),
-            borderRadius: BorderRadius.circular(16),
-            items: const <DropdownMenuItem<ThemeMode>>[
-              DropdownMenuItem<ThemeMode>(
-                value: ThemeMode.system,
-                child: Text('跟随系统'),
+    final double inset = _pageInset(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(inset, 8, inset, 36),
+          children: <Widget>[
+            const ApplePageTitle(
+              title: '设置',
+              subtitle: '外观、界面和账户。',
+              padding: EdgeInsets.fromLTRB(0, 12, 0, 20),
+            ),
+            const _LegacySectionLabel('界面'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySettingRow(
+                    label: '配色',
+                    subtitle: state.legacyPalette.detail,
+                    trailing: DropdownButton<LegacyPaletteMode>(
+                      value: state.legacyPalette,
+                      underline: const SizedBox.shrink(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: <DropdownMenuItem<LegacyPaletteMode>>[
+                        for (final LegacyPaletteMode mode
+                            in LegacyPaletteMode.values)
+                          DropdownMenuItem<LegacyPaletteMode>(
+                            value: mode,
+                            child: Text(mode.label),
+                          ),
+                      ],
+                      onChanged: (LegacyPaletteMode? value) {
+                        if (value != null) {
+                          unawaited(state.setLegacyPalette(value));
+                        }
+                      },
+                    ),
+                  ),
+                  _LegacySettingRow(
+                    label: '设备形态',
+                    subtitle: state.surface.detail,
+                    trailing: DropdownButton<AppSurface>(
+                      value: state.surface,
+                      underline: const SizedBox.shrink(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: <DropdownMenuItem<AppSurface>>[
+                        for (final AppSurface surface in AppSurface.values)
+                          DropdownMenuItem<AppSurface>(
+                            value: surface,
+                            child: Text(surface.label),
+                          ),
+                      ],
+                      onChanged: (AppSurface? value) {
+                        if (value != null) unawaited(state.setSurface(value));
+                      },
+                    ),
+                  ),
+                  _LegacySettingRow(
+                    label: '界面布局',
+                    subtitle: state.uiMode.detail,
+                    trailing: DropdownButton<AppUiMode>(
+                      value: state.uiMode,
+                      underline: const SizedBox.shrink(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: <DropdownMenuItem<AppUiMode>>[
+                        for (final AppUiMode mode in AppUiMode.values)
+                          DropdownMenuItem<AppUiMode>(
+                            value: mode,
+                            child: Text(mode.label),
+                          ),
+                      ],
+                      onChanged: (AppUiMode? value) {
+                        if (value != null) unawaited(state.setUiMode(value));
+                      },
+                    ),
+                  ),
+                  _LegacySliderRow(
+                    key: const ValueKey('dpi-scale-slider'),
+                    label: 'DPI 缩放',
+                    valueText: '${(shownScale * 100).round()}%',
+                    subtitle: state.autoDpiScale
+                        ? '自动推算 · 拖动拉杆即改为手动'
+                        : car
+                        ? '车机形态已把界面放大到 ${(minScale * 100).round()}% 起'
+                        : '按比例放大整块界面，适合高分屏',
+                    value: shownScale.clamp(minScale, kDpiScaleMax),
+                    min: minScale,
+                    max: kDpiScaleMax,
+                    divisions:
+                        ((kDpiScaleMax - minScale) / kDpiScaleStep).round(),
+                    onChanged: (double value) =>
+                        unawaited(state.setDpiScale(value)),
+                    action: TextButton(
+                      key: const ValueKey('dpi-scale-reset'),
+                      onPressed: () => unawaited(state.resetDpiScale()),
+                      child: const Text('恢复默认'),
+                    ),
+                  ),
+                  _LegacySwitchRow(
+                    key: const ValueKey('auto-dpi-switch'),
+                    label: '自动调节 DPI 缩放',
+                    subtitle: '按窗口可用空间自动推算',
+                    value: state.autoDpiScale,
+                    onChanged: (bool value) =>
+                        unawaited(state.setAutoDpiScale(value)),
+                  ),
+                  _LegacySettingRow(
+                    label: '背景',
+                    subtitle: '使用当前歌曲封面主色渲染整页画布',
+                    trailing: DropdownButton<LegacyBackgroundMode>(
+                      value: state.legacyBackground,
+                      underline: const SizedBox.shrink(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: <DropdownMenuItem<LegacyBackgroundMode>>[
+                        for (final LegacyBackgroundMode mode
+                            in LegacyBackgroundMode.values)
+                          DropdownMenuItem<LegacyBackgroundMode>(
+                            value: mode,
+                            child: Text(mode.label),
+                          ),
+                      ],
+                      onChanged: (LegacyBackgroundMode? value) {
+                        if (value != null) {
+                          unawaited(state.setLegacyBackground(value));
+                        }
+                      },
+                    ),
+                  ),
+                  _LegacySliderRow(
+                    key: const ValueKey('legacy-ui-alpha'),
+                    label: '内容不透明度',
+                    valueText: '${(state.legacyUiAlpha * 100).round()}%',
+                    subtitle: '数值越小，封面主色越明显',
+                    value: state.legacyUiAlpha.clamp(0.4, 1.0),
+                    min: 0.4,
+                    max: 1.0,
+                    divisions: 12,
+                    onChanged:
+                        state.legacyBackground == LegacyBackgroundMode.off
+                        ? null
+                        : (double value) =>
+                              unawaited(state.setLegacyUiAlpha(value)),
+                  ),
+                ],
               ),
-              DropdownMenuItem<ThemeMode>(
-                value: ThemeMode.light,
-                child: Text('浅色'),
+            ),
+            const _LegacySectionLabel('外观'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySettingRow(
+                    label: '主题',
+                    subtitle: switch (state.themeMode) {
+                      ThemeMode.system => '跟随系统',
+                      ThemeMode.light => '浅色',
+                      ThemeMode.dark => '深色',
+                    },
+                    trailing: DropdownButton<ThemeMode>(
+                      value: state.themeMode,
+                      underline: const SizedBox.shrink(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: const <DropdownMenuItem<ThemeMode>>[
+                        DropdownMenuItem<ThemeMode>(
+                          value: ThemeMode.system,
+                          child: Text('跟随系统'),
+                        ),
+                        DropdownMenuItem<ThemeMode>(
+                          value: ThemeMode.light,
+                          child: Text('浅色'),
+                        ),
+                        DropdownMenuItem<ThemeMode>(
+                          value: ThemeMode.dark,
+                          child: Text('深色'),
+                        ),
+                      ],
+                      onChanged: (ThemeMode? value) {
+                        if (value != null) {
+                          unawaited(state.setThemeMode(value));
+                        }
+                      },
+                    ),
+                  ),
+                  _LegacySettingRow(
+                    label: '语言',
+                    subtitle: state.language.name,
+                    trailing: DropdownButton<AppLanguage>(
+                      value: state.language,
+                      underline: const SizedBox.shrink(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: <DropdownMenuItem<AppLanguage>>[
+                        for (final AppLanguage language in AppLanguage.values)
+                          DropdownMenuItem<AppLanguage>(
+                            value: language,
+                            child: Text(language.name),
+                          ),
+                      ],
+                      onChanged: (AppLanguage? value) {
+                        if (value != null) {
+                          unawaited(state.setLanguage(value));
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
-              DropdownMenuItem<ThemeMode>(
-                value: ThemeMode.dark,
-                child: Text('深色'),
+            ),
+            const _LegacySectionLabel('播放'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: _LegacySwitchRow(
+                label: '独立播放',
+                subtitle: '不接入系统媒体控制',
+                value: state.independentPlayback,
+                onChanged: (bool value) =>
+                    unawaited(state.setIndependentPlayback(value)),
               ),
-            ],
-            onChanged: (ThemeMode? value) {
-              if (value != null) unawaited(state.setThemeMode(value));
-            },
-          ),
-        ),
-        _LegacySettingRow(
-          label: '语言',
-          subtitle: state.language.name,
-          trailing: DropdownButton<AppLanguage>(
-            value: state.language,
-            underline: const SizedBox.shrink(),
-            borderRadius: BorderRadius.circular(16),
-            items: <DropdownMenuItem<AppLanguage>>[
-              for (final AppLanguage language in AppLanguage.values)
-                DropdownMenuItem<AppLanguage>(
-                  value: language,
-                  child: Text(language.name),
-                ),
-            ],
-            onChanged: (AppLanguage? value) {
-              if (value != null) unawaited(state.setLanguage(value));
-            },
-          ),
-        ),
-        const _LegacySectionLabel('播放'),
-        _LegacySwitchRow(
-          label: '独立播放',
-          subtitle: '不接入系统媒体控制',
-          value: state.independentPlayback,
-          onChanged: (bool value) =>
-              unawaited(state.setIndependentPlayback(value)),
-        ),
-        const _LegacySectionLabel('交互'),
-        _LegacySwitchRow(
-          label: '震动反馈',
-          subtitle: '点击可操作的元素和拖动进度条、数值条时反馈',
-          value: state.hapticsEnabled,
-          onChanged: (bool value) => unawaited(state.setHapticsEnabled(value)),
-        ),
-        if (defaultTargetPlatform == TargetPlatform.iOS)
-          _LegacySliderRow(
-            label: '震动强度',
-            valueText: '${(state.hapticIntensity * 100).round()}%',
-            value: state.hapticIntensity.clamp(0.0, 1.0),
-            min: 0,
-            max: 1,
-            divisions: 20,
-            onChanged: state.hapticsEnabled
-                ? (double value) => unawaited(state.setHapticIntensity(value))
-                : null,
-          ),
-        _LegacySliderRow(
-          label: '歌词控件自动隐藏',
-          valueText: '${state.lyricControlsSeconds.toStringAsFixed(1)} 秒',
-          subtitle: '闲置一会儿后收起歌词页的控件',
-          value: state.lyricControlsSeconds.clamp(1.0, 10.0),
-          min: 1,
-          max: 10,
-          divisions: 18,
-          onChanged: (double value) =>
-              unawaited(state.setLyricControlsSeconds(value)),
-        ),
-        const _LegacySectionLabel('歌词'),
-        _LegacySliderRow(
-          label: '歌词字号',
-          valueText: '${state.lyricFontSize.round()}',
-          value: state.lyricFontSize.clamp(14.0, 40.0),
-          min: 14,
-          max: 40,
-          divisions: 26,
-          onChanged: (double value) => unawaited(state.setLyricFontSize(value)),
-        ),
-        _LegacyChoiceRow(
-          label: '歌词粗细',
-          valueText: switch (state.lyricFontWeight) {
-            400 => '常规',
-            500 => '中等',
-            600 => '半粗',
-            _ => '粗体',
-          },
-          choices: const <int>[400, 500, 600, 700],
-          selected: state.lyricFontWeight,
-          labelOf: (int weight) => switch (weight) {
-            400 => '常规',
-            500 => '中等',
-            600 => '半粗',
-            _ => '粗体',
-          },
-          onSelected: (int weight) =>
-              unawaited(state.setLyricFontWeight(weight)),
-        ),
-        _LegacySwitchRow(
-          label: '歌词模糊',
-          subtitle: '距离当前歌词越远，模糊越强；手动浏览时渐隐',
-          value: state.lyricBlurEnabled,
-          onChanged: (bool value) =>
-              unawaited(state.setLyricBlurEnabled(value)),
-        ),
-        _LegacySliderRow(
-          label: '手动浏览后恢复跟随',
-          valueText: '${state.lyricResumeSeconds.toStringAsFixed(1)} 秒',
-          subtitle: '松开手后多久回到当前行',
-          value: state.lyricResumeSeconds.clamp(1.0, 10.0),
-          min: 1,
-          max: 10,
-          divisions: 18,
-          onChanged: (double value) =>
-              unawaited(state.setLyricResumeSeconds(value)),
-        ),
-        const _LegacySectionLabel('滚动'),
-        _LegacySliderRow(
-          label: '滚动惯性',
-          valueText: '${(state.scrollRetention * 100).round()}%',
-          subtitle: '85–98%；数值越高，松手后滑行越久、越远',
-          value: state.scrollRetention,
-          min: ScrollMotion.minRetention,
-          max: ScrollMotion.maxRetention,
-          divisions: 13,
-          onChanged: (double value) =>
-              unawaited(state.setScrollRetention(value)),
-          action: TextButton(
-            onPressed: () => unawaited(
-              state.setScrollRetention(ScrollMotion.defaultRetention),
             ),
-            child: const Text('恢复默认'),
-          ),
-        ),
-        _LegacySliderRow(
-          label: '滚动加速度',
-          valueText: '${(state.scrollAcceleration * 100).round()}%',
-          subtitle: '50–300%；数值越高，滚轮和连续甩动提速越明显',
-          value: state.scrollAcceleration,
-          min: ScrollMotion.minAcceleration,
-          max: ScrollMotion.maxAcceleration,
-          divisions: 25,
-          onChanged: (double value) =>
-              unawaited(state.setScrollAcceleration(value)),
-          action: TextButton(
-            onPressed: () => unawaited(
-              state.setScrollAcceleration(ScrollMotion.defaultAcceleration),
+            const _LegacySectionLabel('交互'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySwitchRow(
+                    label: '震动反馈',
+                    subtitle: '点击可操作的元素和拖动进度条、数值条时反馈',
+                    value: state.hapticsEnabled,
+                    onChanged: (bool value) =>
+                        unawaited(state.setHapticsEnabled(value)),
+                  ),
+                  if (defaultTargetPlatform == TargetPlatform.iOS)
+                    _LegacySliderRow(
+                      label: '震动强度',
+                      valueText: '${(state.hapticIntensity * 100).round()}%',
+                      value: state.hapticIntensity.clamp(0.0, 1.0),
+                      min: 0,
+                      max: 1,
+                      divisions: 20,
+                      onChanged: state.hapticsEnabled
+                          ? (double value) =>
+                                unawaited(state.setHapticIntensity(value))
+                          : null,
+                    ),
+                  _LegacySliderRow(
+                    label: '歌词控件自动隐藏',
+                    valueText:
+                        '${state.lyricControlsSeconds.toStringAsFixed(1)} 秒',
+                    subtitle: '闲置一会儿后收起歌词页的控件',
+                    value: state.lyricControlsSeconds.clamp(1.0, 10.0),
+                    min: 1,
+                    max: 10,
+                    divisions: 18,
+                    onChanged: (double value) =>
+                        unawaited(state.setLyricControlsSeconds(value)),
+                  ),
+                ],
+              ),
             ),
-            child: const Text('恢复默认'),
-          ),
-        ),
-        const _LegacySectionLabel('性能'),
-        _LegacySwitchRow(
-          label: '显示帧率',
-          subtitle: '实时显示 UI、GPU 帧时间和 120 fps 帧预算',
-          value: state.showFrameStats,
-          onChanged: (bool value) => unawaited(state.setShowFrameStats(value)),
-        ),
-        _LegacySettingRow(
-          label: '动画帧预算',
-          subtitle: '全部界面动画按 8.3 ms 设计；实际帧率跟随显示器刷新率',
-          trailing: Text(
-            '8.3 ms',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            const _LegacySectionLabel('歌词'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySliderRow(
+                    label: '歌词字号',
+                    valueText: '${state.lyricFontSize.round()}',
+                    value: state.lyricFontSize.clamp(14.0, 40.0),
+                    min: 14,
+                    max: 40,
+                    divisions: 26,
+                    onChanged: (double value) =>
+                        unawaited(state.setLyricFontSize(value)),
+                  ),
+                  _LegacyChoiceRow(
+                    label: '歌词粗细',
+                    valueText: switch (state.lyricFontWeight) {
+                      400 => '常规',
+                      500 => '中等',
+                      600 => '半粗',
+                      _ => '粗体',
+                    },
+                    choices: const <int>[400, 500, 600, 700],
+                    selected: state.lyricFontWeight,
+                    labelOf: (int weight) => switch (weight) {
+                      400 => '常规',
+                      500 => '中等',
+                      600 => '半粗',
+                      _ => '粗体',
+                    },
+                    onSelected: (int weight) =>
+                        unawaited(state.setLyricFontWeight(weight)),
+                  ),
+                  _LegacySwitchRow(
+                    label: '歌词模糊',
+                    subtitle: '距离当前歌词越远，模糊越强；手动浏览时渐隐',
+                    value: state.lyricBlurEnabled,
+                    onChanged: (bool value) =>
+                        unawaited(state.setLyricBlurEnabled(value)),
+                  ),
+                  _LegacySliderRow(
+                    label: '手动浏览后恢复跟随',
+                    valueText:
+                        '${state.lyricResumeSeconds.toStringAsFixed(1)} 秒',
+                    subtitle: '松开手后多久回到当前行',
+                    value: state.lyricResumeSeconds.clamp(1.0, 10.0),
+                    min: 1,
+                    max: 10,
+                    divisions: 18,
+                    onChanged: (double value) =>
+                        unawaited(state.setLyricResumeSeconds(value)),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
-        const _LegacySectionLabel('账户'),
-        _LegacySettingRow(
-          label: state.isGuest ? '游客' : state.user.name,
-          subtitle: state.isGuest
-              ? '登录后同步歌单和每日推荐'
-              : '${state.user.methodLabel} · ${state.user.detail}',
-          trailing: state.isGuest
-              ? FilledButton(
-                  onPressed: () =>
-                      unawaited(showLegacyLoginDialog(context, state)),
-                  child: const Text('登录'),
-                )
-              : TextButton(onPressed: state.signOut, child: const Text('退出登录')),
-        ),
-        _LegacySettingRow(
-          label: '刷新曲库',
-          subtitle: '重新拉取首页、歌单和每日推荐',
-          trailing: OutlinedButton(
-            onPressed: () => unawaited(state.refreshHome(force: true)),
-            child: const Text('刷新'),
-          ),
-        ),
-        const _LegacySectionLabel('关于'),
-        _LegacySettingRow(
-          label: 'Legacy UI',
-          subtitle: '移植自 Lazer 项目：Material 3 蓝色夜间配色、左侧导航与播放条',
-          trailing: Text(
-            'Lazer',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
+            const _LegacySectionLabel('滚动'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySliderRow(
+                    label: '滚动惯性',
+                    valueText: '${(state.scrollRetention * 100).round()}%',
+                    subtitle: '85–98%；数值越高，松手后滑行越久、越远',
+                    value: state.scrollRetention,
+                    min: ScrollMotion.minRetention,
+                    max: ScrollMotion.maxRetention,
+                    divisions: 13,
+                    onChanged: (double value) =>
+                        unawaited(state.setScrollRetention(value)),
+                    action: TextButton(
+                      onPressed: () => unawaited(
+                        state.setScrollRetention(
+                          ScrollMotion.defaultRetention,
+                        ),
+                      ),
+                      child: const Text('恢复默认'),
+                    ),
+                  ),
+                  _LegacySliderRow(
+                    label: '滚动加速度',
+                    valueText: '${(state.scrollAcceleration * 100).round()}%',
+                    subtitle: '50–300%；数值越高，滚轮和连续甩动提速越明显',
+                    value: state.scrollAcceleration,
+                    min: ScrollMotion.minAcceleration,
+                    max: ScrollMotion.maxAcceleration,
+                    divisions: 25,
+                    onChanged: (double value) =>
+                        unawaited(state.setScrollAcceleration(value)),
+                    action: TextButton(
+                      onPressed: () => unawaited(
+                        state.setScrollAcceleration(
+                          ScrollMotion.defaultAcceleration,
+                        ),
+                      ),
+                      child: const Text('恢复默认'),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+            const _LegacySectionLabel('性能'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySwitchRow(
+                    label: '显示帧率',
+                    subtitle: '实时显示 UI、GPU、低帧和 100 fps 帧预算',
+                    value: state.showFrameStats,
+                    onChanged: (bool value) =>
+                        unawaited(state.setShowFrameStats(value)),
+                  ),
+                  _LegacySettingRow(
+                    label: '动画帧预算',
+                    subtitle: '全部界面动画按 10 ms 设计；低帧目标不低于 90 fps',
+                    trailing: Text(
+                      '10 ms',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: apple.secondaryLabel,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const _LegacySectionLabel('账户'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySettingRow(
+                    label: state.isGuest ? '游客' : state.user.name,
+                    subtitle: state.isGuest
+                        ? '登录后同步歌单和每日推荐'
+                        : '${state.user.methodLabel} · ${state.user.detail}',
+                    trailing: state.isGuest
+                        ? FilledButton(
+                            onPressed: () => unawaited(
+                              showLegacyLoginDialog(context, state),
+                            ),
+                            child: const Text('登录'),
+                          )
+                        : TextButton(
+                            onPressed: state.signOut,
+                            child: const Text('退出登录'),
+                          ),
+                  ),
+                  _LegacySettingRow(
+                    label: '刷新曲库',
+                    subtitle: '重新拉取首页、歌单和每日推荐',
+                    trailing: OutlinedButton(
+                      onPressed: () =>
+                          unawaited(state.refreshHome(force: true)),
+                      child: const Text('刷新'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const _LegacySectionLabel('关于'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: const AppleListTile(
+                title: 'Lazer',
+                subtitle: 'Apple Music 风格界面 · 自适应桌面与移动端',
+                leading: AppleIconTile(icon: Icons.graphic_eq_rounded),
+                trailing: Text('2.0'),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -913,14 +1216,14 @@ class _LegacySectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 18, 2, 6),
+      padding: const EdgeInsets.fromLTRB(12, 22, 12, 7),
       child: Text(
         label,
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: apple.secondaryLabel,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
@@ -941,52 +1244,62 @@ class _LegacySettingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    // Narrow windows stack the control under its label instead of squeezing
-    // both into one line.
-    final bool stacked = MediaQuery.sizeOf(context).width < 560;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final bool stacked = MediaQuery.sizeOf(context).width < 360;
     final Widget heading = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: theme.textTheme.titleMedium),
-        const SizedBox(height: 2),
+      children: <Widget>[
         Text(
-          subtitle,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+          label,
+          style: theme.textTheme.bodyLarge?.copyWith(color: apple.label),
         ),
+        if (subtitle.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: apple.secondaryLabel,
+            ),
+          ),
+        ],
       ],
     );
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+          bottom: BorderSide(color: apple.separator, width: .5),
         ),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 2),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: stacked
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+              children: <Widget>[
                 heading,
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Align(alignment: Alignment.centerLeft, child: trailing),
               ],
             )
           : Row(
-              children: [
-                Expanded(child: heading),
-                const SizedBox(width: 16),
-                Flexible(child: trailing),
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Expanded(flex: 4, child: heading),
+                const SizedBox(width: 12),
+                Flexible(
+                  flex: 9,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: trailing,
+                  ),
+                ),
               ],
             ),
     );
   }
 }
 
-/// A settings row with a switch on the right.
 class _LegacySwitchRow extends StatelessWidget {
   const _LegacySwitchRow({
     super.key,
@@ -1011,8 +1324,6 @@ class _LegacySwitchRow extends StatelessWidget {
   }
 }
 
-/// A settings row whose control is a full-width slider under the label, with
-/// the value on the right and an optional reset action.
 class _LegacySliderRow extends StatelessWidget {
   const _LegacySliderRow({
     super.key,
@@ -1040,23 +1351,32 @@ class _LegacySliderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        border: Border(
+          bottom: BorderSide(color: apple.separator, width: .5),
+        ),
       ),
-      padding: const EdgeInsets.fromLTRB(2, 16, 2, 4),
+      padding: const EdgeInsets.fromLTRB(16, 13, 12, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           Row(
-            children: [
-              Expanded(child: Text(label, style: theme.textTheme.titleMedium)),
-              if (action != null) ...[action!, const SizedBox(width: 4)],
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: apple.label,
+                  ),
+                ),
+              ),
+              if (action != null) ...<Widget>[action!, const SizedBox(width: 4)],
               Text(
                 valueText,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: apple.secondaryLabel,
                   fontFeatures: const <FontFeature>[
                     FontFeature.tabularFigures(),
                   ],
@@ -1064,12 +1384,12 @@ class _LegacySliderRow extends StatelessWidget {
               ),
             ],
           ),
-          if (subtitle != null) ...[
+          if (subtitle != null) ...<Widget>[
             const SizedBox(height: 2),
             Text(
               subtitle!,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
+                color: apple.secondaryLabel,
               ),
             ),
           ],
@@ -1089,7 +1409,6 @@ class _LegacySliderRow extends StatelessWidget {
   }
 }
 
-/// A settings row of mutually exclusive chips and the current value.
 class _LegacyChoiceRow extends StatelessWidget {
   const _LegacyChoiceRow({
     required this.label,
@@ -1110,22 +1429,31 @@ class _LegacyChoiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        border: Border(
+          bottom: BorderSide(color: apple.separator, width: .5),
+        ),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 2),
+      padding: const EdgeInsets.fromLTRB(16, 13, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           Row(
-            children: [
-              Expanded(child: Text(label, style: theme.textTheme.titleMedium)),
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: apple.label,
+                  ),
+                ),
+              ),
               Text(
                 valueText,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: apple.secondaryLabel,
                 ),
               ),
             ],
@@ -1134,25 +1462,23 @@ class _LegacyChoiceRow extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: [
+            children: <Widget>[
               for (final int choice in choices)
                 ChoiceChip(
                   label: Text(
                     labelOf(choice),
                     style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.values[choice ~/ 100 - 1],
+                      color: selected == choice ? apple.accent : apple.label,
                     ),
                   ),
                   showCheckmark: false,
                   selected: selected == choice,
-                  selectedColor: scheme.secondaryContainer,
-                  backgroundColor: scheme.surfaceContainerHighest.withValues(
-                    alpha: 0.45,
-                  ),
-                  side: BorderSide(
-                    color: selected == choice
-                        ? scheme.primary
-                        : scheme.outlineVariant,
+                  selectedColor: apple.accentSoft,
+                  backgroundColor: apple.fill,
+                  side: BorderSide.none,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   onSelected: (_) => onSelected(choice),
                 ),
@@ -1164,7 +1490,8 @@ class _LegacyChoiceRow extends StatelessWidget {
   }
 }
 
-/// The legacy library grid: cards sized to the available width.
+/// Responsive playlist grid shared by Library and Search. It opts into more
+/// columns on desktop and two on phones, matching Music's density.
 class LegacyPlaylistGrid extends StatelessWidget {
   const LegacyPlaylistGrid({
     super.key,
@@ -1180,13 +1507,22 @@ class LegacyPlaylistGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final double width = constraints.maxWidth;
-        final int columns = (width / 196).floor().clamp(2, 8);
-        final double gap = 18;
-        final double cell = (width - gap * (columns - 1)) / columns;
+        final int columns = switch (width) {
+          >= 1100 => 6,
+          >= 860 => 5,
+          >= 660 => 4,
+          >= 430 => 3,
+          _ => 2,
+        };
+        const double gap = 18;
+        final double cell = ((width - gap * (columns - 1)) / columns).clamp(
+          112.0,
+          180.0,
+        );
         return Wrap(
           spacing: gap,
           runSpacing: 24,
-          children: [
+          children: <Widget>[
             for (final Playlist playlist in playlists)
               LegacyPlaylistCard(
                 playlist: playlist,

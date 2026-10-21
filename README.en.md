@@ -14,14 +14,15 @@ playlists come from the service.
 - Artist profiles with popular tracks and paged albums, plus album descriptions and full track lists; open them from artist or album names.
 - Synchronized lyrics, translations, word timing, multi-line copying and lyric image export.
 - Adjustable lyric font size and weight, with a live preview and saved preferences.
-- Now-playing page: on desktop, an immersive Apple Music-inspired layout — the shell's animated album flow (AlbumBlurFlow) fills the window, the large cover and centred track facts sit on the left, the lyric sheet floats on the right without a card, and the transport is a white-control strip with a thin progress rail; queue and comments dock in a right-hand glass panel, with Space / arrows / M / L / Q / C / F shortcuts. Landscape mobile keeps the information column beside the lyrics, portrait keeps the cover/lyrics swap.
+- The now-playing page is rebuilt from scratch: desktop gets an immersive Apple Music split layout, mobile gets a cover/borderless lyric canvas over a real blurred-cover and album-colour backdrop. It includes cover/lyrics switching, glass transport, queue/comments panels and Space / arrows / M / L / Q / C / F shortcuts, introduced by a same-route overlay slide that pauses shell/player ambient tickers, removes full-screen scale/clip work, gates the blurred artwork until settled, and stabilises the Windows accessibility semantics root to prevent AXTree root-update errors.
+- The complete lyric stack is new and follows AMLL: a 35% focus band, Apple-style left-aligned lyric column, per-grapheme emphasized/ordinary spring motion, glow and progressive masks, distance blur and spring-driven follow scrolling. LRC/YRC parsing, glyph hit testing, multi-line selection, copy and PNG export live under `lib/lyrics/`.
 - Popular and latest comments with pagination, likes and unlikes; guests can read and sign in to react.
 - System media controls on Android, iOS, Windows, macOS and Linux.
 - Simplified Chinese, Traditional Chinese, Japanese and English interfaces.
 - Adjustable scroll acceleration and momentum, lyric blur, and frame-accurate lyric line changes with a smooth return to following.
 - Haptics on controls and seek detents, with adjustable intensity on iOS.
 - Layout override (automatic / desktop / mobile), DPI scaling (80–175%) and a car head-unit profile that starts at 135% with roomier controls.
-- A single Legacy UI: complete Material 3 colour roles, type scale and component themes, a left rail and transport bar, with a background that flows in the current cover's colours.
+- Every page now follows Apple's design language: semantic system colours and type, translucent navigation and grouped lists, the Apple Music red accent and cover-derived tints; desktop gets a source-list sidebar plus full transport, while mobile gets a tab bar plus mini-player from the same adaptive page tree.
 - Performance: every interface animation is designed against an 8.3 ms (120 fps) frame budget; the flowing backdrop and word-level lyric animation run at the display refresh rate, artwork is fetched at the size it is painted instead of decoding a 1024² image for every thumbnail, and Settings can show a live FPS/frame-time overlay.
 - A mobile Favorites shortcut, with automatic caching of audio, artwork, lyrics and playlists.
 
@@ -70,6 +71,7 @@ See [build details](docs/builds.md) and [system media integration](docs/system-m
 ## References
 
 The protocol implementation references [API Enhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced).
+The now-playing composition references [AMLL Player](https://github.com/amll-dev/amll-player).
 Lyric animation references [Apple Music Like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics).
 The application uses **MiSans** by Xiaomi.
 

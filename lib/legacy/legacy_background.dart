@@ -12,6 +12,8 @@ import '../utils/artwork.dart';
 import '../widgets/artwork_image.dart';
 import 'legacy_theme.dart';
 
+export '../player/player_backdrop.dart' show AlbumBlurFlow;
+
 /// Ported from the Lazer project:
 /// `shared/src/commonMain/.../AlbumFlowBackground.kt` (the flowing palette) and
 /// `.../LazerBackgrounds.kt` (the artwork-seed extractor).
@@ -61,7 +63,6 @@ class _FlowLayer {
     required this.scaleX,
     required this.scaleY,
     required this.rotationRange,
-    this.colorAlpha = 0.68,
   });
 
   final int paletteIndex;
@@ -72,7 +73,6 @@ class _FlowLayer {
   final double scaleX;
   final double scaleY;
   final double rotationRange;
-  final double colorAlpha;
 }
 
 const List<_FlowLayer> _flowLayers = <_FlowLayer>[
@@ -97,16 +97,6 @@ const List<_FlowLayer> _flowLayers = <_FlowLayer>[
     rotationRange: -10,
   ),
   _FlowLayer(
-    paletteIndex: 2,
-    phaseOffset: 4.0,
-    speed: 0.17,
-    orbitX: 0.37,
-    orbitY: 0.20,
-    scaleX: 1.52,
-    scaleY: 1.26,
-    rotationRange: 7,
-  ),
-  _FlowLayer(
     paletteIndex: 3,
     phaseOffset: 5.35,
     speed: 0.12,
@@ -116,22 +106,11 @@ const List<_FlowLayer> _flowLayers = <_FlowLayer>[
     scaleY: 1.62,
     rotationRange: -6,
   ),
-  _FlowLayer(
-    paletteIndex: 4,
-    phaseOffset: 1.25,
-    speed: 0.105,
-    orbitX: 0.16,
-    orbitY: 0.18,
-    scaleX: 1.85,
-    scaleY: 1.12,
-    rotationRange: 5,
-    colorAlpha: 0.52,
-  ),
 ];
 
 /// The animated album-colour renderer.
 ///
-/// The whole canvas is one [CustomPaint]: the five drifting gradients are
+/// The whole canvas is one [CustomPaint]: three drifting gradients are
 /// drawn with transformed radial shaders in a single paint pass. The previous
 /// widget version wrapped every layer in three Transform widgets plus a
 /// DecoratedBox, and stepped the phase at 30 fps; that both capped the motion
@@ -229,7 +208,10 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
 
   void _syncPlayback() {
     if (_runs) {
-      _ticker ??= createTicker(_onTick)..start();
+      if (_ticker == null) {
+        _last = Duration.zero;
+        _ticker = createTicker(_onTick)..start();
+      }
     } else {
       _ticker?.dispose();
       _ticker = null;
@@ -279,7 +261,7 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
   }
 }
 
-/// Paints the base, five transformed radial gradients and the veil in one
+/// Paints the base, three transformed radial gradients and the veil in one
 /// pass. No per-layer widgets, no save layers.
 class _FlowPainter extends CustomPainter {
   _FlowPainter({
@@ -294,6 +276,9 @@ class _FlowPainter extends CustomPainter {
   final double Function() phase;
   final Color veil;
   final bool solid;
+  List<Color>? _shaderColors;
+  double? _shaderRadius;
+  List<Paint>? _layerPaints;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -304,24 +289,35 @@ class _FlowPainter extends CustomPainter {
     if (!solid) {
       final double timeBase = phase();
       final double shortest = size.shortestSide;
-      for (final _FlowLayer layer in _flowLayers) {
-        final Color color = colors[layer.paletteIndex];
+      final List<Color>? oldColors = _shaderColors;
+      if (_shaderRadius != shortest * .5 ||
+          oldColors == null ||
+          !_samePalette(oldColors, colors)) {
+        _shaderColors = List<Color>.of(colors);
+        _shaderRadius = shortest * .5;
+        _layerPaints = <Paint>[
+          for (final _FlowLayer layer in _flowLayers)
+            Paint()
+              ..shader = ui.Gradient.radial(
+                Offset.zero,
+                shortest * .5,
+                <Color>[
+                  colors[layer.paletteIndex].withValues(alpha: 0.68),
+                  colors[layer.paletteIndex].withValues(alpha: 0.68 * .56),
+                  colors[layer.paletteIndex].withValues(alpha: 0.68 * .16),
+                  colors[layer.paletteIndex].withValues(alpha: 0),
+                ],
+                const <double>[0, 1 / 3, 2 / 3, 1],
+              ),
+        ];
+      }
+      final List<Paint> paints = _layerPaints!;
+      for (var layerIndex = 0; layerIndex < _flowLayers.length; layerIndex++) {
+        final _FlowLayer layer = _flowLayers[layerIndex];
         final double time = timeBase * layer.speed + layer.phaseOffset;
         final double secondary =
             timeBase * layer.speed * 0.73 + layer.phaseOffset * 1.37;
         final double pulse = math.sin(time * 0.61) * 0.075;
-        final double alpha = layer.colorAlpha;
-        final ui.Shader shader = ui.Gradient.radial(
-          Offset.zero,
-          shortest * 0.5,
-          <Color>[
-            color.withValues(alpha: alpha),
-            color.withValues(alpha: alpha * 0.56),
-            color.withValues(alpha: alpha * 0.16),
-            color.withValues(alpha: 0),
-          ],
-          const <double>[0, 1 / 3, 2 / 3, 1],
-        );
         canvas.save();
         canvas.translate(
           size.width * 0.5 + math.sin(time) * size.width * layer.orbitX,
@@ -330,14 +326,18 @@ class _FlowPainter extends CustomPainter {
         canvas.rotate(
           math.sin(time * 0.43) * layer.rotationRange * math.pi / 180,
         );
-        canvas.scale(layer.scaleX + pulse, layer.scaleY - pulse * 0.72);
-        canvas.drawRect(
+        final double scaleX = layer.scaleX + pulse;
+        final double scaleY = layer.scaleY - pulse * 0.72;
+        canvas.scale(scaleX, scaleY);
+        // The shader reaches zero alpha at this radius; limiting rasterization
+        // to its transformed ellipse avoids shading the full window rectangle.
+        canvas.drawOval(
           Rect.fromCenter(
             center: Offset.zero,
-            width: size.width,
-            height: size.height,
+            width: size.width / scaleX,
+            height: size.height / scaleY,
           ),
-          Paint()..shader = shader,
+          paints[layerIndex],
         );
         canvas.restore();
       }
@@ -601,76 +601,6 @@ class _LegacyAlbumBackdropState extends State<LegacyAlbumBackdrop> {
         if (widget.veil == null)
           ColoredBox(color: scheme.surface.withValues(alpha: veil)),
       ],
-    );
-  }
-}
-
-/// The shell's album-colour flow, re-scrimmed for the immersive Apple Music
-/// player.
-///
-/// This deliberately reuses the exact [LegacyAlbumBackdrop] /
-/// [AlbumFlowBackground] path the main shell paints: one CustomPaint, five
-/// drifting gradients at the display refresh rate and a palette crossfade on
-/// track change. The only additions are the darker vertical gradient and the
-/// vignette that keep white controls and lyrics legible over a bright cover.
-class AlbumBlurFlow extends StatelessWidget {
-  const AlbumBlurFlow({
-    super.key,
-    required this.track,
-    required this.mode,
-    required this.pageColor,
-  });
-
-  final Track? track;
-  final LegacyBackgroundMode mode;
-  final Color pageColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return ExcludeSemantics(
-      child: RepaintBoundary(
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            LegacyAlbumBackdrop(
-              track: track,
-              mode: mode,
-              uiAlpha: 1,
-              pageColor: pageColor,
-              veil: const Color(0x00000000),
-            ),
-            const IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: <Color>[
-                      Color(0x99000000),
-                      Color(0x33000000),
-                      Color(0x59000000),
-                      Color(0xE6000000),
-                    ],
-                    stops: <double>[0, .28, .62, 1],
-                  ),
-                ),
-              ),
-            ),
-            const IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(-0.35, -0.25),
-                    radius: 1.1,
-                    colors: <Color>[Color(0x00000000), Color(0x80000000)],
-                    stops: <double>[0.45, 1],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

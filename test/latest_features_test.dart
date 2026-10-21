@@ -451,6 +451,39 @@ void main() {
     },
   );
   testWidgets(
+    'the lyric live region keeps one semantics node while lines advance',
+    (tester) async {
+      final handle = tester.ensureSemantics();
+      final engine = _Engine();
+      final state = AppState(catalog: _WordCatalog(), audioEngine: engine);
+      addTearDown(state.dispose);
+      state.playQueue([_track]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: LyricViewport(state: state)),
+        ),
+      );
+      await tester.pump();
+      final semantics = find.byKey(const ValueKey('lyric-live-region'));
+      final before = tester.getSemantics(semantics);
+      expect(before.label, '最初の行');
+      expect(find.bySemanticsLabel('最初の行'), findsOneWidget);
+      final firstId = before.id;
+
+      engine.position = const Duration(milliseconds: 1200);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 400));
+      final after = tester.getSemantics(semantics);
+      expect(after.id, firstId);
+      expect(after.label, '次の行');
+      expect(tester.takeException(), isNull);
+      state.pause();
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      handle.dispose();
+    },
+  );
+  testWidgets(
     'word painting preserves wrapping, graphemes, semantics and deterministic seeking',
     (tester) async {
       final repaint = ValueNotifier(0);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
+import '../theme/apple_design.dart';
 import '../theme/tokens.dart';
 import 'accessible_controls.dart';
 import 'interaction_feedback.dart';
@@ -59,7 +60,7 @@ class _PlaybackQueueViewState extends State<PlaybackQueueView> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return AnimatedBuilder(
       animation: widget.state,
       builder: (BuildContext context, _) {
@@ -76,7 +77,7 @@ class _PlaybackQueueViewState extends State<PlaybackQueueView> {
                       Icon(
                         Icons.queue_music_rounded,
                         size: 20,
-                        color: scheme.onSurfaceVariant,
+                        color: apple.secondaryLabel,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -85,7 +86,7 @@ class _PlaybackQueueViewState extends State<PlaybackQueueView> {
                       Text(
                         '${state.queue.length} 首',
                         style: theme.textTheme.labelMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                          color: apple.secondaryLabel,
                         ),
                       ),
                       if (widget.onClose != null) ...<Widget>[
@@ -152,7 +153,7 @@ class _QueueRowState extends State<_QueueRow> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final bool current = widget.isCurrent;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -162,11 +163,11 @@ class _QueueRowState extends State<_QueueRow> {
         padding: const EdgeInsets.symmetric(vertical: 1),
         child: Material(
           color: current
-              ? scheme.secondaryContainer.withValues(alpha: 0.64)
+              ? apple.accentSoft
               : _hovering
-              ? scheme.onSurface.withValues(alpha: 0.05)
+              ? apple.fill
               : Colors.transparent,
-          borderRadius: AppShape.mdRadius,
+          borderRadius: BorderRadius.circular(8),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: feedbackAction(context, widget.onTap),
@@ -182,8 +183,8 @@ class _QueueRowState extends State<_QueueRow> {
                             '${widget.index + 1}'.padLeft(2, '0'),
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: current
-                                  ? scheme.primary
-                                  : scheme.onSurfaceVariant,
+                                  ? apple.accent
+                                  : apple.secondaryLabel,
                               fontFeatures: const <FontFeature>[
                                 FontFeature.tabularFigures(),
                               ],
@@ -213,9 +214,7 @@ class _QueueRowState extends State<_QueueRow> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: current
-                                ? scheme.onSecondaryContainer
-                                : scheme.onSurface,
+                            color: current ? apple.accent : apple.label,
                             fontWeight: current
                                 ? FontWeight.w600
                                 : FontWeight.w400,
@@ -227,7 +226,7 @@ class _QueueRowState extends State<_QueueRow> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+                            color: apple.secondaryLabel,
                           ),
                         ),
                       ],
@@ -237,7 +236,7 @@ class _QueueRowState extends State<_QueueRow> {
                   Text(
                     fmt(widget.track.duration),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                      color: apple.secondaryLabel,
                       fontFeatures: const <FontFeature>[
                         FontFeature.tabularFigures(),
                       ],
@@ -305,7 +304,7 @@ class _PlayingBarsState extends State<_PlayingBars> {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final List<double> heights = _pattern[_step];
     return ExcludeSemantics(
       child: RepaintBoundary(
@@ -321,7 +320,7 @@ class _PlayingBarsState extends State<_PlayingBars> {
                 height: heights[i],
                 margin: const EdgeInsets.only(right: 2.5),
                 decoration: BoxDecoration(
-                  color: scheme.primary,
+                  color: apple.accent,
                   borderRadius: const BorderRadius.all(Radius.circular(2)),
                 ),
               ),

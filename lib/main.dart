@@ -14,7 +14,7 @@ import 'audio/system_media_handler.dart';
 import 'audio/playback_session.dart';
 import 'diagnostics/frame_stats.dart';
 import 'legacy/legacy_shell.dart';
-import 'legacy/legacy_theme.dart';
+import 'theme/apple_design.dart';
 import 'state/app_state.dart';
 import 'state/ui_preferences.dart';
 import 'widgets/window_frame.dart';
@@ -149,10 +149,14 @@ class _LazerAppState extends State<LazerApp> {
       child: MaterialApp(
         title: 'Lazer · Field Player',
         debugShowCheckedModeBanner: false,
-        // The app is the Material 3 shell ported from the Lazer project, so
-        // it brings its own palette and type ramp.
-        theme: buildLegacyTheme(seed: seed),
-        darkTheme: buildLegacyTheme(brightness: Brightness.dark, seed: seed),
+        // One Apple surface theme drives the custom window frame, root
+        // dialogs and the adaptive shell. Pages refine their local player
+        // theme where Apple Music intentionally switches to a dark canvas.
+        theme: buildAppleTheme(brightness: Brightness.light, seedAccent: seed),
+        darkTheme: buildAppleTheme(
+          brightness: Brightness.dark,
+          seedAccent: seed,
+        ),
         themeMode: _state.themeMode,
         locale: _state.language.locale,
         supportedLocales: AppLocalizations.supportedLocales,
