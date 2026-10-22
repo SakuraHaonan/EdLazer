@@ -67,7 +67,7 @@ void main() {
 
       final activeBefore = opacity('lyric-bright-0');
       final inactiveBefore = opacity('lyric-bright-2');
-      final translationBefore = opacity('lyric-translation-1');
+      final translationBefore = opacity('lyric-translation-bright-1');
 
       await tester.longPress(find.text('歌词 1'));
       await tester.pumpAndSettle();
@@ -79,7 +79,7 @@ void main() {
       );
       expect(opacity('lyric-bright-1'), closeTo(1, .001));
       expect(
-        opacity('lyric-translation-1'),
+        opacity('lyric-translation-bright-1'),
         closeTo(1, .001),
         reason: 'selected lyrics reach full alpha',
       );
@@ -93,13 +93,16 @@ void main() {
         closeTo(inactiveBefore, .001),
         reason: 'unselected lyrics keep their original alpha',
       );
-      expect(opacity('lyric-translation-2'), closeTo(translationBefore, .001));
+      expect(
+        opacity('lyric-translation-bright-2'),
+        closeTo(translationBefore, .001),
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 
-  testWidgets('tapping the cover does nothing; long-press offers to save it', (
+  testWidgets('tapping the cover opens the lyric sheet; long-press offers to save it', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -125,17 +128,19 @@ void main() {
     );
     final covers = find.byType(LegacyCover);
     expect(covers, findsOneWidget);
-    final size = tester.getSize(cover);
 
+    // A tap folds the cover away for the full-height lyric sheet, and does not
+    // open a large artwork or a save prompt.
     await tester.tap(cover);
     await tester.pumpAndSettle();
-    expect(
-      find.byType(AlertDialog),
-      findsNothing,
-      reason: 'a tap must not open a large artwork or save prompt',
-    );
-    expect(covers, findsOneWidget, reason: 'no large artwork overlay');
-    expect(tester.getSize(cover), size);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(covers, findsNothing, reason: 'the lyric sheet replaced the cover');
+    expect(find.byType(LyricViewport), findsOneWidget);
+
+    // Tapping the sheet again returns to the cover.
+    await tester.tapAt(const Offset(195, 60));
+    await tester.pumpAndSettle();
+    expect(covers, findsOneWidget);
 
     await tester.longPress(cover);
     await tester.pumpAndSettle();

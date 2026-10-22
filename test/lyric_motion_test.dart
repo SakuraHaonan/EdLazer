@@ -293,13 +293,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final cover = find.byKey(const ValueKey('legacy-now-playing-cover'));
+      final lyricsButton = find.byTooltip('歌词');
       for (var i = 0; i < 6; i++) {
-        await tester.tap(cover);
+        await tester.tap(lyricsButton);
         await tester.pump(const Duration(milliseconds: 80));
       }
       await tester.pumpAndSettle();
-      await tester.tap(cover);
+      await tester.tap(lyricsButton);
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(milliseconds: 500));

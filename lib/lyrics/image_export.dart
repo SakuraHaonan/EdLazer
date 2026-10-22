@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -6,75 +6,72 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../data/lyrics.dart';
 import '../data/models.dart';
-import '../legacy/legacy_background.dart';
+import '../l10n/app_localizations.dart';
+import '../theme/app_palette.dart';
 import '../utils/artwork.dart';
 import '../utils/cover_save.dart';
+import '../widgets/accessible_controls.dart';
 import '../widgets/artwork_image.dart';
-import 'lyric_document.dart';
+import '../widgets/interaction_feedback.dart';
 import '../widgets/plate_art.dart';
 
-/// Opens the lyric-image composer with an iOS-style scale/fade presentation.
 Future<void> showLyricImageDialog(
   BuildContext context, {
   required Track track,
   required List<LyricLine> lines,
 }) {
-  final CapturedThemes themes = InheritedTheme.capture(
+  final themes = InheritedTheme.capture(
     from: context,
     to: Navigator.of(context, rootNavigator: true).context,
   );
-  final bool dark = Theme.of(context).brightness == Brightness.dark;
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: '关闭',
-    barrierColor: Colors.black.withValues(alpha: dark ? .64 : .34),
+    barrierLabel: context.tr('关闭'),
+    barrierColor: Colors.black.withValues(alpha: context.colors.dark ? .6 : .3),
     transitionDuration: MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 280),
+        : const Duration(milliseconds: 300),
     pageBuilder: (_, _, _) => themes.wrap(
       SafeArea(
-        child: LyricImageDialog(
-          track: track,
-          lines: List<LyricLine>.unmodifiable(lines),
-        ),
+        child: LyricImageDialog(track: track, lines: List.unmodifiable(lines)),
       ),
     ),
-    transitionBuilder: (_, Animation<double> animation, _, Widget child) {
-      final Animation<double> eased = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
+    transitionBuilder: (_, animation, _, child) {
+      final eased = animation.drive(CurveTween(curve: Curves.easeOutCubic));
       return FadeTransition(
         opacity: eased,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: .96, end: 1).animate(eased),
-          child: child,
+        child: SlideTransition(
+          position: Tween(
+            begin: const Offset(0, .035),
+            end: Offset.zero,
+          ).animate(eased),
+          child: ScaleTransition(
+            scale: Tween(begin: .96, end: 1.0).animate(eased),
+            child: child,
+          ),
         ),
       );
     },
   );
 }
 
-/// Captures the exact preview tree, including content beyond the visible
-/// scroll viewport. The pixel ratio is capped so very long selections stay
-/// inside the engine's texture and memory limits.
+/// The preview itself is captured, so exported text wrapping matches exactly.
 Future<Uint8List> captureLyricImage(RenderRepaintBoundary boundary) async {
-  final Size size = boundary.size;
-  final double ratio = math.min(
-    3,
+  final size = boundary.size;
+  // Keep long selections within texture and memory limits without truncating.
+  final ratio = math.min(
+    3.0,
     math.min(
-      16000 / math.max(1, math.max(size.width, size.height)),
-      math.sqrt(16000000 / math.max(1, size.width * size.height)),
+      16000 / math.max(size.width, size.height),
+      math.sqrt(16000000 / (size.width * size.height)),
     ),
   );
-  final ui.Image image = await boundary.toImage(pixelRatio: ratio);
+  final image = await boundary.toImage(pixelRatio: ratio);
   try {
-    final ByteData? data = await image.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
     if (data == null) throw StateError('PNG encoding failed');
     return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
   } finally {
@@ -83,12 +80,7 @@ Future<Uint8List> captureLyricImage(RenderRepaintBoundary boundary) async {
 }
 
 class LyricImageDialog extends StatefulWidget {
-  const LyricImageDialog({
-    super.key,
-    required this.track,
-    required this.lines,
-  });
-
+  const LyricImageDialog({super.key, required this.track, required this.lines});
   final Track track;
   final List<LyricLine> lines;
 
@@ -97,35 +89,37 @@ class LyricImageDialog extends StatefulWidget {
 }
 
 class _LyricImageDialogState extends State<LyricImageDialog> {
-  final GlobalKey _capture = GlobalKey();
-  final ScrollController _previewScroll = ScrollController();
+  final _imageKey = GlobalKey();
+  final _previewScroll = ScrollController();
   ImageProvider? _artwork;
-  Color? _coverSeed;
-  bool _started = false;
   bool _loading = true;
   bool _saving = false;
   bool _saved = false;
+  bool _started = false;
   String? _error;
+
+  Duration get _motion => MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : const Duration(milliseconds: 240);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_started) return;
-    _started = true;
-    unawaited(_loadArtwork());
+    if (!_started) {
+      _started = true;
+      unawaited(_loadArtwork());
+    }
   }
 
   Future<void> _loadArtwork() async {
-    final String? url = enlargedArtworkUrl(widget.track.coverUrl);
+    final url = enlargedArtworkUrl(widget.track.coverUrl);
     if (url != null && url.isNotEmpty) {
-      final ImageProvider provider = ArtworkImage(url);
-      try {
-        await precacheImage(provider, context);
-        _artwork = provider;
-        _coverSeed = await albumSeedForCover(widget.track.coverUrl);
-      } catch (_) {
-        _artwork = null;
-      }
+      _artwork = ArtworkImage(url);
+      await precacheImage(
+        _artwork!,
+        context,
+        onError: (_, _) => _artwork = null,
+      );
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -140,447 +134,496 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
     try {
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
-      final RenderRepaintBoundary? boundary =
-          _capture.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
-      if (boundary == null) throw StateError('Preview is not ready');
-      final Uint8List png = await captureLyricImage(boundary);
+      final boundary =
+          _imageKey.currentContext!.findRenderObject()!
+              as RenderRepaintBoundary;
+      final bytes = await captureLyricImage(boundary);
       if (!mounted) return;
-      final bool saved = await saveCoverBytes(
-        png,
+      final saved = await saveCoverBytes(
+        bytes,
         '${widget.track.title} - lyrics',
       );
-      if (!mounted) return;
-      setState(() {
-        _saved = saved;
-        if (!saved) _error = null;
-      });
+      if (mounted && saved) setState(() => _saved = true);
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _saved = false;
-          _error = '保存失败，请检查相册权限或稍后重试。';
-        });
-      }
+      if (mounted) setState(() => _error = '保存失败，请检查相册权限或稍后重试。');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  @override
-  void dispose() {
-    _previewScroll.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
-    final double height = math.min(
-      780,
-      math.max(
-        0,
-        MediaQuery.sizeOf(context).height -
-            MediaQuery.paddingOf(context).vertical -
-            24,
+  Widget _preview() => AnimatedSwitcher(
+    duration: _motion,
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    transitionBuilder: (child, animation) => FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween(
+          begin: const Offset(0, .025),
+          end: Offset.zero,
+        ).animate(animation),
+        child: child,
       ),
-    );
-    return PopScope(
-      canPop: !_saving,
-      child: Dialog(
-        insetPadding: const EdgeInsets.all(12),
-        backgroundColor: scheme.surfaceContainerHigh,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: SizedBox(
-          width: 520,
-          height: height,
+    ),
+    layoutBuilder: (current, previous) => Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final old in previous)
+          ExcludeSemantics(child: IgnorePointer(child: old)),
+        ?current,
+      ],
+    ),
+    child: _loading
+        ? Center(
+            key: const ValueKey('lyric-image-loading'),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.image_outlined,
+                    size: 40,
+                    color: context.colors.cloudMedium,
+                  ),
+                  const SizedBox(height: 20),
+                  const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(height: 12),
+                  TrText('正在加载封面…', style: context.type.captionMuted),
+                ],
+              ),
+            ),
+          )
+        : Scrollbar(
+            key: const ValueKey('lyric-image-preview'),
+            controller: _previewScroll,
+            thumbVisibility: true,
+            thickness: 3,
+            radius: Radius.zero,
+            child: SingleChildScrollView(
+              controller: _previewScroll,
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topCenter,
+                  child: RepaintBoundary(
+                    key: _imageKey,
+                    child: LyricImageCard(
+                      track: widget.track,
+                      lines: widget.lines,
+                      artwork: _artwork,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+  );
+
+  Widget _status() => AnimatedSwitcher(
+    duration: _motion,
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    transitionBuilder: (child, animation) => SizeTransition(
+      sizeFactor: animation,
+      alignment: Alignment.topCenter,
+      child: FadeTransition(opacity: animation, child: child),
+    ),
+    child: _error == null && !_saved
+        ? const SizedBox.shrink(key: ValueKey('lyric-image-status-empty'))
+        : Padding(
+            key: ValueKey(_error ?? 'saved'),
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Semantics(
+              liveRegion: true,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _error == null
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.error_outline_rounded,
+                    size: 18,
+                    color: context.colors.clayDeep,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TrText(
+                      _error ?? '歌词图片已保存',
+                      style: context.type.caption.copyWith(
+                        color: context.colors.clayDeep,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+  );
+
+  Widget _header() => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
+    child: Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          color: context.colors.clay.withValues(alpha: .12),
+          child: Icon(
+            Icons.image_outlined,
+            size: 22,
+            color: context.colors.clayDeep,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
           child: Column(
-            children: <Widget>[
-              _header(theme, scheme),
-              Divider(height: .5, color: scheme.outlineVariant),
-              Expanded(child: _previewArea(theme, scheme)),
-              Divider(height: .5, color: scheme.outlineVariant),
-              _footer(theme, scheme),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TrText(
+                '生成歌词图片',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.subheading.copyWith(
+                  fontSize: 20,
+                  height: 1.25,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.track.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.captionMuted,
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
+        AccessibleIconButton(
+          tooltip: '关闭',
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          style: IconButton.styleFrom(
+            shape: const RoundedRectangleBorder(),
+            foregroundColor: context.colors.cloudDark,
+          ),
+          icon: const Icon(Icons.close_rounded, size: 20),
+        ),
+      ],
+    ),
+  );
 
-  Widget _header(ThemeData theme, ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 14, 6, 14),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              Icons.image_outlined,
-              size: 19,
-              color: scheme.onPrimaryContainer,
-            ),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  '生成歌词图片',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  widget.track.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: '关闭',
-            onPressed: _saving ? null : () => Navigator.pop(context),
-            iconSize: 19,
-            icon: const Icon(Icons.close_rounded),
-          ),
-        ],
+  Widget _footer() {
+    final back = TextButton(
+      onPressed: _saving
+          ? null
+          : feedbackAction(context, () => Navigator.pop(context)),
+      style: TextButton.styleFrom(
+        shape: const RoundedRectangleBorder(),
+        foregroundColor: context.colors.cloudDark,
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        enableFeedback: false,
       ),
+      child: const TrText('返回选择', maxLines: 1, overflow: TextOverflow.ellipsis),
     );
-  }
-
-  Widget _previewArea(ThemeData theme, ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  '图片预览',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Text(
-                '已选择 ${widget.lines.length} 行',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLow,
-                  border: Border.all(color: scheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: _loading
-                    ? Center(
-                        key: const ValueKey<String>('lyric-image-loading'),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            const SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              '正在加载封面…',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Scrollbar(
-                        controller: _previewScroll,
-                        thumbVisibility: true,
-                        child: SingleChildScrollView(
-                          key: const ValueKey<String>('lyric-image-preview'),
-                          controller: _previewScroll,
-                          padding: const EdgeInsets.all(12),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.topCenter,
-                            child: RepaintBoundary(
-                              key: _capture,
-                              child: LyricImageCard(
-                                track: widget.track,
-                                lines: widget.lines,
-                                artwork: _artwork,
-                                flowSeed: _coverSeed,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _footer(ThemeData theme, ColorScheme scheme) {
-    final Widget save = FilledButton(
+    final save = _SaveImageButton(
+      saving: _saving,
+      saved: _saved,
       onPressed: _loading || _saving ? null : () => unawaited(_save()),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 46),
-        shape: const StadiumBorder(),
-      ),
-      child: Text(
-        _saving ? '正在保存…' : (_saved ? '再次保存' : '保存图片'),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-    final Widget back = TextButton(
-      onPressed: _saving ? null : () => Navigator.pop(context),
-      child: const Text('返回选择', maxLines: 1, overflow: TextOverflow.ellipsis),
     );
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          if (_error != null || _saved) ...<Widget>[
+        children: [
+          _status(),
+          if (MediaQuery.textScalerOf(context).scale(14) > 20)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [save, const SizedBox(height: 8), back],
+            )
+          else
             Row(
-              children: <Widget>[
-                Icon(
-                  _error == null
-                      ? Icons.check_circle_outline_rounded
-                      : Icons.error_outline_rounded,
-                  size: 17,
-                  color: _error == null ? scheme.primary : scheme.error,
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    _error ?? '歌词图片已保存',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: _error == null ? scheme.primary : scheme.error,
-                    ),
-                  ),
-                ),
+              children: [
+                back,
+                const SizedBox(width: 12),
+                Expanded(child: save),
               ],
             ),
-            const SizedBox(height: 10),
-          ],
-          LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final bool stack = constraints.maxWidth < 360 ||
-                  MediaQuery.textScalerOf(context).scale(14) > 20;
-              if (stack) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[save, const SizedBox(height: 4), back],
-                );
-              }
-              return Row(
-                children: <Widget>[
-                  back,
-                  const SizedBox(width: 12),
-                  Expanded(child: save),
-                ],
-              );
-            },
-          ),
         ],
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_saving,
+    child: Dialog(
+      backgroundColor: context.colors.ivoryLight,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: context.borders.hairline,
+      ),
+      clipBehavior: Clip.antiAlias,
+      insetPadding: const EdgeInsets.all(12),
+      child: SizedBox(
+        width: 520,
+        height: math.min(
+          780,
+          math.max(
+            0,
+            MediaQuery.sizeOf(context).height -
+                MediaQuery.paddingOf(context).vertical -
+                24,
+          ),
+        ),
+        child: Column(
+          children: [
+            _header(),
+            Divider(height: 1, color: context.colors.stone),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          TrText('图片预览', style: context.type.captionStrong),
+                          TrText(
+                            '已选择 ${widget.lines.length} 行',
+                            style: context.type.captionMuted,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: context.colors.ivoryMedium,
+                          border: Border.fromBorderSide(
+                            context.borders.hairline,
+                          ),
+                        ),
+                        child: ClipRect(
+                          child: ShaderMask(
+                            blendMode: BlendMode.dstIn,
+                            shaderCallback: (bounds) {
+                              final fade = math.min(
+                                .12,
+                                12 / math.max(1, bounds.height),
+                              );
+                              return LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: const [
+                                  Colors.transparent,
+                                  Colors.black,
+                                  Colors.black,
+                                  Colors.transparent,
+                                ],
+                                stops: [0, fade, 1 - fade, 1],
+                              ).createShader(bounds);
+                            },
+                            child: _preview(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Divider(height: 1, color: context.colors.stone),
+            _footer(),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  @override
+  void dispose() {
+    _previewScroll.dispose();
+    super.dispose();
+  }
 }
 
-/// The export card. Its width is fixed so exported line wrapping is stable
-/// across phone, tablet and desktop previews.
+class _SaveImageButton extends StatefulWidget {
+  const _SaveImageButton({
+    required this.saving,
+    required this.saved,
+    required this.onPressed,
+  });
+  final bool saving, saved;
+  final VoidCallback? onPressed;
+  @override
+  State<_SaveImageButton> createState() => _SaveImageButtonState();
+}
+
+class _SaveImageButtonState extends State<_SaveImageButton> {
+  bool _pressed = false;
+
+  void _press(bool value) {
+    if (mounted && _pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: widget.onPressed == null ? null : (_) => _press(true),
+    onPointerUp: (_) => _press(false),
+    onPointerCancel: (_) => _press(false),
+    child: AnimatedScale(
+      scale: _pressed ? .97 : 1,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+      child: FilledButton(
+        onPressed: feedbackAction(context, widget.onPressed),
+        style: FilledButton.styleFrom(
+          shape: const RoundedRectangleBorder(),
+          backgroundColor: widget.saved
+              ? context.colors.slateDark
+              : context.colors.clay,
+          foregroundColor: widget.saved ? context.colors.onInk : Colors.white,
+          disabledBackgroundColor: context.colors.oatWarm,
+          disabledForegroundColor: context.colors.cloudDark,
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          enableFeedback: false,
+        ),
+        child: AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: Row(
+            key: ValueKey((widget.saving, widget.saved)),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              widget.saving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      widget.saved
+                          ? Icons.check_rounded
+                          : Icons.save_alt_rounded,
+                      size: 18,
+                    ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: TrText(
+                  widget.saving
+                      ? '正在保存…'
+                      : widget.saved
+                      ? '再次保存'
+                      : '保存图片',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// A fixed-width, app-painted lyric sheet in the current application palette.
 class LyricImageCard extends StatelessWidget {
   const LyricImageCard({
     super.key,
     required this.track,
     required this.lines,
     this.artwork,
-    this.flowSeed,
   });
-
   final Track track;
   final List<LyricLine> lines;
   final ImageProvider? artwork;
-  final Color? flowSeed;
 
   @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
-    // The backdrop is sampled from the current cover. The hash tint is only
-    // the stand-in used before that sample arrives, or when there is no art.
-    final Color seed =
-        flowSeed ??
-        HSLColor.fromAHSL(
-          1,
-          (track.coverSeed.abs() * 47) % 360,
-          .46,
-          .48,
-        ).toColor();
-    final List<Color> colors = albumFlowColors(seed);
-    return MediaQuery.withNoTextScaling(
-      child: SizedBox(
-        width: 360,
-        child: CustomPaint(
-          painter: _ExportBackdrop(
-            surface: scheme.surfaceContainerLowest,
-            colors: colors,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 24, 18, 30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: SizedBox.square(
-                    dimension: 324,
-                    child: artwork == null
-                        ? PlateArt(seed: track.coverSeed, size: 324)
-                        : Image(image: artwork!, fit: BoxFit.cover),
-                  ),
+  Widget build(BuildContext context) => MediaQuery.withNoTextScaling(
+    child: SizedBox(
+      width: 360,
+      child: ColoredBox(
+        color: context.colors.ivoryMedium,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 26, 18, 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AspectRatio(
+                aspectRatio: 1,
+                child: artwork == null
+                    ? PlateArt(seed: track.coverSeed)
+                    : Image(image: artwork!, fit: BoxFit.cover),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                track.title,
+                style: context.type.heading.copyWith(
+                  fontSize: 28,
+                  height: 1.25,
                 ),
-                const SizedBox(height: 18),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                track.album,
+                style: context.type.bodySm.copyWith(
+                  color: context.colors.cloudDark,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                track.artist,
+                style: context.type.bodySm.copyWith(
+                  color: context.colors.cloudDark,
+                ),
+              ),
+              Divider(height: 20, color: context.colors.cloudDark),
+              for (var i = 0; i < lines.length; i++) ...[
+                if (i > 0) const SizedBox(height: 24),
                 Text(
-                  track.title,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontSize: 28,
-                    height: 1.24,
-                    fontWeight: FontWeight.w700,
+                  lines[i].text.trim(),
+                  style: context.type.body.copyWith(
+                    fontSize: 20,
+                    height: 1.5,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 7),
-                if (track.album.isNotEmpty)
+                if (lines[i].translation?.trim().isNotEmpty ?? false) ...[
+                  const SizedBox(height: 4),
                   Text(
-                    track.album,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                const SizedBox(height: 2),
-                Text(
-                  track.artist,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                Divider(height: 28, color: scheme.outlineVariant),
-                for (int i = 0; i < lines.length; i++) ...<Widget>[
-                  if (i > 0) const SizedBox(height: 24),
-                  Text(
-                    lines[i].text.trim().isEmpty ? ' ' : lines[i].text.trim(),
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      fontSize: 20,
+                    lines[i].translation!.trim(),
+                    style: context.type.bodySm.copyWith(
+                      fontSize: 14,
                       height: 1.5,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface,
+                      color: context.colors.cloudDark,
                     ),
                   ),
-                  if (lines[i].translation?.trim().isNotEmpty ?? false) ...<
-                    Widget
-                  >[
-                    const SizedBox(height: 4),
-                    Text(
-                      lines[i].translation!.trim(),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
                 ],
               ],
-            ),
+            ],
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ExportBackdrop extends CustomPainter {
-  const _ExportBackdrop({required this.surface, required this.colors});
-
-  final Color surface;
-  final List<Color> colors;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-    final Rect bounds = Offset.zero & size;
-    canvas.drawRect(bounds, Paint()..color = surface);
-    canvas.save();
-    canvas.clipRect(bounds.deflate(10));
-    final double radius = math.max(size.width, size.height) * .7;
-    for (final (int index, Offset center) in <(int, Offset)>[
-      (1, Offset(size.width * .08, size.height * .12)),
-      (3, Offset(size.width * .92, size.height * .88)),
-    ]) {
-      canvas.drawRect(
-        bounds,
-        Paint()
-          ..shader = ui.Gradient.radial(
-            center,
-            radius,
-            <Color>[
-              colors[index].withValues(alpha: .56),
-              colors[index].withValues(alpha: .16),
-              colors[index].withValues(alpha: 0),
-            ],
-            const <double>[0, .48, 1],
-          ),
-      );
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _ExportBackdrop oldDelegate) =>
-      oldDelegate.surface != surface ||
-      oldDelegate.colors.length != colors.length ||
-      <bool>[
-        for (var i = 0; i < colors.length; i++)
-          oldDelegate.colors[i] != colors[i],
-      ].any((bool changed) => changed);
+    ),
+  );
 }

@@ -100,9 +100,15 @@ class _WheelMomentum extends StatefulWidget {
 
 class _WheelMomentumState extends State<_WheelMomentum>
     with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker(_tick);
+  Ticker? _ticker;
   double _velocity = 0;
   Duration _last = Duration.zero;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ticker ??= createTicker(_tick);
+  }
 
   ScrollPosition? get _position {
     final controller = widget.details.controller;
@@ -112,7 +118,7 @@ class _WheelMomentumState extends State<_WheelMomentum>
   }
 
   void _stop() {
-    _ticker.stop();
+    _ticker?.stop();
     _velocity = 0;
     _last = Duration.zero;
   }
@@ -172,16 +178,18 @@ class _WheelMomentumState extends State<_WheelMomentum>
         consumed,
         acceleration: widget.acceleration,
       );
-      if (!_ticker.isActive) {
+      final ticker = _ticker;
+      if (ticker != null && !ticker.isActive) {
         _last = Duration.zero;
-        _ticker.start();
+        ticker.start();
       }
     });
   }
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _ticker?.dispose();
+    _ticker = null;
     super.dispose();
   }
 

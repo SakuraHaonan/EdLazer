@@ -1,35 +1,129 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../data/models.dart';
-import '../interaction/app_haptics.dart';
-import '../legacy/legacy_login.dart';
-import '../lyrics/viewport.dart';
+import 'player_backdrop.dart';
+import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../state/song_comments_controller.dart';
-import '../theme/apple_design.dart';
+import '../state/ui_preferences.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_theme.dart';
+import '../theme/design_tokens.dart';
+import '../theme/paper_widgets.dart';
 import '../utils/cover_save.dart';
-import '../widgets/apple_ui.dart';
+import '../widgets/accessible_controls.dart';
+import '../widgets/animated_notice.dart';
+import '../widgets/animated_track_cover.dart';
+import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
-import '../legacy/legacy_widgets.dart';
+import '../widgets/lyric_viewport.dart';
 import '../widgets/playback_queue_view.dart';
+import '../widgets/player_seek_bar.dart';
 import '../widgets/song_comments_view.dart';
-import 'player_backdrop.dart';
+import 'desktop_now_playing.dart';
 
-enum _SidePanel { none, queue, comments }
+/// Shared comments entry from the player header.
+Future<void> showSongComments(
+  BuildContext context, {
+  required AppState state,
+  required Track track,
+  required SongCommentsController controller,
+}) async {
+  final bool compact = useCompactLayout(
+    state.uiMode,
+    MediaQuery.sizeOf(context).width,
+  );
+  Widget content(BuildContext sheetContext) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 10, 2),
+        child: Row(
+          children: [
+            const Expanded(child: InlineLabel('评论')),
+            AccessibleIconButton(
+              key: const ValueKey('desktop-panel-close'),
+              tooltip: '关闭',
+              onPressed: () => Navigator.of(sheetContext).pop(),
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ],
+        ),
+      ),
+      Expanded(
+        child: SongCommentsView(
+          state: state,
+          track: track,
+          controller: controller,
+        ),
+      ),
+    ],
+  );
+  if (compact) {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.ivoryLight,
+      showDragHandle: true,
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * .76,
+        child: content(sheetContext),
+      ),
+    );
+    return;
+  }
+  await showDialog<void>(
+    context: context,
+    barrierColor: context.colors.slateDark.withValues(alpha: .2),
+    builder: (dialogContext) => Dialog(
+      insetPadding: const EdgeInsets.all(32),
+      child: SizedBox(
+        width: 620,
+        height: MediaQuery.sizeOf(context).height * .76,
+        child: content(dialogContext),
+      ),
+    ),
+  );
+}
 
-enum NowPlayingMenuAction { saveCover, copyTitle, copyArtist, shortcuts }
+/// Shared queue entry from the player header and desktop transport.
+Future<void> showPlaybackQueue(BuildContext context, AppState state) async {
+  if (!useCompactLayout(state.uiMode, MediaQuery.sizeOf(context).width)) {
+    await showDialog<void>(
+      context: context,
+      barrierColor: context.colors.slateDark.withValues(alpha: .2),
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(32),
+        child: SizedBox(
+          width: 580,
+          height: MediaQuery.sizeOf(context).height * .76,
+          child: PlaybackQueueView(
+            state: state,
+            onClose: () => Navigator.pop(context),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: context.colors.ivoryLight,
+    showDragHandle: true,
+    builder: (context) => SizedBox(
+      height: MediaQuery.sizeOf(context).height * .76,
+      child: PlaybackQueueView(
+        state: state,
+        onClose: () => Navigator.pop(context),
+      ),
+    ),
+  );
+}
 
-/// The completely rebuilt adaptive now-playing page.
-///
-/// Desktop uses an artwork-led split composition; phones use a compact header
-/// with a full-height lyric canvas. Both share one transport implementation,
-/// one lyric viewport and one queue/comment stack.
+/// Responsive cover/lyric spread with the same transport order on every size.
 class NowPlayingPage extends StatefulWidget {
   const NowPlayingPage({
     super.key,
@@ -40,10 +134,6 @@ class NowPlayingPage extends StatefulWidget {
 
   final AppState state;
   final VoidCallback? onClose;
-
-  /// When the host is still animating the page in (or about to animate it
-  /// out), expensive ambient blur/flow work is held back until the transition
-  /// has finished.
   final bool entranceSettled;
 
   @override
@@ -51,1028 +141,566 @@ class NowPlayingPage extends StatefulWidget {
 }
 
 class _NowPlayingPageState extends State<NowPlayingPage> {
-  final FocusNode _focus = FocusNode(debugLabel: 'now-playing');
-  _SidePanel _panel = _SidePanel.none;
-  SongCommentsController? _comments;
-  bool _fullscreen = false;
+  bool _lyricsMode = false;
   bool _controlsVisible = true;
-  Timer? _controlsTimer;
-
-  AppState get state => widget.state;
+  // Defaults to the non-destructive branch: a semantics-driven tap never
+  // passes through onPointerDown, so it must not fold the lyrics away.
+  bool _controlsHiddenAtTouchDown = true;
+  bool _saving = false;
+  bool _selectionOpen = false;
+  bool _commentsOpen = false;
+  bool _queueOpen = false;
+  bool? _desktopLayout;
+  DesktopNowPlayingPane _desktopPane = DesktopNowPlayingPane.lyrics;
+  late SongCommentsController _commentsController;
+  Timer? _hideTimer;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_readFullscreen());
-    _armControlsTimer();
+    _commentsController = SongCommentsController(widget.state.gateway);
+    widget.state.addListener(_preferencesChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(widget.state.ensureCurrentLyrics());
+    });
+  }
+
+  bool get _canAutoHide =>
+      !_selectionOpen &&
+      !_commentsOpen &&
+      !_queueOpen &&
+      (_desktopLayout == true
+          ? _desktopPane == DesktopNowPlayingPane.lyrics
+          : _lyricsMode) &&
+      !widget.state.lyricsLoading &&
+      widget.state.lyrics.isNotEmpty;
+
+  void _preferencesChanged() {
+    if (!_canAutoHide && !_controlsVisible) _wakeControls();
+    _armHide();
+  }
+
+  void _armHide() {
+    _hideTimer?.cancel();
+    if (!_canAutoHide) return;
+    _hideTimer = Timer(
+      Duration(
+        milliseconds: (widget.state.lyricControlsSeconds * 1000).round(),
+      ),
+      _hideControls,
+    );
+  }
+
+  void _selectionChanged(bool active) {
+    _selectionOpen = active;
+    if (active) {
+      _hideTimer?.cancel();
+    } else {
+      _armHide();
+    }
+  }
+
+  void _hideControls() {
+    if (!mounted) return;
+    if (!_canAutoHide) {
+      _wakeControls();
+      return;
+    }
+    // Retire floating tooltip nodes before their anchors become invisible.
+    // Wait for real animation completion, including on a delayed frame.
+    if (Tooltip.dismissAllToolTips()) {
+      _hideTimer = Timer(const Duration(milliseconds: 16), _hideControls);
+      return;
+    }
+    setState(() => _controlsVisible = false);
+  }
+
+  void _wakeControls() {
+    _hideTimer?.cancel();
+    if (!_controlsVisible && mounted) setState(() => _controlsVisible = true);
+  }
+
+  void _controlsActivity() {
+    _wakeControls();
+    _armHide();
+  }
+
+  // Record the starting mode without waking the controls for lyric or drag
+  // gestures. Only a completed background tap changes the presentation.
+  void _onTouchDown() {
+    _controlsHiddenAtTouchDown = !_controlsVisible;
+  }
+
+  /// Return one step only after a completed tap outside the lyric text.
+  void _stepBackFromLyrics() {
+    if (!_lyricsMode || _selectionOpen) return;
+    if (_controlsHiddenAtTouchDown) {
+      _wakeControls();
+      _armHide();
+    } else {
+      _toggleLyrics();
+    }
   }
 
   @override
   void dispose() {
-    _controlsTimer?.cancel();
-    _comments?.dispose();
-    _focus.dispose();
+    _hideTimer?.cancel();
+    widget.state.removeListener(_preferencesChanged);
+    _commentsController.dispose();
     super.dispose();
   }
 
-  /// Bottom transport on the phone player yields to the lyric sheet after the
-  /// listener stops touching it. Any tap, drag or panel brings it back and
-  /// restarts the wait, whose length is the settings slider.
-  void _revealControls() {
-    _controlsTimer?.cancel();
-    if (!_controlsVisible && mounted) {
-      setState(() => _controlsVisible = true);
-    }
-    _armControlsTimer();
+  void _toggleLyrics() {
+    setState(() {
+      _lyricsMode = !_lyricsMode;
+      if (!_lyricsMode) _selectionOpen = false;
+      _controlsVisible = true;
+    });
+    _armHide();
   }
 
-  void _armControlsTimer() {
-    _controlsTimer?.cancel();
-    final double seconds = state.lyricControlsSeconds;
-    _controlsTimer = Timer(
-      Duration(milliseconds: (seconds * 1000).round()),
-      () {
-        if (!mounted || _panel != _SidePanel.none) return;
-        setState(() => _controlsVisible = false);
-      },
-    );
-  }
-
-  Future<void> _readFullscreen() async {
-    try {
-      final bool active = await windowManager.isFullScreen();
-      if (mounted) setState(() => _fullscreen = active);
-    } catch (_) {
-      // The plugin is unavailable in tests and non-desktop embeddings.
-    }
+  Future<void> _queue() async {
+    _queueOpen = true;
+    _hideTimer?.cancel();
+    await showPlaybackQueue(context, widget.state);
+    if (!mounted) return;
+    _queueOpen = false;
+    _wakeControls();
+    _armHide();
   }
 
   void _closePage() {
-    if (widget.onClose != null) {
-      widget.onClose!();
-    } else if (Navigator.of(context).canPop()) {
+    final VoidCallback? onClose = widget.onClose;
+    if (onClose != null) {
+      onClose();
+    } else {
       Navigator.of(context).maybePop();
     }
   }
 
-  void _closePanel() {
-    if (_panel != _SidePanel.none) setState(() => _panel = _SidePanel.none);
-    _armControlsTimer();
-  }
-
-  void _openPanel(_SidePanel panel) {
-    if (_panel == panel) {
-      _closePanel();
-      return;
-    }
-    if (panel == _SidePanel.comments) {
-      _comments ??= SongCommentsController(state.gateway);
-    }
-    _controlsTimer?.cancel();
-    setState(() {
-      _panel = panel;
-      _controlsVisible = true;
-    });
-  }
-
   Future<void> _toggleFullscreen() async {
     try {
-      await windowManager.setFullScreen(!_fullscreen);
-      if (mounted) setState(() => _fullscreen = !_fullscreen);
-    } catch (_) {}
+      if (await windowManager.isFullScreen()) {
+        await windowManager.setFullScreen(false);
+      } else {
+        await windowManager.setFullScreen(true);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: TrText('无法切换全屏状态。')));
+    }
   }
 
-  void _seekBy(Duration delta) {
-    final Track? track = state.current;
-    if (track == null || track.duration <= Duration.zero) return;
-    final int target = (state.precisePosition + delta).inMilliseconds.clamp(
-      0,
-      track.duration.inMilliseconds,
+  Future<void> _openComments() async {
+    final track = widget.state.current;
+    if (track == null || _commentsOpen) return;
+    _commentsOpen = true;
+    _hideTimer?.cancel();
+    await showSongComments(
+      context,
+      state: widget.state,
+      track: track,
+      controller: _commentsController,
     );
-    state.seek(target / track.duration.inMilliseconds);
+    if (!mounted) return;
+    _commentsOpen = false;
+    _wakeControls();
+    _armHide();
   }
 
-  void _toggleLike() {
-    unawaited(state.feedback());
-    if (state.isGuest) {
-      unawaited(showLegacyLoginDialog(context, state));
+  void _selectDesktopPane(DesktopNowPlayingPane pane) {
+    if (_desktopPane == pane) {
+      _controlsActivity();
       return;
     }
-    unawaited(state.toggleLikeCurrent());
+    _hideTimer?.cancel();
+    setState(() {
+      _desktopPane = pane;
+      _selectionOpen = false;
+      _controlsVisible = true;
+    });
+    _armHide();
   }
 
-  Future<void> _saveCover() async {
-    final Track? track = state.current;
-    final String? url = track?.coverUrl;
-    if (track == null || url == null || url.isEmpty) return;
-    final bool saved = await saveCover(url, track.title);
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(saved ? '封面已保存' : '封面保存失败，请稍后重试')));
-  }
-
-  Future<void> _confirmSaveCover() async {
-    final Track? track = state.current;
-    final String? url = track?.coverUrl;
-    if (track == null || url == null || url.isEmpty) return;
-    unawaited(state.feedback());
-    final bool? save = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('保存封面'),
-        content: Text('是否保存「${track.title}」的封面？'),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-    if (save == true) await _saveCover();
-  }
-
-  Future<void> _copy(String value, String message) async {
-    await Clipboard.setData(ClipboardData(text: value));
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _onMore(NowPlayingMenuAction action) {
-    final Track? track = state.current;
-    if (track == null) return;
-    switch (action) {
-      case NowPlayingMenuAction.saveCover:
-        unawaited(_saveCover());
-      case NowPlayingMenuAction.copyTitle:
-        unawaited(_copy(track.title, '已复制歌曲名'));
-      case NowPlayingMenuAction.copyArtist:
-        unawaited(_copy(legacyArtistNames(track), '已复制歌手名'));
-      case NowPlayingMenuAction.shortcuts:
-        unawaited(_showShortcuts());
+  @override
+  void didUpdateWidget(covariant NowPlayingPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.removeListener(_preferencesChanged);
+      widget.state.addListener(_preferencesChanged);
+      _commentsController.dispose();
+      _commentsController = SongCommentsController(widget.state.gateway);
     }
   }
 
-  Future<void> _showShortcuts() => showDialog<void>(
-    context: context,
-    builder: (BuildContext context) => AlertDialog(
-      title: const Text('键盘快捷键'),
-      content: const SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            _ShortcutRow(keys: '空格', action: '播放 / 暂停'),
-            _ShortcutRow(keys: '← / →', action: '后退 / 前进 5 秒'),
-            _ShortcutRow(keys: 'Shift + ← / →', action: '后退 / 前进 15 秒'),
-            _ShortcutRow(keys: '↑ / ↓', action: '音量 + / - 5%'),
-            _ShortcutRow(keys: 'M', action: '静音'),
-            _ShortcutRow(keys: 'L', action: '喜欢当前歌曲'),
-            _ShortcutRow(keys: 'Q', action: '播放队列'),
-            _ShortcutRow(keys: 'C', action: '评论'),
-            _ShortcutRow(keys: 'F', action: '全屏'),
-            _ShortcutRow(keys: 'Esc', action: '关闭面板或播放器'),
-          ],
-        ),
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('知道了'),
+  /// 移动端整屏歌词：标题固定，正文占满剩余高度。
+  Widget _mobileLyrics() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const InlineLabel('歌词'),
+        const SizedBox(height: AppSpacing.md),
+        Expanded(
+          child: LyricViewport(
+            state: widget.state,
+            onSelectionChanged: _selectionChanged,
+          ),
         ),
       ],
     ),
   );
 
-  ThemeData _playerTheme() {
-    final ThemeData base = buildAppleTheme(
-      brightness: Brightness.dark,
-      seedAccent: AppleColors.musicRed,
-    );
-    return base.copyWith(
-      colorScheme: base.colorScheme.copyWith(
-        primary: Colors.white,
-        onPrimary: Colors.black,
-        secondary: AppleColors.musicRed,
-        onSecondary: Colors.white,
-      ),
-      scaffoldBackgroundColor: Colors.black,
-      canvasColor: Colors.black,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Theme(
-      data: _playerTheme(),
-      child: AnimatedBuilder(
-        animation: state,
-        builder: (BuildContext context, Widget? _) {
-          final Track? track = state.current;
-          final double width = MediaQuery.sizeOf(context).width;
-          final bool wide = width >= 840;
-          return CallbackShortcuts(
-            bindings: <ShortcutActivator, VoidCallback>{
-              const SingleActivator(LogicalKeyboardKey.space): state.togglePlay,
-              const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-                  _seekBy(const Duration(seconds: -5)),
-              const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-                  _seekBy(const Duration(seconds: 5)),
-              const SingleActivator(
-                LogicalKeyboardKey.arrowLeft,
-                shift: true,
-              ): () =>
-                  _seekBy(const Duration(seconds: -15)),
-              const SingleActivator(
-                LogicalKeyboardKey.arrowRight,
-                shift: true,
-              ): () =>
-                  _seekBy(const Duration(seconds: 15)),
-              const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
-                  unawaited(
-                    state.setVolume((state.volume + .05).clamp(0.0, 1.0)),
-                  ),
-              const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
-                  unawaited(
-                    state.setVolume((state.volume - .05).clamp(0.0, 1.0)),
-                  ),
-              const SingleActivator(LogicalKeyboardKey.keyM): () =>
-                  unawaited(state.toggleMute()),
-              const SingleActivator(LogicalKeyboardKey.keyL): _toggleLike,
-              const SingleActivator(LogicalKeyboardKey.keyQ): () =>
-                  _openPanel(_SidePanel.queue),
-              const SingleActivator(LogicalKeyboardKey.keyC): () =>
-                  _openPanel(_SidePanel.comments),
-              const SingleActivator(LogicalKeyboardKey.keyF): () =>
-                  unawaited(_toggleFullscreen()),
-              const SingleActivator(LogicalKeyboardKey.escape): () {
-                if (_panel != _SidePanel.none) {
-                  _closePanel();
-                } else {
-                  _closePage();
-                }
-              },
-            },
-            child: Focus(
-              focusNode: _focus,
-              autofocus: true,
-              child: Scaffold(
-                backgroundColor: Colors.black,
-                body: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    AlbumBlurFlow(
-                      track: track,
-                      mode: state.legacyBackground,
-                      pageColor: Colors.black,
-                      animationsEnabled: widget.entranceSettled,
-                    ),
-                    SafeArea(
-                      child: track == null
-                          ? _empty(context)
-                          : wide
-                          ? KeyedSubtree(
-                              key: const ValueKey<String>(
-                                'desktop-now-playing',
-                              ),
-                              child: _desktop(context, track),
-                            )
-                          : KeyedSubtree(
-                              key: const ValueKey<String>('mobile-now-playing'),
-                              child: _mobile(context, track),
-                            ),
-                    ),
-                    if (track != null && _panel != _SidePanel.none)
-                      wide
-                          ? _desktopPanel(context, track)
-                          : _mobilePanel(context, track),
-                  ],
-                ),
-              ),
+  Future<void> _saveArtwork(Track track) async {
+    if (_saving) return;
+    _hideTimer?.cancel();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const TrText('保存封面图片？'),
+        content: TrText('将「${track.title}」的封面保存在设备中。'),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: context.colors.slateDark,
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _empty(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          const Icon(
-            Icons.music_note_rounded,
-            size: 44,
-            color: Color(0x99FFFFFF),
+            onPressed: () => Navigator.pop(context, false),
+            child: const TrText('取消'),
           ),
-          const SizedBox(height: 14),
-          const Text(
-            '还没有播放中的曲目。',
-            style: TextStyle(color: Color(0xB3FFFFFF), fontSize: 15),
-          ),
-          const SizedBox(height: 18),
-          IconButton(
-            tooltip: '关闭',
-            onPressed: _closePage,
-            icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          FilledButton(
+            onPressed: track.coverUrl == null
+                ? null
+                : () => Navigator.pop(context, true),
+            child: const TrText('保存'),
           ),
         ],
       ),
     );
+    if (!mounted) return;
+    if (confirmed != true) {
+      _armHide();
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final saved = await saveCover(track.coverUrl!, track.title);
+      if (mounted && saved) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: TrText('封面已保存')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: TrText('保存失败，请检查相册权限或稍后重试。')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+      _armHide();
+    }
   }
 
-  Widget _desktop(BuildContext context, Track track) {
-    return Column(
-      children: <Widget>[
-        _desktopTopBar(context, track),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(26, 8, 26, 18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Expanded(flex: 40, child: _desktopInfo(track)),
-                const SizedBox(width: 24),
-                Expanded(flex: 60, child: _lyricsPane(compact: false)),
-              ],
-            ),
-          ),
-        ),
-        _DesktopTransport(state: state),
-      ],
-    );
-  }
-
-  Widget _mobile(BuildContext context, Track track) {
-    final Size size = MediaQuery.sizeOf(context);
-    final bool landscape = size.width > size.height;
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _revealControls(),
-      child: Column(
-        children: <Widget>[
-          _mobileTopBar(context, track, landscape: landscape),
-            Expanded(
-            child: landscape
-                ? Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-                    child: LayoutBuilder(
-                      builder:
-                          (BuildContext context, BoxConstraints constraints) {
-                            // The row must be told its height. Without it the
-                            // info card sizes from its own content and grows
-                            // past a short landscape screen, pushing the
-                            // transport below the visible edge.
-                            return SizedBox(
-                              height: constraints.maxHeight,
-                              child: Row(
-                                children: <Widget>[
-                                  Expanded(
-                                    flex: 40,
-                                    child: _mobileInfoCard(track),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    flex: 60,
-                                    child: _lyricsPane(compact: true),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                    ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 4),
-                    child: Column(
-                      children: <Widget>[
-                        _compactHeader(context, track),
-                        const SizedBox(height: 8),
-                        Expanded(child: _lyricsPane(compact: true)),
-                      ],
-                    ),
-                  ),
-          ),
-          // Keep the transport mounted so its key survives the hide, but report
-          // no height while collapsed. A height factor of zero only clips: the
-          // child is still measured at full size past the screen edge.
-          _Collapsible(
-            collapsed: !_controlsVisible,
-            child: AnimatedOpacity(
-              key: const ValueKey<String>('mobile-transport-visibility'),
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOutCubic,
-              opacity: _controlsVisible ? 1 : 0,
-              child: IgnorePointer(
-                ignoring: !_controlsVisible,
-                child: _MobileTransport(
-                  state: state,
-                  landscape: landscape,
-                  onOpenPanel: _openPanel,
-                  onInteract: _revealControls,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _desktopTopBar(BuildContext context, Track track) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 18, 4),
-      child: Row(
-        children: <Widget>[
-          _TopIconButton(
-            key: const ValueKey<String>('desktop-close'),
-            tooltip: '收起播放器 (Esc)',
-            icon: Icons.keyboard_arrow_down_rounded,
-            onPressed: _closePage,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const Text(
-                  '正在播放',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.25,
-                    color: Color(0x99FFFFFF),
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  track.album.isEmpty ? legacyArtistNames(track) : track.album,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _TopIconButton(
-            key: const ValueKey<String>('desktop-comments'),
-            tooltip: '评论 (C)',
-            icon: Icons.mode_comment_outlined,
-            selected: _panel == _SidePanel.comments,
-            onPressed: () => _openPanel(_SidePanel.comments),
-          ),
-          _TopIconButton(
-            key: const ValueKey<String>('desktop-queue'),
-            tooltip: '播放队列 (Q)',
-            icon: Icons.queue_music_rounded,
-            selected: _panel == _SidePanel.queue,
-            onPressed: () => _openPanel(_SidePanel.queue),
-          ),
-          _TopIconButton(
-            key: const ValueKey<String>('desktop-fullscreen'),
-            tooltip: _fullscreen ? '退出全屏 (F)' : '全屏 (F)',
-            icon: _fullscreen
-                ? Icons.fullscreen_exit_rounded
-                : Icons.fullscreen_rounded,
-            onPressed: () => unawaited(_toggleFullscreen()),
-          ),
-          _MoreButton(
-            key: const ValueKey<String>('desktop-more'),
-            includeShortcuts: true,
-            onSelected: _onMore,
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-    );
-  }
-
-  Widget _desktopInfo(Track track) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final double cover = math
-            .min(
-              constraints.maxWidth * .92,
-              math.max(160, constraints.maxHeight - 224),
-            )
-            .clamp(160.0, 390.0)
-            .toDouble();
-        return Center(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onLongPress: () => unawaited(_confirmSaveCover()),
-                  child: _Artwork(
-                    track: track,
-                    size: cover,
-                    radius: 10,
-                    iconSize: cover * .14,
-                  ),
-                ),
-                SizedBox(height: constraints.maxHeight < 620 ? 16 : 22),
-                Text(
-                  track.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    height: 1.18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -.4,
-                    color: Colors.white,
-                    shadows: <Shadow>[
-                      Shadow(
-                        color: Color(0x99000000),
-                        blurRadius: 18,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                ),
-                if (track.translatedTitle?.trim().isNotEmpty ??
-                    false) ...<Widget>[
-                  const SizedBox(height: 4),
-                  Text(
-                    track.translatedTitle!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xB3FFFFFF),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 7),
-                Text(
-                  legacyArtistNames(track),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    height: 1.3,
-                    color: Color(0xB3FFFFFF),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    _TopIconButton(
-                      key: const ValueKey<String>('desktop-like'),
-                      tooltip: state.currentLiked ? '取消收藏 (L)' : '收藏 (L)',
-                      icon: state.currentLiked
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      selected: state.currentLiked,
-                      onPressed: _toggleLike,
-                    ),
-                    _TopIconButton(
-                      tooltip: '保存封面',
-                      icon: Icons.download_rounded,
-                      onPressed: () => unawaited(_saveCover()),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
+  Widget _cover(Track track) => Semantics(
+    label: context.tr('歌曲封面，长按保存'),
+    child: GestureDetector(
+      onTap: () {
+        if (useCompactLayout(
+          widget.state.uiMode,
+          MediaQuery.sizeOf(context).width,
+        )) {
+          unawaited(widget.state.feedback());
+          _toggleLyrics();
+        }
       },
-    );
-  }
-
-  Widget _lyricsPane({required bool compact}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Padding(
-          padding: EdgeInsets.fromLTRB(compact ? 14 : 18, 6, 10, 2),
-          child: Row(
-            children: <Widget>[
-              const Text(
-                '歌词',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                  color: Color(0x66FFFFFF),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                state.lyricsLoading
-                    ? '加载中'
-                    : state.lyrics.isEmpty
-                    ? '暂无歌词'
-                    : '${state.lyrics.length} 行',
-                style: const TextStyle(fontSize: 11, color: Color(0x4DFFFFFF)),
+      onLongPress: () => unawaited(_saveArtwork(track)),
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66000000),
+                blurRadius: 24,
+                spreadRadius: 1,
+                offset: Offset(0, 8),
               ),
             ],
           ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: KeyedSubtree(
+              key: const ValueKey('legacy-now-playing-cover'),
+              child: AnimatedTrackCover(
+                track: track,
+                direction: widget.state.trackChangeDirection,
+              ),
+            ),
+          ),
         ),
-        Expanded(
-          child: compact
-              ? LyricViewport(
-                  state: state,
-                  blurEnabled: widget.entranceSettled ? null : false,
-                )
-              : LyricViewport(
-                  state: state,
-                  fontSize: 26,
-                  fontWeight: 600,
-                  blurEnabled: false,
-                ),
-        ),
-      ],
-    );
-  }
+      ),
+    ),
+  );
 
-  Widget _mobileTopBar(
-    BuildContext context,
-    Track track, {
-    required bool landscape,
-  }) {
-    return SizedBox(
-      height: 54,
+  Widget _header(bool compact) => IgnorePointer(
+    ignoring: compact && !_controlsVisible,
+    child: AnimatedOpacity(
+      opacity: compact && !_controlsVisible ? 0 : 1,
+      duration: const Duration(milliseconds: 200),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
         child: Row(
-          children: <Widget>[
-            _TopIconButton(
-              key: const ValueKey<String>('mobile-close'),
-              tooltip: '收起播放器',
-              icon: Icons.keyboard_arrow_down_rounded,
+          children: [
+            AccessibleIconButton(
+              tooltip: '返回',
               onPressed: _closePage,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const Text(
-                      '正在播放',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    if (landscape)
-                      Text(
-                        track.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0x80FFFFFF),
-                        ),
-                      ),
-                  ],
-                ),
+            const Spacer(),
+            if (_saving)
+              const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-            ),
-            if (landscape) ...<Widget>[
-              _TopIconButton(
-                key: const ValueKey<String>('mobile-queue'),
-                tooltip: '播放队列',
-                icon: Icons.queue_music_rounded,
-                onPressed: () {
-                  final AppState? feedback = InteractionFeedback.of(context);
-                  if (feedback != null) unawaited(feedback.feedback());
-                  _openPanel(_SidePanel.queue);
-                },
+            if (compact)
+              AccessibleIconButton(
+                tooltip: '歌词',
+                onPressed: _toggleLyrics,
+                isSelected: _lyricsMode,
+                icon: const Icon(Icons.lyrics_outlined),
               ),
-              TextButton.icon(
-                key: const ValueKey<String>('mobile-comments'),
-                onPressed: feedbackAction(
-                  context,
-                  () => _openPanel(_SidePanel.comments),
-                ),
-                icon: const Icon(Icons.mode_comment_outlined, size: 17),
-                label: const Text('查看评论'),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xB3FFFFFF),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 40),
-                  textStyle: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ],
-            _TopIconButton(
-              key: const ValueKey<String>('mobile-like'),
-              tooltip: state.currentLiked ? '取消喜欢' : '加入喜欢',
-              icon: state.currentLiked
-                  ? Icons.favorite_rounded
-                  : Icons.favorite_border_rounded,
-              selected: state.currentLiked,
-              onPressed: _toggleLike,
+            AccessibleIconButton(
+              tooltip: '查看评论',
+              onPressed: () => unawaited(_openComments()),
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
             ),
-            _MoreButton(
-              key: const ValueKey<String>('mobile-more'),
-              onSelected: _onMore,
+            AccessibleIconButton(
+              tooltip: '播放队列',
+              onPressed: _queue,
+              icon: const Icon(Icons.queue_music_rounded),
             ),
-            const SizedBox(width: 2),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
 
-  Widget _compactHeader(BuildContext context, Track track) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-      child: Row(
-        children: <Widget>[
-          GestureDetector(
-            key: const ValueKey<String>('legacy-now-playing-cover'),
-            behavior: HitTestBehavior.opaque,
-            onLongPress: () => unawaited(_confirmSaveCover()),
-            child: _Artwork(track: track, size: 56, radius: 8, iconSize: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  track.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                if (track.translatedTitle?.trim().isNotEmpty ?? false)
-                  Text(
-                    track.translatedTitle!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0x99FFFFFF),
-                    ),
-                  ),
-                Text(
-                  legacyArtistNames(track),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0x99FFFFFF),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _mobileInfoCard(Track track) {
-    return AppleGlass(
-      borderRadius: BorderRadius.circular(18),
-      blurSigma: 24,
-      color: Colors.white.withValues(alpha: .08),
-      border: Border.all(color: Colors.white.withValues(alpha: .12), width: .5),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          // An unbounded height (a scroll view, or a row that has not been
-          // given one) must not fall through to the 180 px ceiling: that makes
-          // the card report a height taller than a landscape phone, and the
-          // transport below it is pushed past the screen edge.
-          final double available = constraints.maxHeight.isFinite
-              ? constraints.maxHeight - 86
-              : constraints.maxWidth - 34;
-          final double side = math
-              .min(constraints.maxWidth - 34, available)
-              .clamp(50.0, 180.0);
-          return Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onLongPress: () => unawaited(_confirmSaveCover()),
-                    child: _Artwork(
-                      track: track,
-                      size: side,
-                      radius: 12,
-                      iconSize: 26,
-                    ),
-                  ),
-                  const SizedBox(height: 9),
-                  Text(
-                    track.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    legacyArtistNames(track),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0x99FFFFFF),
-                    ),
-                  ),
-                ],
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: buildAppTheme(
+      brightness: Brightness.dark,
+      accent: Theme.of(context).colorScheme.primary,
+    ),
+    child: Scaffold(
+      backgroundColor: Colors.black,
+      body: AnimatedBuilder(
+        animation: widget.state,
+        builder: (context, _) {
+          final Track? track = widget.state.current;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              AlbumBlurFlow(
+                track: track,
+                mode: widget.state.legacyBackground,
+                pageColor: Colors.black,
+                animationsEnabled: widget.entranceSettled,
               ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _desktopPanel(BuildContext context, Track track) {
-    final double width = math.min(430, MediaQuery.sizeOf(context).width * .38);
-    return Positioned.fill(
-      child: Stack(
-        children: <Widget>[
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _closePanel,
-            child: ColoredBox(color: Colors.black.withValues(alpha: .32)),
-          ),
-          Positioned(
-            top: 66,
-            right: 16,
-            bottom: 16,
-            width: width,
-            child: AppleGlass(
-              borderRadius: BorderRadius.circular(20),
-              blurSigma: 30,
-              color: const Color(0xF21C1C1E),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: .12),
-                width: .5,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Column(
-                  children: <Widget>[
-                    SizedBox(
-                      height: 48,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 2, 4, 2),
-                        child: Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: Text(
-                                _panel == _SidePanel.queue ? '播放队列' : '评论',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              key: const ValueKey<String>(
-                                'desktop-panel-close',
-                              ),
-                              tooltip: '关闭',
-                              onPressed: _closePanel,
-                              icon: const Icon(Icons.close_rounded, size: 19),
-                            ),
-                          ],
+              if (track == null)
+                _EmptyNowPlaying(onBack: _closePage)
+              else
+                LayoutBuilder(
+                  builder: (context, box) {
+                    final bool compact = useCompactLayout(
+                      widget.state.uiMode,
+                      box.maxWidth,
+                    );
+                    if (_desktopLayout != !compact) {
+                      _desktopLayout = !compact;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          _wakeControls();
+                          _armHide();
+                        }
+                      });
+                    }
+                    if (!compact) {
+                      return SafeArea(
+                        child: DesktopNowPlaying(
+                          key: const ValueKey('desktop-now-playing'),
+                          state: widget.state,
+                          track: track,
+                          artwork: _cover(track),
+                          lyrics: LyricViewport(
+                            state: widget.state,
+                            onSelectionChanged: _selectionChanged,
+                          ),
+                          comments: SongCommentsView(
+                            state: widget.state,
+                            track: track,
+                            controller: _commentsController,
+                          ),
+                          queue: PlaybackQueueView(
+                            state: widget.state,
+                            showHeader: false,
+                          ),
+                          pane: _desktopPane,
+                          onPaneChanged: _selectDesktopPane,
+                          onBack: _closePage,
+                          onSaveArtwork: () => unawaited(_saveArtwork(track)),
+                          onFullscreen: () => unawaited(_toggleFullscreen()),
+                          controlsVisible: _controlsVisible,
+                          onActivity: _controlsActivity,
                         ),
-                      ),
-                    ),
-                    const Divider(height: .5, color: Color(0x33FFFFFF)),
-                    Expanded(
-                      child: _panel == _SidePanel.queue
-                          ? PlaybackQueueView(state: state, showHeader: false)
-                          : SongCommentsView(
-                              state: state,
-                              track: track,
-                              controller: _comments!,
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _mobilePanel(BuildContext context, Track track) {
-    final Size size = MediaQuery.sizeOf(context);
-    final bool reduce = MediaQuery.disableAnimationsOf(context);
-    return Positioned.fill(
-      child: Stack(
-        children: <Widget>[
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _closePanel,
-            child: ColoredBox(color: Colors.black.withValues(alpha: .36)),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0, end: 1),
-              duration: reduce
-                  ? Duration.zero
-                  : const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-              builder: (BuildContext context, double value, Widget? child) {
-                return Transform.translate(
-                  offset: Offset(0, (1 - value) * 36),
-                  child: Opacity(opacity: value, child: child),
-                );
-              },
-              child: SafeArea(
-                top: false,
-                child: Container(
-                  height: size.height * .92,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1C1C1E),
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(20),
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    children: <Widget>[
-                      SizedBox(
-                        height: 50,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 2, 6, 2),
-                          child: Row(
-                            children: <Widget>[
-                              Expanded(
-                                child: Text(
-                                  _panel == _SidePanel.queue ? '播放队列' : '评论',
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                key: const ValueKey<String>(
-                                  'mobile-panel-close',
-                                ),
-                                tooltip: '关闭',
-                                onPressed: _closePanel,
-                                icon: const Icon(Icons.close_rounded, size: 19),
-                              ),
+                      );
+                    }
+                    return Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (_) => _onTouchDown(),
+                      onPointerUp: (_) => _armHide(),
+                      onPointerCancel: (_) => _armHide(),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        excludeFromSemantics: true,
+                        onTap: compact && _lyricsMode
+                            ? _stepBackFromLyrics
+                            : null,
+                        child: SafeArea(
+                          child: Column(
+                            children: [
+                              _header(compact),
+                              Expanded(child: _mobile(track)),
                             ],
                           ),
                         ),
                       ),
-                      const Divider(height: .5, color: Color(0x33FFFFFF)),
-                      Expanded(
-                        child: _panel == _SidePanel.queue
-                            ? PlaybackQueueView(state: state, showHeader: false)
-                            : SongCommentsView(
-                                state: state,
-                                track: track,
-                                controller: _comments!,
-                              ),
-                      ),
-                    ],
+                    );
+                  },
+                ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+
+  Widget _readingPane(Track track) => AnimatedSwitcher(
+    duration: const Duration(milliseconds: 280),
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    transitionBuilder: (child, animation) => FadeTransition(
+      opacity: animation,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+        child: child,
+      ),
+    ),
+    layoutBuilder: (current, previous) => Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final old in previous)
+          ExcludeSemantics(child: IgnorePointer(child: old)),
+        ?current,
+      ],
+    ),
+    child: _lyricsMode
+        ? KeyedSubtree(
+            key: const ValueKey('mobile-lyrics'),
+            child: _mobileLyrics(),
+          )
+        : LayoutBuilder(
+            key: const ValueKey('mobile-cover'),
+            builder: (context, box) => Center(
+              child: SizedBox.square(
+                dimension: (box.maxHeight - 16).clamp(
+                  0,
+                  box.maxWidth.clamp(0, 380),
+                ),
+                child: _cover(track),
+              ),
+            ),
+          ),
+  );
+
+  Widget _mobile(Track track) {
+    final size = MediaQuery.sizeOf(context);
+    final visible = !_lyricsMode || _controlsVisible;
+    if (size.height < 500 && size.width > size.height) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: LayoutBuilder(
+          builder: (context, box) => Row(
+            children: [
+              Expanded(child: _readingPane(track)),
+              IgnorePointer(
+                ignoring: !visible,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 360),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) => SizeTransition(
+                    axis: Axis.horizontal,
+                    sizeFactor: animation,
+                    child: FadeTransition(opacity: animation, child: child),
                   ),
+                  child: !visible
+                      ? const SizedBox.shrink(key: ValueKey('hidden'))
+                      : SizedBox(
+                          key: const ValueKey('controls'),
+                          width: (box.maxWidth * 0.6).clamp(280, 400),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 20),
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    child: _TrackDetails(
+                                      track: track,
+                                      state: widget.state,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _PlaybackTransport(
+                                  track: track,
+                                  state: widget.state,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                 ),
               ),
+            ],
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
+      child: Column(
+        children: [
+          Expanded(child: _readingPane(track)),
+          IgnorePointer(
+            ignoring: !visible,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 360),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => SizeTransition(
+                sizeFactor: animation,
+                child: FadeTransition(opacity: animation, child: child),
+              ),
+              child: visible
+                  ? Padding(
+                      key: const ValueKey('controls'),
+                      padding: const EdgeInsets.only(top: 16),
+                      child: _TrackInfo(track: track, state: widget.state),
+                    )
+                  : const SizedBox.shrink(key: ValueKey('hidden')),
             ),
           ),
         ],
@@ -1081,933 +709,291 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   }
 }
 
-class _TopIconButton extends StatelessWidget {
-  const _TopIconButton({
-    super.key,
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.selected = false,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color accent = Theme.of(context).colorScheme.secondary;
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: feedbackAction(context, onPressed),
-      iconSize: 20,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-      style: IconButton.styleFrom(
-        foregroundColor: selected ? accent : const Color(0xB3FFFFFF),
-        backgroundColor: selected
-            ? accent.withValues(alpha: .14)
-            : Colors.transparent,
-        shape: const CircleBorder(),
-      ),
-      icon: Icon(icon),
-    );
-  }
-}
-
-class _MoreButton extends StatelessWidget {
-  const _MoreButton({
-    super.key,
-    required this.onSelected,
-    this.includeShortcuts = false,
-  });
-
-  final ValueChanged<NowPlayingMenuAction> onSelected;
-  final bool includeShortcuts;
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<NowPlayingMenuAction>(
-      tooltip: '更多',
-      onOpened: () {
-        final AppState? state = InteractionFeedback.of(context);
-        if (state != null) unawaited(state.feedback());
-      },
-      onSelected: (NowPlayingMenuAction action) {
-        final AppState? state = InteractionFeedback.of(context);
-        if (state != null) unawaited(state.feedback());
-        onSelected(action);
-      },
-      color: const Color(0xFF1C1C1E),
-      surfaceTintColor: Colors.transparent,
-      elevation: 18,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      icon: const Icon(
-        Icons.more_horiz_rounded,
-        color: Color(0xB3FFFFFF),
-        size: 22,
-      ),
-      itemBuilder: (BuildContext context) =>
-          <PopupMenuEntry<NowPlayingMenuAction>>[
-            const PopupMenuItem<NowPlayingMenuAction>(
-              value: NowPlayingMenuAction.saveCover,
-              child: _MenuRow(icon: Icons.download_rounded, label: '保存封面'),
-            ),
-            const PopupMenuItem<NowPlayingMenuAction>(
-              value: NowPlayingMenuAction.copyTitle,
-              child: _MenuRow(icon: Icons.copy_rounded, label: '复制歌曲名'),
-            ),
-            const PopupMenuItem<NowPlayingMenuAction>(
-              value: NowPlayingMenuAction.copyArtist,
-              child: _MenuRow(
-                icon: Icons.person_outline_rounded,
-                label: '复制歌手名',
-              ),
-            ),
-            if (includeShortcuts)
-              const PopupMenuItem<NowPlayingMenuAction>(
-                value: NowPlayingMenuAction.shortcuts,
-                child: _MenuRow(
-                  icon: Icons.keyboard_alt_outlined,
-                  label: '键盘快捷键',
-                ),
-              ),
-          ],
-    );
-  }
-}
-
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        Icon(icon, size: 17, color: const Color(0xB3FFFFFF)),
-        const SizedBox(width: 10),
-        Text(label),
-      ],
-    );
-  }
-}
-
-class _Artwork extends StatelessWidget {
-  const _Artwork({
-    required this.track,
-    required this.size,
-    required this.radius,
-    required this.iconSize,
-  });
-
+class _TrackInfo extends StatelessWidget {
+  const _TrackInfo({required this.track, required this.state});
   final Track track;
-  final double size;
-  final double radius;
-  final double iconSize;
-
+  final AppState state;
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      image: true,
-      label: '${track.title} 封面',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: Color(0x8A000000),
-              blurRadius: 36,
-              offset: Offset(0, 15),
-            ),
-          ],
-          border: Border.all(color: const Color(0x14FFFFFF), width: .5),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: SizedBox.square(
-            dimension: size,
-            child: LegacyCover(
-              url: track.coverUrl,
-              radius: 0,
-              iconSize: iconSize,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _TrackDetails(track: track, state: state),
+      const SizedBox(height: 16),
+      _PlaybackTransport(track: track, state: state),
+    ],
+  );
 }
 
-class _ShortcutRow extends StatelessWidget {
-  const _ShortcutRow({required this.keys, required this.action});
-
-  final String keys;
-  final String action;
-
+class _TrackDetails extends StatelessWidget {
+  const _TrackDetails({required this.track, required this.state});
+  final Track track;
+  final AppState state;
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: <Widget>[
-          SizedBox(
-            width: 116,
-            child: Text(
-              keys,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xB3FFFFFF),
-              ),
-            ),
-          ),
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
           Expanded(
             child: Text(
-              action,
-              style: const TextStyle(fontSize: 12, color: Color(0x99FFFFFF)),
+              track.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.type.subheading.copyWith(
+                fontSize: MediaQuery.sizeOf(context).width < 720 ? 24 : 28,
+              ),
+            ),
+          ),
+          AccessibleIconButton(
+            tooltip: state.signedIn ? '收藏歌曲' : '登录后收藏',
+            onPressed: state.signedIn
+                ? () => unawaited(state.toggleLikeCurrent())
+                : null,
+            icon: Icon(
+              state.currentLiked
+                  ? Icons.favorite_rounded
+                  : Icons.favorite_border_rounded,
+              color: state.currentLiked
+                  ? context.colors.clayDeep
+                  : context.colors.cloudDark,
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DesktopTransport extends StatefulWidget {
-  const _DesktopTransport({required this.state});
-
-  final AppState state;
-
-  @override
-  State<_DesktopTransport> createState() => _DesktopTransportState();
-}
-
-class _DesktopTransportState extends State<_DesktopTransport> {
-  double? _drag;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.black.withValues(alpha: .26),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            AnimatedBuilder(
-              animation: widget.state.ticks,
-              builder: (BuildContext context, Widget? _) => _seekRow(),
+      if (track.translatedTitle?.isNotEmpty ?? false) ...[
+        const SizedBox(height: 4),
+        Text(
+          track.translatedTitle!,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: context.type.bodySm.copyWith(
+            fontSize: 15,
+            color: context.colors.cloudDark,
+          ),
+        ),
+      ],
+      const SizedBox(height: 4),
+      DefaultTextStyle(
+        style: context.type.body.copyWith(
+          fontSize: 17,
+          color: context.colors.cloudDark,
+        ),
+        child: Row(
+          children: [
+            Flexible(
+              child: ArtistNameLink(
+                state: state,
+                artists: track.artists,
+                fallback: track.artist,
+              ),
             ),
-            const SizedBox(height: 1),
+            if (track.album.isNotEmpty) ...[
+              const Text(' · '),
+              Flexible(
+                child: AlbumNameLink(state: state, track: track),
+              ),
+            ],
+          ],
+        ),
+      ),
+      if (state.likeError != null) ...[
+        const SizedBox(height: AppSpacing.sm),
+        TrText(
+          state.likeError!,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: context.type.caption.copyWith(color: context.colors.clayDeep),
+        ),
+      ],
+    ],
+  );
+}
+
+class _PlaybackTransport extends StatelessWidget {
+  const _PlaybackTransport({required this.track, required this.state});
+  final Track track;
+  final AppState state;
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(16),
+    child: DecoratedBox(
+      decoration: const BoxDecoration(color: Colors.transparent),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          key: const ValueKey('now-playing-transport'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedNotice(
+              message: state.playbackError,
+              onDismiss: state.clearPlaybackError,
+            ),
+            PlayerSeekBar(state: state),
+            const SizedBox(height: AppSpacing.sm),
+            // Time labels ride the tick lane so position updates never rebuild
+            // the whole page.
+            AnimatedBuilder(
+              animation: state.all,
+              builder: (BuildContext context, _) => Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(fmt(state.position), style: context.type.monoSm),
+                  Text(fmt(track.duration), style: context.type.monoSm),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Fill the rail width so the last control has no trailing empty slab.
             Row(
-              children: <Widget>[
-                SizedBox(
-                  width: 280,
-                  child: Text(
-                    widget.state.queue.isEmpty
-                        ? ''
-                        : '${widget.state.queueIndex + 1} / ${widget.state.queue.length}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0x66FFFFFF),
-                      fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-                    ),
-                  ),
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _ControlIcon(
+                  icon: state.shuffle
+                      ? Icons.shuffle_on_rounded
+                      : Icons.shuffle_rounded,
+                  active: state.shuffle,
+                  tooltip: '随机播放',
+                  onTap: state.toggleShuffle,
                 ),
-                Expanded(
-                  child: Center(
-                    child: _TransportControls(
-                      state: widget.state,
-                      compact: false,
-                    ),
-                  ),
+                _ControlIcon(
+                  icon: Icons.skip_previous_rounded,
+                  size: 34,
+                  tooltip: '上一首',
+                  onTap: state.previous,
                 ),
-                SizedBox(
-                  width: 280,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: <Widget>[
-                      IconButton(
-                        tooltip: widget.state.volume <= .001 ? '取消静音' : '静音',
-                        onPressed: feedbackAction(
-                          context,
-                          () => unawaited(widget.state.toggleMute()),
-                        ),
-                        iconSize: 19,
-                        color: const Color(0xB3FFFFFF),
-                        icon: Icon(
-                          widget.state.volume <= .001
-                              ? Icons.volume_off_rounded
-                              : Icons.volume_up_rounded,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 96,
-                        child: Slider(
-                          value: widget.state.volume.clamp(0.0, 1.0),
-                          onChanged: (double value) =>
-                              unawaited(widget.state.setVolume(value)),
-                        ),
-                      ),
-                    ],
-                  ),
+                _BigPlayPause(playing: state.playing, onTap: state.togglePlay),
+                _ControlIcon(
+                  icon: Icons.skip_next_rounded,
+                  size: 34,
+                  tooltip: '下一首',
+                  onTap: state.next,
+                ),
+                _ControlIcon(
+                  icon: state.repeat == LoopMode.one
+                      ? Icons.repeat_one_on_rounded
+                      : Icons.repeat_rounded,
+                  active: state.repeat != LoopMode.off,
+                  tooltip: '循环播放',
+                  onTap: state.cycleRepeat,
                 ),
               ],
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _seekRow() {
-    final Track? track = widget.state.current;
-    final Duration duration = track?.duration ?? Duration.zero;
-    final double live = duration.inMilliseconds <= 0
-        ? 0
-        : (widget.state.precisePosition.inMilliseconds /
-                  duration.inMilliseconds)
-              .clamp(0.0, 1.0);
-    final double fraction = (_drag ?? live).clamp(0.0, 1.0);
-    return Row(
-      children: <Widget>[
-        SizedBox(
-          width: 62,
-          child: _TimeLabel(
-            legacyDuration(
-              Duration(
-                milliseconds: (duration.inMilliseconds * fraction).round(),
-              ),
-            ),
-            align: TextAlign.start,
-          ),
-        ),
-        Expanded(
-          child: Semantics(
-            key: const ValueKey<String>('desktop-seek-semantics'),
-            container: true,
-            slider: true,
-            label: '播放进度',
-            value:
-                '${legacyDuration(Duration(milliseconds: (duration.inMilliseconds * fraction).round()))} / ${legacyDuration(duration)}',
-            increasedValue: '+1%',
-            decreasedValue: '-1%',
-            onIncrease: () =>
-                widget.state.seek((fraction + .01).clamp(0.0, 1.0)),
-            onDecrease: () =>
-                widget.state.seek((fraction - .01).clamp(0.0, 1.0)),
-            child: ExcludeSemantics(
-              child: PlayerSeekBar(
-                key: const ValueKey<String>('desktop-seek-bar'),
-                progress: fraction,
-                buffered: widget.state.bufferedFraction,
-                debugPrefix: 'desktop',
-                onPreview: (double value) => setState(() => _drag = value),
-                onCommit: (double value) {
-                  setState(() => _drag = null);
-                  widget.state.seek(value);
-                },
-                onCancel: () => setState(() => _drag = null),
-                feedback: widget.state.feedback,
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 62,
-          child: _TimeLabel(legacyDuration(duration), align: TextAlign.end),
-        ),
-      ],
-    );
-  }
+    ),
+  );
 }
 
-/// Reports the child's height while open and nothing while collapsed, without
-/// unmounting it. The child is still laid out, but its box is clipped to the
-/// reported size so a hidden transport cannot extend past the screen.
-class _Collapsible extends SingleChildRenderObjectWidget {
-  const _Collapsible({required this.collapsed, required super.child});
-
-  final bool collapsed;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderCollapsible(collapsed);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderCollapsible renderObject,
-  ) {
-    renderObject.collapsed = collapsed;
-  }
-}
-
-class _RenderCollapsible extends RenderProxyBox {
-  _RenderCollapsible(this._collapsed);
-
-  bool _collapsed;
-
-  bool get collapsed => _collapsed;
-
-  set collapsed(bool value) {
-    if (_collapsed == value) return;
-    _collapsed = value;
-    markNeedsLayout();
-  }
-
-  @override
-  double computeMinIntrinsicHeight(double width) =>
-      _collapsed ? 0 : super.computeMinIntrinsicHeight(width);
-
-  @override
-  double computeMaxIntrinsicHeight(double width) =>
-      _collapsed ? 0 : super.computeMaxIntrinsicHeight(width);
-
-  @override
-  Size computeDryLayout(BoxConstraints constraints) {
-    if (_collapsed) return Size(constraints.maxWidth, 0);
-    return child?.getDryLayout(constraints) ?? Size.zero;
-  }
-
-  @override
-  void performLayout() {
-    final RenderBox? current = child;
-    if (current == null) {
-      size = constraints.constrain(Size.zero);
-      return;
-    }
-    current.layout(constraints, parentUsesSize: true);
-    size = _collapsed
-        ? constraints.constrain(Size(current.size.width, 0))
-        : constraints.constrain(current.size);
-  }
-
-  @override
-  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
-    if (_collapsed) return false;
-    return super.hitTestChildren(result, position: position);
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    if (_collapsed) return;
-    super.paint(context, offset);
-  }
-}
-
-class _MobileTransport extends StatefulWidget {
-  const _MobileTransport({
-    required this.state,
-    required this.landscape,
-    required this.onOpenPanel,
-    required this.onInteract,
-  });
-
-  final AppState state;
-  final bool landscape;
-  final ValueChanged<_SidePanel> onOpenPanel;
-  final VoidCallback onInteract;
-
-  @override
-  State<_MobileTransport> createState() => _MobileTransportState();
-}
-
-class _MobileTransportState extends State<_MobileTransport> {
-  double? _drag;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    final ColorScheme scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-      child: Container(
-        key: const ValueKey<String>('now-playing-transport'),
-        decoration: BoxDecoration(
-          color: apple.glassStrong,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: .12),
-            width: .5,
-          ),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: Colors.black.withValues(alpha: .28),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        padding: EdgeInsets.fromLTRB(
-          12,
-          widget.landscape ? 6 : 8,
-          12,
-          widget.landscape ? 4 : 7,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            if (!widget.landscape) ...<Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextButton.icon(
-                      key: const ValueKey<String>('mobile-queue'),
-                      onPressed: feedbackAction(
-                        context,
-                        () => widget.onOpenPanel(_SidePanel.queue),
-                      ),
-                      icon: const Icon(Icons.queue_music_rounded, size: 17),
-                      label: const Text('播放队列'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xB3FFFFFF),
-                        backgroundColor: Colors.white.withValues(alpha: .08),
-                        minimumSize: const Size(0, 38),
-                        shape: const StadiumBorder(),
-                        textStyle: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextButton.icon(
-                      key: const ValueKey<String>('mobile-comments'),
-                      onPressed: feedbackAction(
-                        context,
-                        () => widget.onOpenPanel(_SidePanel.comments),
-                      ),
-                      icon: const Icon(Icons.mode_comment_outlined, size: 17),
-                      label: const Text('查看评论'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xB3FFFFFF),
-                        backgroundColor: Colors.white.withValues(alpha: .08),
-                        minimumSize: const Size(0, 38),
-                        shape: const StadiumBorder(),
-                        textStyle: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-            ],
-            AnimatedBuilder(
-              animation: widget.state.ticks,
-              builder: (BuildContext context, Widget? _) => _seekRow(),
-            ),
-            SizedBox(height: widget.landscape ? 1 : 2),
-            _TransportControls(state: widget.state, compact: true),
-            if ((widget.state.playbackError ?? widget.state.likeError)
-                case final String issue when issue.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Text(
-                  issue,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 10, color: scheme.error),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _seekRow() {
-    final Track? track = widget.state.current;
-    final Duration duration = track?.duration ?? Duration.zero;
-    final double live = duration.inMilliseconds <= 0
-        ? 0
-        : (widget.state.precisePosition.inMilliseconds /
-                  duration.inMilliseconds)
-              .clamp(0.0, 1.0);
-    final double fraction = (_drag ?? live).clamp(0.0, 1.0);
-    return Row(
-      children: <Widget>[
-        SizedBox(
-          width: widget.landscape ? 34 : 40,
-          child: _TimeLabel(
-            legacyDuration(
-              Duration(
-                milliseconds: (duration.inMilliseconds * fraction).round(),
-              ),
-            ),
-            align: TextAlign.start,
-          ),
-        ),
-        Expanded(
-          child: Semantics(
-            key: const ValueKey<String>('now-playing-seek-semantics'),
-            container: true,
-            slider: true,
-            label: '播放进度',
-            value:
-                '${legacyDuration(Duration(milliseconds: (duration.inMilliseconds * fraction).round()))} / ${legacyDuration(duration)}',
-            increasedValue: '+1%',
-            decreasedValue: '-1%',
-            onIncrease: () =>
-                widget.state.seek((fraction + .01).clamp(0.0, 1.0)),
-            onDecrease: () =>
-                widget.state.seek((fraction - .01).clamp(0.0, 1.0)),
-            child: ExcludeSemantics(
-              child: PlayerSeekBar(
-                key: ValueKey<String>('now-playing-seek-${track?.id}'),
-                progress: fraction,
-                buffered: widget.state.bufferedFraction,
-                debugPrefix: 'now-playing',
-                height: widget.landscape ? 26 : 30,
-                onPreview: (double value) {
-                  widget.onInteract();
-                  setState(() => _drag = value);
-                },
-                onCommit: (double value) {
-                  widget.onInteract();
-                  setState(() => _drag = null);
-                  widget.state.seek(value);
-                },
-                onCancel: () {
-                  widget.onInteract();
-                  setState(() => _drag = null);
-                },
-                feedback: widget.state.feedback,
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: widget.landscape ? 34 : 40,
-          child: _TimeLabel(legacyDuration(duration), align: TextAlign.end),
-        ),
-      ],
-    );
-  }
-}
-
-class _TransportControls extends StatelessWidget {
-  const _TransportControls({required this.state, required this.compact});
-
-  final AppState state;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final double side = compact ? 38 : 44;
-    final double play = compact ? 48 : 54;
-    final double glyph = compact ? 21 : 25;
-    final IconData repeatIcon = switch (state.repeat) {
-      LoopMode.off => Icons.repeat_rounded,
-      LoopMode.all => Icons.repeat_on_rounded,
-      LoopMode.one => Icons.repeat_one_on_rounded,
-    };
-    final String repeatTip = switch (state.repeat) {
-      LoopMode.off => '顺序播放',
-      LoopMode.all => '列表循环',
-      LoopMode.one => '单曲循环',
-    };
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        _TransportIcon(
-          tooltip: '随机播放',
-          icon: Icons.shuffle_rounded,
-          selected: state.shuffle,
-          size: side,
-          iconSize: compact ? 18 : 20,
-          onPressed: state.toggleShuffle,
-        ),
-        const SizedBox(width: 2),
-        _TransportIcon(
-          tooltip: '上一首',
-          icon: Icons.skip_previous_rounded,
-          size: side,
-          iconSize: glyph,
-          onPressed: state.current == null ? null : state.previous,
-        ),
-        const SizedBox(width: 2),
-        IconButton(
-          key: const ValueKey<String>('now-playing-play'),
-          tooltip: state.playing ? '暂停' : '播放',
-          onPressed: state.current == null
-              ? null
-              : feedbackAction(context, state.togglePlay),
-          iconSize: compact ? 25 : 28,
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
-            disabledBackgroundColor: Colors.white.withValues(alpha: .16),
-            disabledForegroundColor: Colors.black38,
-            fixedSize: Size.square(play),
-            minimumSize: Size.square(play),
-            maximumSize: Size.square(play),
-            shape: const CircleBorder(),
-          ),
-          icon: Icon(
-            state.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          ),
-        ),
-        const SizedBox(width: 2),
-        _TransportIcon(
-          tooltip: '下一首',
-          icon: Icons.skip_next_rounded,
-          size: side,
-          iconSize: glyph,
-          onPressed: state.current == null ? null : state.next,
-        ),
-        const SizedBox(width: 2),
-        _TransportIcon(
-          tooltip: repeatTip,
-          icon: repeatIcon,
-          selected: state.repeat != LoopMode.off,
-          size: side,
-          iconSize: compact ? 18 : 20,
-          onPressed: state.cycleRepeat,
-        ),
-      ],
-    );
-  }
-}
-
-class _TransportIcon extends StatelessWidget {
-  const _TransportIcon({
-    required this.tooltip,
+class _ControlIcon extends StatefulWidget {
+  const _ControlIcon({
     required this.icon,
-    required this.size,
-    required this.iconSize,
-    required this.onPressed,
-    this.selected = false,
+    required this.onTap,
+    this.active = false,
+    this.tooltip,
+    this.size = 26,
   });
 
-  final String tooltip;
   final IconData icon;
+  final VoidCallback? onTap;
+  final bool active;
+  final String? tooltip;
   final double size;
-  final double iconSize;
-  final VoidCallback? onPressed;
-  final bool selected;
 
   @override
-  Widget build(BuildContext context) {
-    final Color accent = Theme.of(context).colorScheme.secondary;
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: feedbackAction(context, onPressed),
-      iconSize: iconSize,
-      padding: EdgeInsets.zero,
-      constraints: BoxConstraints.tightFor(width: size, height: size),
-      style: IconButton.styleFrom(
-        foregroundColor: selected ? accent : const Color(0xB3FFFFFF),
-        disabledForegroundColor: const Color(0x42FFFFFF),
-      ),
-      icon: Icon(icon),
-    );
-  }
+  State<_ControlIcon> createState() => _ControlIconState();
 }
 
-class _TimeLabel extends StatelessWidget {
-  const _TimeLabel(this.text, {required this.align});
-
-  final String text;
-  final TextAlign align;
+class _ControlIconState extends State<_ControlIcon> {
+  bool _hovering = false;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      textAlign: align,
-      style: const TextStyle(
-        fontSize: 10.5,
-        color: Color(0x66FFFFFF),
-        fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+    final bool enabled = widget.onTap != null;
+    final Color color = !enabled
+        ? context.colors.cloudMedium
+        : widget.active || _hovering
+        ? context.colors.slateDark
+        : context.colors.cloudDark;
+    final Widget btn = MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTap: feedbackAction(context, widget.onTap),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Icon(widget.icon, size: widget.size, color: color),
+          ),
+        ),
       ),
     );
+    return widget.tooltip == null
+        ? btn
+        : AccessibleTooltip(message: widget.tooltip!, child: btn);
   }
 }
 
-class PlayerSeekBar extends StatefulWidget {
-  const PlayerSeekBar({
-    super.key,
-    required this.progress,
-    required this.buffered,
-    required this.debugPrefix,
-    required this.onPreview,
-    required this.onCommit,
-    required this.onCancel,
-    this.feedback,
-    this.height = 30,
-  });
+class _BigPlayPause extends StatelessWidget {
+  const _BigPlayPause({required this.playing, required this.onTap});
 
-  final double progress;
-  final double buffered;
-  final String debugPrefix;
-  final ValueChanged<double> onPreview;
-  final ValueChanged<double> onCommit;
-  final VoidCallback onCancel;
-
-  /// Detent ticks while the thumb moves, so dragging feels like a notched dial.
-  final Future<void> Function({bool detent, bool boundary})? feedback;
-  final double height;
+  final bool playing;
+  final VoidCallback onTap;
 
   @override
-  State<PlayerSeekBar> createState() => _PlayerSeekBarState();
+  Widget build(BuildContext context) => AccessibleIconButton(
+    key: const ValueKey('now-playing-play'),
+    tooltip: playing ? '暂停' : '播放',
+    onPressed: onTap,
+    iconSize: 38,
+    padding: EdgeInsets.zero,
+    constraints: const BoxConstraints.tightFor(width: 68, height: 68),
+    color: context.colors.onPlayer,
+    style: IconButton.styleFrom(
+      backgroundColor: Colors.transparent,
+      foregroundColor: context.colors.onPlayer,
+      hoverColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      minimumSize: const Size(68, 68),
+      shape: const CircleBorder(),
+    ),
+    icon: AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      child: Icon(
+        playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        key: ValueKey(playing),
+        size: 38,
+      ),
+    ),
+  );
 }
 
-class _PlayerSeekBarState extends State<PlayerSeekBar> {
-  double? _hover;
-  double? _drag;
-  final SeekDetents _detents = SeekDetents();
+class _EmptyNowPlaying extends StatelessWidget {
+  const _EmptyNowPlaying({required this.onBack});
 
-  void _tick(double value, {required bool grabbed}) {
-    final Future<void> Function({bool detent, bool boundary})? feedback =
-        widget.feedback;
-    if (feedback == null) return;
-    if (grabbed) {
-      _detents.begin(value);
-      unawaited(feedback(detent: true));
-      return;
-    }
-    if (_detents.update(value)) {
-      unawaited(
-        feedback(detent: true, boundary: value <= 0 || value >= 1),
-      );
-    }
-  }
-
-  double _fractionAt(double dx, double width) =>
-      width <= 0 ? 0 : (dx / width).clamp(0.0, 1.0);
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final double width = constraints.maxWidth;
-        final double played = (_drag ?? widget.progress).clamp(0.0, 1.0);
-        // Hovering only enlarges the thumb; it must not preview the seek
-        // position, so the thumb stays on the real playback progress until a
-        // tap or drag starts.
-        final double thumbFraction = (_drag ?? played).clamp(0.0, 1.0);
-        const double thumbSlot = 12;
-        final double travel = math.max(0, width - thumbSlot);
-        final double trackTop = widget.height / 2 - 1.5;
-        return MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onHover: (PointerHoverEvent event) => setState(
-            () => _hover = _fractionAt(event.localPosition.dx, width),
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TrText('没有正在播放的曲目', style: context.type.subheading),
+          const SizedBox(height: AppSpacing.sm),
+          TrText(
+            '回到曲库，翻开一页吧。',
+            style: context.type.bodyMuted.copyWith(fontSize: 16),
           ),
-          onExit: (_) => setState(() => _hover = null),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (TapDownDetails details) {
-              final double value = _fractionAt(details.localPosition.dx, width);
-              setState(() => _drag = value);
-              _tick(value, grabbed: true);
-              widget.onPreview(value);
-            },
-            onTapUp: (TapUpDetails details) {
-              final double value = _fractionAt(details.localPosition.dx, width);
-              setState(() => _drag = null);
-              _detents.end();
-              widget.onCommit(value);
-            },
-            onHorizontalDragStart: (DragStartDetails details) {
-              final double value = _fractionAt(details.localPosition.dx, width);
-              setState(() => _drag = value);
-              _tick(value, grabbed: true);
-              widget.onPreview(value);
-            },
-            onHorizontalDragUpdate: (DragUpdateDetails details) {
-              final double value = _fractionAt(details.localPosition.dx, width);
-              setState(() => _drag = value);
-              _tick(value, grabbed: false);
-              widget.onPreview(value);
-            },
-            onHorizontalDragEnd: (_) {
-              final double value = _drag ?? played;
-              setState(() => _drag = null);
-              _detents.end();
-              widget.onCommit(value);
-            },
-            onHorizontalDragCancel: () {
-              setState(() => _drag = null);
-              _detents.end();
-              widget.onCancel();
-            },
-            child: SizedBox(
-              height: widget.height,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: <Widget>[
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: trackTop,
-                    child: Container(
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: .22),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    top: trackTop,
-                    width: width * widget.buffered.clamp(0.0, 1.0),
-                    child: Container(
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: .16),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    top: trackTop,
-                    width: width * played,
-                    child: Container(
-                      key: ValueKey<String>(
-                        '${widget.debugPrefix}-seek-played',
-                      ),
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: travel * thumbFraction,
-                    top: (widget.height - thumbSlot) / 2,
-                    width: thumbSlot,
-                    height: thumbSlot,
-                    child: Center(
-                      child: AnimatedContainer(
-                        key: ValueKey<String>(
-                          '${widget.debugPrefix}-seek-thumb',
-                        ),
-                        duration: const Duration(milliseconds: 120),
-                        width: _hover != null || _drag != null ? 12 : 8,
-                        height: _hover != null || _drag != null ? 12 : 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+          const SizedBox(height: AppSpacing.lg),
+          IvoryButton(label: '返回', onPressed: onBack),
+        ],
+      ),
     );
   }
 }

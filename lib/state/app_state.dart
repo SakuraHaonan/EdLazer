@@ -134,6 +134,7 @@ class AppState extends ChangeNotifier {
   final Catalog catalog;
   StreamSubscription<void>? _completionSubscription;
   static const playbackInterval = Duration(milliseconds: 100);
+  static const lyricFollowInterval = Duration(milliseconds: 5);
   bool hapticsEnabled = true;
   final AppHaptics haptics = AppHaptics();
   Future<void> feedback({bool detent = false, bool boundary = false}) =>

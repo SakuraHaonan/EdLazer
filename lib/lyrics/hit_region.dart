@@ -1,141 +1,100 @@
-﻿// ignore_for_file: prefer_initializing_formals
-
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-/// Restricts hit testing to the actual painted lyric glyph boxes.
-///
-/// A lyric row otherwise owns its full rectangular width, which makes the gaps
-/// between wrapped short lines steal taps meant for the background or a parent
-/// gesture. The custom render object proxies its child but rejects positions
-/// that are not inside a laid-out text box.
+/// Match the painted lines, including short wrapped lines, instead of giving
+/// every lyric the full width of its row as a tap target.
 class LyricTextHitRegion extends SingleChildRenderObjectWidget {
   const LyricTextHitRegion({
     super.key,
     required this.text,
     required this.style,
-    this.textAlign = TextAlign.start,
     required super.child,
   });
-
   final String text;
   final TextStyle style;
-  final TextAlign textAlign;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => _LyricHitRender(
-    text: text,
-    style: style,
-    scaler: MediaQuery.textScalerOf(context),
-    locale: Localizations.maybeLocaleOf(context),
-    direction: Directionality.maybeOf(context) ?? TextDirection.ltr,
-    textAlign: textAlign,
-  );
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderLyricTextHitRegion(
+        text,
+        style,
+        MediaQuery.textScalerOf(context),
+        Localizations.maybeLocaleOf(context),
+      );
 
   @override
   void updateRenderObject(
     BuildContext context,
     covariant RenderObject renderObject,
-  ) {
-    (renderObject as _LyricHitRender).configure(
-      text: text,
-      style: style,
-      scaler: MediaQuery.textScalerOf(context),
-      locale: Localizations.maybeLocaleOf(context),
-      direction: Directionality.maybeOf(context) ?? TextDirection.ltr,
-      textAlign: textAlign,
-    );
-  }
+  ) => (renderObject as _RenderLyricTextHitRegion).configure(
+    text,
+    style,
+    MediaQuery.textScalerOf(context),
+    Localizations.maybeLocaleOf(context),
+  );
 }
 
-class _LyricHitRender extends RenderProxyBox {
-  _LyricHitRender({
-    required String text,
-    required TextStyle style,
-    required TextScaler scaler,
-    required Locale? locale,
-    required TextDirection direction,
-    required TextAlign textAlign,
-  }) : _text = text,
-       _style = style,
-       _scaler = scaler,
-       _locale = locale,
-       _direction = direction,
-       _textAlign = textAlign;
-
-
+class _RenderLyricTextHitRegion extends RenderProxyBox {
+  _RenderLyricTextHitRegion(
+    this._text,
+    this._style,
+    this._scaler,
+    this._locale,
+  );
   String _text;
   TextStyle _style;
   TextScaler _scaler;
   Locale? _locale;
-  TextDirection _direction;
-  TextAlign _textAlign;
   TextPainter? _painter;
-  List<Rect> _boxes = const <Rect>[];
-  double? _measuredWidth;
+  double? _width;
+  List<Rect> _boxes = const [];
 
-  void configure({
-    required String text,
-    required TextStyle style,
-    required TextScaler scaler,
-    required Locale? locale,
-    required TextDirection direction,
-    required TextAlign textAlign,
-  }) {
+  void configure(
+    String text,
+    TextStyle style,
+    TextScaler scaler,
+    Locale? locale,
+  ) {
     if (_text == text &&
         _style == style &&
         _scaler == scaler &&
-        _locale == locale &&
-        _direction == direction &&
-        _textAlign == textAlign) {
+        _locale == locale) {
       return;
     }
     _text = text;
     _style = style;
     _scaler = scaler;
     _locale = locale;
-    _direction = direction;
-    _textAlign = textAlign;
     _painter?.dispose();
     _painter = null;
-    _measuredWidth = null;
     markNeedsLayout();
   }
 
   @override
   void performLayout() {
     super.performLayout();
-    if (size.width <= 0 || size.height <= 0) {
-      _boxes = const <Rect>[];
-      return;
-    }
-    if (_painter != null && _measuredWidth == size.width) return;
-    _measuredWidth = size.width;
+    if (_painter != null && _width == size.width) return;
+    _width = size.width;
     _painter?.dispose();
-    final TextPainter painter = _painter = TextPainter(
+    final painter = _painter = TextPainter(
       text: TextSpan(text: _text, style: _style),
-      textDirection: _direction,
+      textDirection: TextDirection.ltr,
       textScaler: _scaler,
       locale: _locale,
-      textAlign: _textAlign,
     )..layout(maxWidth: size.width);
-    final int length = _text.trimRight().length;
-    _boxes = length <= 0
-        ? const <Rect>[]
-        : painter
-              .getBoxesForSelection(
-                TextSelection(baseOffset: 0, extentOffset: length),
-              )
-              .map((TextBox box) => box.toRect())
-              .where((Rect rect) => !rect.isEmpty)
-              .toList(growable: false);
+    _boxes = painter
+        .getBoxesForSelection(
+          TextSelection(baseOffset: 0, extentOffset: _text.trimRight().length),
+        )
+        .map((box) => box.toRect())
+        .where((box) => !box.isEmpty)
+        .toList();
   }
 
   @override
-  bool hitTest(BoxHitTestResult result, {required Offset position}) {
-    if (!_boxes.any((Rect rect) => rect.contains(position))) return false;
-    return super.hitTest(result, position: position);
-  }
+  bool hitTest(BoxHitTestResult result, {required Offset position}) =>
+      _boxes.any((box) => box.contains(position)) &&
+      super.hitTest(result, position: position);
 
   @override
   void dispose() {

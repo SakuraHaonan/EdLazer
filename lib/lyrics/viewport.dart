@@ -1,44 +1,35 @@
+import 'package:lazer_nextgen/theme/app_palette.dart';
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Adapted lyric animation; reference: README.md. License: licenses/lyric_animation/AGPL-3.0.txt.
+import '../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
-import '../data/models.dart';
+import '../animation/lyric_spring.dart';
+import '../data/lyrics.dart';
+import '../data/lyric_selection.dart';
+import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
-import 'edge_fade.dart';
-import 'image_export.dart';
-import 'lyric_document.dart';
-import 'selection.dart';
-import 'selection_bar.dart';
-import 'spring.dart';
-import 'timed_line.dart';
+import '../widgets/lyric_selection_toolbar.dart';
+import '../widgets/lyric_image_dialog.dart';
+import '../widgets/lyric_edge_fade.dart';
+import '../widgets/timed_lyric_text.dart';
+import '../widgets/lyric_text_hit_region.dart';
 
-/// Apple Music/AMLL-style lyric sheet with lazy line mounting, live word
-/// painting, manual scroll suspension, selection and image export.
-///
-/// The public surface stays intentionally small: the viewport consumes the
-/// shared [AppState], draws the current lyric document and owns only the
-/// reading interaction. Cached line widgets stay independent of the scroll
-/// viewport so a long song never materialises the whole lyric column.
+/// children stay cached while the ticker only updates their transforms.
 class LyricViewport extends StatefulWidget {
   const LyricViewport({
     super.key,
     required this.state,
     this.onSelectionChanged,
-    this.fontSize,
-    this.fontWeight,
-    this.blurEnabled,
   });
-
   final AppState state;
   final ValueChanged<bool>? onSelectionChanged;
-  final double? fontSize;
-  final int? fontWeight;
-  final bool? blurEnabled;
 
   @override
   State<LyricViewport> createState() => _LyricViewportState();
@@ -46,599 +37,510 @@ class LyricViewport extends StatefulWidget {
 
 class _LyricViewportState extends State<LyricViewport>
     with TickerProviderStateMixin {
-  late final Ticker _motionTicker;
-  late final Ticker _wordTicker;
-  Duration _lastMotionTick = Duration.zero;
-  bool _seeking = false;
-  double _manualVelocity = 0;
-  VelocityTracker? _pointerVelocity;
-  Timer? _pollTimer;
-  late final AnimationController _blurGate;
-  final ValueNotifier<int> _motionTick = ValueNotifier<int>(0);
-  final ValueNotifier<int> _brightnessTick = ValueNotifier<int>(0);
-  final ValueNotifier<int> _wordTick = ValueNotifier<int>(0);
-
-  /// Never ticked; inactive rows paint a static bright layer, so they must not
-  /// re-rasterise (and re-blur) on every word frame.
-  final ValueNotifier<int> _idleTick = ValueNotifier<int>(0);
-  final Map<int, AnimationController> _brightnessControllers =
-      <int, AnimationController>{};
-  List<LyricSpring> _scaleSprings = <LyricSpring>[];
-  List<LyricSpring> _rowYSprings = <LyricSpring>[];
-
-  List<LyricLine> _lines = const <LyricLine>[];
+  Ticker? _ticker;
+  late final AnimationController _blur = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 320),
+    value: widget.state.lyricBlurEnabled ? 1 : 0,
+  );
+  final ValueNotifier<int> _frames = ValueNotifier(0);
+  final Stopwatch _wall = Stopwatch()..start();
+  List<LyricLine> _lines = [];
   bool _hasWordTimings = false;
-  int _active = 0;
-  String? _trackId;
-  (double, int, bool)? _styleSnapshot;
-  List<double> _heights = const <double>[];
-  List<double> _prefix = const <double>[];
-  List<LyricLine>? _measuredLines;
-  double _measuredWidth = -1;
-  double _measuredFont = -1;
-  int _measuredWeight = -1;
-  TextScaler? _measuredScaler;
-  double _viewportHeight = 0;
+  List<LyricSpring> _ys = [];
+  List<LyricSpring> _scales = [];
+  List<double> _heights = [];
+  List<double> _prefix = [];
   double _rowUnit = 0;
-
-  bool _positioned = false;
+  List<Widget> _rows = [];
+  Size _size = Size.zero;
+  double get _gutter =>
+      math.min(LyricEdgeFade.horizontalExtent, _size.width * 0.1);
+  double get _textWidth => math.max(1.0, _size.width - _gutter * 2);
+  TextScaler? _textScaler;
+  double? _fontSize;
+  int? _fontWeight;
+  int _active = -1;
+  bool _playing = false;
   bool _manual = false;
-  bool _pointerDown = false;
-  double _pointerTravel = 0;
-  Timer? _resumeTimer;
-  Timer? _wheelTimer;
-
+  bool _dragging = false;
+  int? _middlePointer;
+  double _offset = 0;
+  double _velocity = 0;
+  Duration _lastFrame = Duration.zero;
+  Duration? _lastMedia;
+  int _lastWall = 0;
+  Timer? _resume;
+  Timer? _followClock;
+  bool _clockVisible = true;
+  double _dragCarry = 0;
   LyricSelection _selection = const LyricSelection();
   bool _copied = false;
   Timer? _copiedTimer;
-
-  AppState get _state => widget.state;
-  double get _fontSize => widget.fontSize ?? _state.lyricFontSize;
-  int get _fontWeight => widget.fontWeight ?? _state.lyricFontWeight;
-  bool get _blurEnabled => widget.blurEnabled ?? _state.lyricBlurEnabled;
+  int _selectionRevision = 0;
+  String? _trackId;
+  int _dragArmedAt = -1000;
+  bool _extendingSelection = false;
+  final GlobalKey _viewportKey = GlobalKey();
+  late double _blurTarget = widget.state.lyricBlurEnabled ? 1 : 0;
 
   @override
   void initState() {
     super.initState();
-    _motionTicker = createTicker(_onMotionTick);
-    _wordTicker = createTicker(_onWordTick);
-    _blurGate = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 320),
-      value: 1,
-    );
-    _trackId = _state.current?.id;
-    _lines = _state.lyrics;
-    _hasWordTimings = _lines.any((LyricLine line) => line.words.isNotEmpty);
-    _styleSnapshot = (_fontSize, _fontWeight, _blurEnabled);
-    _active = _activeAt(_state.precisePosition);
-    _rebuildScaleSprings();
-    _resetBrightnessControllers();
-    _state.all.addListener(_onState);
-    if (_state.playing) _startPolling();
+    _trackId = widget.state.current?.id;
+    widget.state.all.addListener(_onLane);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ticker ??= createTicker(_tick);
+    _clockVisible = TickerMode.valuesOf(context).enabled;
+    _syncFollowClock();
   }
 
   @override
   void didUpdateWidget(covariant LyricViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.state != widget.state) {
-      oldWidget.state.all.removeListener(_onState);
-      widget.state.all.addListener(_onState);
-      _lines = widget.state.lyrics;
-      _active = _activeAt(widget.state.precisePosition);
-      _rebuildScaleSprings();
-      _resetBrightnessControllers();
+      oldWidget.state.all.removeListener(_onLane);
+      widget.state.all.addListener(_onLane);
     }
+    _updateBlur();
+    _syncFollowClock();
   }
 
-  @override
-  void dispose() {
-    _resumeTimer?.cancel();
-    _wheelTimer?.cancel();
-    _copiedTimer?.cancel();
-    _state.all.removeListener(_onState);
-    _stopPolling();
-    _motionTicker.dispose();
-    _wordTicker.dispose();
-    _blurGate.dispose();
-    _disposeBrightnessControllers();
-    _motionTick.dispose();
-    _brightnessTick.dispose();
-    _wordTick.dispose();
-    _idleTick.dispose();
-    super.dispose();
+  void _syncFollowClock() {
+    if (!widget.state.playing ||
+        !_clockVisible ||
+        widget.state.lyrics.isEmpty) {
+      _followClock?.cancel();
+      _followClock = null;
+      return;
+    }
+    _followClock ??= Timer.periodic(
+      AppState.lyricFollowInterval,
+      (_) => _followLine(),
+    );
+  }
+
+  void _followLine() {
+    if (!mounted || !identical(_lines, widget.state.lyrics) || _lines.isEmpty) {
+      return;
+    }
+    final active = _activeAt(widget.state.precisePosition);
+    if (active == _active) return;
+    setState(() {
+      _active = active;
+      _rows = [];
+      _targets();
+      _scaleTargets();
+    });
   }
 
   int _activeAt(Duration position) {
-    if (_lines.isEmpty) return 0;
-    int low = 0;
-    int high = _lines.length;
+    final lines = widget.state.lyrics;
+    var low = 0;
+    var high = lines.length;
     while (low < high) {
-      final int middle = (low + high) ~/ 2;
-      if (_lines[middle].time <= position) {
+      final middle = (low + high) ~/ 2;
+      if (lines[middle].time <= position) {
         low = middle + 1;
       } else {
         high = middle;
       }
     }
-    return low == 0 ? 0 : low - 1;
+    return low - 1;
   }
 
-  void _onState() {
+  bool _isSeek() {
+    final media = widget.state.position;
+    final now = _wall.elapsedMilliseconds;
+    final old = _lastMedia;
+    final wallDelta = (now - _lastWall).clamp(0, 800);
+    _lastMedia = media;
+    _lastWall = now;
+    if (old == null) return false;
+    final delta = (media - old).inMilliseconds;
+    return delta < 0 ||
+        delta - (widget.state.playing ? wallDelta : 0) >
+            (widget.state.playing ? math.max(150, wallDelta * 0.5) : 150);
+  }
+
+  void _onLane() {
     if (!mounted) return;
-    final List<LyricLine> nextLines = _state.lyrics;
-    final String? nextTrack = _state.current?.id;
-    final (double, int, bool) nextStyle = (
-      _fontSize,
-      _fontWeight,
-      _blurEnabled,
-    );
-    final bool documentChanged = !identical(nextLines, _lines);
-    final bool trackChanged = nextTrack != _trackId;
-    final bool styleChanged = nextStyle != _styleSnapshot;
-    final int nextActive = _activeAt(_state.precisePosition);
-    final bool activeChanged = nextActive != _active;
-    var needsBuild = false;
-
-    if (documentChanged || trackChanged) {
-      _trackId = nextTrack;
-      _lines = nextLines;
-      _hasWordTimings = _lines.any((LyricLine line) => line.words.isNotEmpty);
-      _selection = const LyricSelection();
-      _manual = false;
-      _active = nextActive;
-      _blurGate.value = 1;
-      _positioned = false;
-      _rebuildScaleSprings();
-      _resetBrightnessControllers();
-      if (_motionTicker.isActive) _motionTicker.stop();
-      needsBuild = true;
-    } else if (activeChanged) {
-      _seeking = (nextActive - _active).abs() > 1;
-      _active = nextActive;
-      _setLineBrightnessActive(nextActive);
-      if (!_manual && !_selection.active) {
-        _setRowTargets();
-        _setScaleTargets();
-      }
-      needsBuild = true;
-    }
-    if (styleChanged) {
-      _styleSnapshot = nextStyle;
-      needsBuild = true;
-    }
-
-    if (!_state.playing) {
-      _stopPolling();
-      if (_active < _lines.length && _lines[_active].words.isNotEmpty) {
-        _wordTick.value++;
-      }
-    } else {
-      _startPolling();
-    }
-    if (needsBuild) setState(() {});
-  }
-
-  /// The 8 ms timer only tracks the engine clock for line changes. Word
-  /// repaints are driven by [Ticker] so every frame is vsync-aligned; a timer
-  /// based repaint pump aliases against the display refresh and makes the
-  /// per-glyph float animation visibly stutter.
-  void _startPolling() {
-    _pollTimer ??= Timer.periodic(const Duration(milliseconds: 8), (_) {
-      _pollActiveLine();
-    });
-    if (_hasWordTimings && _state.playing) {
-      if (!_wordTicker.isActive) _wordTicker.start();
-    } else if (_wordTicker.isActive) {
-      _wordTicker.stop();
-    }
-  }
-
-  void _pollActiveLine() {
-    if (!mounted) {
-      _stopPolling();
-      return;
-    }
-    if (!_state.playing) {
-      _stopPolling();
-      return;
-    }
-    final int active = _activeAt(_state.precisePosition);
-    if (active != _active) {
-      _seeking = (active - _active).abs() > 1;
-      setState(() => _active = active);
-      _setLineBrightnessActive(active);
-      if (!_manual && !_selection.active) {
-        _setRowTargets();
-        _setScaleTargets();
+    final active = _activeAt(widget.state.precisePosition);
+    final seeking = _isSeek();
+    final changed = !identical(_lines, widget.state.lyrics);
+    final typographyChanged =
+        _fontSize != widget.state.lyricFontSize ||
+        _fontWeight != widget.state.lyricFontWeight;
+    if (_trackId != widget.state.current?.id) {
+      _trackId = widget.state.current?.id;
+      if (_selection.active) {
+        _changeSelection(const LyricSelection(), resume: false);
       }
     }
-  }
-
-  /// One repaint per displayed frame while word-timed lyrics are playing.
-  void _onWordTick(Duration elapsed) {
-    if (!mounted || !_state.playing) {
-      _stopPolling();
-      return;
-    }
-    if (_active >= 0 &&
-        _active < _lines.length &&
-        _lines[_active].words.isNotEmpty) {
-      _wordTick.value++;
-    }
-  }
-
-  void _stopPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = null;
-    if (_wordTicker.isActive) _wordTicker.stop();
-  }
-
-  AnimationController _brightnessControllerFor(int index, {double value = 0}) {
-    return _brightnessControllers.putIfAbsent(index, () {
-      final AnimationController controller = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 300),
-        reverseDuration: const Duration(milliseconds: 450),
-        value: value,
-      );
-      controller.addListener(() => _brightnessTick.value++);
-      return controller;
-    });
-  }
-
-  void _disposeBrightnessControllers() {
-    for (final AnimationController controller
-        in _brightnessControllers.values) {
-      controller.dispose();
-    }
-    _brightnessControllers.clear();
-  }
-
-  void _resetBrightnessControllers() {
-    _disposeBrightnessControllers();
-    if (_lines.isEmpty) return;
-    final int active = _active.clamp(0, _lines.length - 1);
-    _brightnessControllerFor(active, value: 1);
-  }
-
-  void _setLineBrightnessActive(int active) {
-    if (_lines.isEmpty) return;
-    for (final MapEntry<int, AnimationController> entry
-        in _brightnessControllers.entries) {
-      if (entry.key == active) continue;
-      final AnimationController controller = entry.value;
-      if (controller.value > 0) {
-        controller.animateTo(
-          0,
-          duration: const Duration(milliseconds: 450),
-          curve: Curves.easeOut,
+    if (changed) {
+      _resume?.cancel();
+      if (_selection.active) {
+        final available = {
+          for (final line in widget.state.lyrics) ?lyricSelectionKey(line),
+        };
+        final retained = _selection.keys.intersection(available);
+        _changeSelection(
+          retained.isEmpty
+              ? const LyricSelection()
+              : LyricSelection(
+                  anchor: retained.contains(_selection.anchor)
+                      ? _selection.anchor
+                      : retained.first,
+                  keys: retained,
+                ),
+          resume: false,
         );
       }
+      _manual = _selection.active;
+      _velocity = 0;
     }
-    final AnimationController current = _brightnessControllerFor(active);
-    current.animateTo(
-      1,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
+    if (changed ||
+        typographyChanged ||
+        active != _active ||
+        _playing != widget.state.playing) {
+      setState(() {
+        _active = active;
+        _playing = widget.state.playing;
+        _rows = [];
+        if (!changed && !_manual) _targets(seeking: seeking);
+        _scaleTargets();
+      });
+    }
+    // Paused seeks within one line still change the word mask.
+    _frames.value++;
+    _updateBlur();
+    _syncFollowClock();
+  }
+
+  void _updateBlur() {
+    final target = widget.state.lyricBlurEnabled && !_manual ? 1.0 : 0.0;
+    if (_blurTarget != target) {
+      _blurTarget = target;
+      _blur.animateTo(target, curve: Curves.easeOutCubic);
+    }
+  }
+
+  /// Blur tracks how far a row sits from the focus band instead of its index
+  /// gap, so it ramps in and out as rows travel rather than snapping to zero
+  /// the instant a line becomes active.
+  double _sigma(int i) {
+    if (_rowUnit <= 0 || _blur.value <= 0) return 0;
+    final centre = _ys[i].value + _heights[i] * 0.5;
+    final distance = (centre - _size.height * 0.35).abs() / _rowUnit;
+    return math.min(5.0, distance * 1.55) * _blur.value;
+  }
+
+  /// Dissolves rows into the viewport edges so the clip never slices a blurred
+  /// line clean in half.
+  Widget _edgeFade(Widget child) => LyricEdgeFade(
+    verticalExtent: math.min(
+      _size.height * 0.22,
+      math.max(28.0, _rowUnit * 1.15),
+    ),
+    child: child,
+  );
+
+  void _start() {
+    final Ticker? ticker = _ticker;
+    if (ticker != null && !ticker.isActive) {
+      _lastFrame = Duration.zero;
+      ticker.start();
+    }
+  }
+
+  void _tick(Duration elapsed) {
+    final dt = ((elapsed - _lastFrame).inMicroseconds / 1e6).clamp(0.0, 0.1);
+    _lastFrame = elapsed;
+    if (widget.state.playing) _followLine();
+    if (_manual && !_dragging && _velocity.abs() > 5 && dt > 0) {
+      final previous = _offset;
+      _setOffset(_offset + _velocity * dt);
+      _velocity *= math.pow(widget.state.scrollRetention, dt * 60);
+      if (_offset == previous) _velocity = 0;
+    }
+    var moving =
+        _manual && _velocity.abs() > 5 ||
+        widget.state.playing && _hasWordTimings;
+    for (var i = 0; i < _ys.length; i++) {
+      _ys[i].update(dt);
+      _scales[i].update(dt);
+      moving = moving || !_ys[i].arrived || !_scales[i].arrived;
+    }
+    _frames.value++;
+    if (!moving) _ticker?.stop();
+  }
+
+  void _scaleTargets() {
+    for (var i = 0; i < _scales.length; i++) {
+      _scales[i].setTarget(i == _active ? 100 : 97);
+    }
+    if (_scales.isNotEmpty) _start();
+  }
+
+  void _targets({bool seeking = false, bool stagger = true}) {
+    if (_ys.isEmpty || _size.height <= 0 || _manual) return;
+    final focus = _active.clamp(0, _lines.length - 1);
+    final anchor = _prefix[focus] - _size.height * 0.35 + _heights[focus] / 2;
+    final positions = [
+      for (var i = 0; i < _lines.length; i++) _prefix[i] - anchor,
+    ];
+    final params = lyricPositionPolicy(
+      seeking: seeking,
+      intervalMs: focus > 0
+          ? (_lines[focus].time - _lines[focus - 1].time).inMilliseconds
+          : null,
+      endOfSong:
+          widget.state.position >=
+          (widget.state.current?.duration ?? const Duration(days: 1)),
     );
-  }
-
-  double _brightnessFor(int index) {
-    final double normal = _brightnessControllers[index]?.value ?? 0;
-    if (_selection.active) {
-      final bool selected = _selection.keys.contains(
-        lyricSelectionKey(_lines[index]),
-      );
-      // Selection only raises the selected rows to full alpha; every other
-      // row keeps exactly the brightness it had before selection began.
-      return selected ? 1 : normal;
-    }
-    return normal;
-  }
-
-  void _rebuildScaleSprings() {
-    _scaleSprings = <LyricSpring>[
-      for (var i = 0; i < _lines.length; i++)
-        LyricSpring(
-          i == _active ? 100 : 97,
-          params: const LyricSpringParams(mass: 2, damping: 25, stiffness: 100),
-        ),
-    ];
-    _rowYSprings = <LyricSpring>[
-      for (var i = 0; i < _lines.length; i++) LyricSpring(0),
-    ];
-  }
-
-  void _startMotion() {
-    _lastMotionTick = Duration.zero;
-    if (!_motionTicker.isActive) _motionTicker.start();
-  }
-
-  List<double> _lineYDelays(int active) {
-    final List<double> positions = _heights.length == _lines.length
-        ? <double>[
-            for (var i = 0; i < _lines.length; i++)
-              _prefix[i] - _prefix[active],
-          ]
-        : <double>[for (var i = 0; i < _lines.length; i++) (i - active) * 80];
-    final List<double> heights = _heights.length == _lines.length
-        ? _heights
-        : List<double>.filled(_lines.length, 80);
-    return lyricStaggerDelays(
+    final delays = lyricStaggerDelays(
       positions,
-      heights,
-      active,
-      disabled: _seeking || _manual || MediaQuery.disableAnimationsOf(context),
+      _heights,
+      focus,
+      disabled: seeking || !stagger,
     );
-  }
-
-  double _targetYFor(int index, int active) {
-    final double activeTop = _viewportHeight * .35 - _heights[active] / 2;
-    return activeTop + (_prefix[index] - _prefix[active]);
-  }
-
-  void _setRowTargets({bool snap = false}) {
-    if (_heights.length != _lines.length || _viewportHeight <= 0) return;
-    if (_rowYSprings.length != _lines.length) _rebuildScaleSprings();
-    final int active = _active.clamp(0, _lines.length - 1);
-    final Track? track = _state.current;
-    final bool endOfSong =
-        track != null &&
-        track.duration > Duration.zero &&
-        _state.position >= track.duration;
-    final LyricSpringParams params = lyricPositionPolicy(
-      seeking: _seeking,
-      intervalMs: _lyricIntervalMs(),
-      endOfSong: endOfSong,
-    );
-    final List<double> delays = snap
-        ? List<double>.filled(_lines.length, 0)
-        : _lineYDelays(active);
-    final bool immediate =
-        snap || _seeking || _manual || MediaQuery.disableAnimationsOf(context);
-    // The focus row must start rising on the same frame it becomes active.
-    // AMLL's stagger schedule otherwise queues it behind the rows above, so
-    // the blur/scale/word animations lead the float by one step.
-    if (!immediate) delays[active] = 0;
-    for (var i = 0; i < _rowYSprings.length; i++) {
-      final LyricSpring spring = _rowYSprings[i];
-      spring.setParameters(params);
-      final double target = _targetYFor(i, active);
-      if (immediate) {
-        spring.setPosition(target);
-      } else {
-        spring.setTarget(target, delay: delays[i]);
-      }
+    for (var i = 0; i < _ys.length; i++) {
+      _ys[i].setParameters(params);
+      _ys[i].setTarget(positions[i], delay: delays[i]);
     }
-    if (!immediate) _startMotion();
+    _scaleTargets();
+    _start();
   }
 
-  void _setScaleTargets() {
-    if (_scaleSprings.length != _lines.length) _rebuildScaleSprings();
-    if (_scaleSprings.isEmpty) {
-      _motionTicker.stop();
+  TextStyle get _originalStyle => context.type.bodySm.copyWith(
+    fontSize: widget.state.lyricFontSize,
+    height: 1.5,
+    fontWeight: FontWeight.values[widget.state.lyricFontWeight ~/ 100 - 1],
+  );
+  TextStyle get _translationStyle => context.type.bodySm.copyWith(
+    fontSize: (widget.state.lyricFontSize * 16 / 22).clamp(12, 30),
+    height: 1.45,
+    color: Colors.white,
+  );
+  double _measureText(
+    String text,
+    TextStyle style,
+    double width,
+    TextScaler scaler,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+    )..layout(maxWidth: width);
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
+  void _layout(Size size, TextScaler scaler) {
+    final replaced = !identical(_lines, widget.state.lyrics);
+    final typographyChanged =
+        _fontSize != widget.state.lyricFontSize ||
+        _fontWeight != widget.state.lyricFontWeight;
+    if (!replaced &&
+        !typographyChanged &&
+        size == _size &&
+        scaler == _textScaler) {
       return;
     }
-    final int active = _active.clamp(0, _lines.length - 1);
-    for (var i = 0; i < _scaleSprings.length; i++) {
-      final LyricSpring spring = _scaleSprings[i];
-      spring
-        ..setParameters(
-          const LyricSpringParams(mass: 2, damping: 25, stiffness: 100),
-        )
-        ..setTarget(i == active ? 100 : 97);
+    final needsMeasure =
+        replaced ||
+        typographyChanged ||
+        size.width != _size.width ||
+        scaler != _textScaler;
+    _size = size;
+    _textScaler = scaler;
+    _fontSize = widget.state.lyricFontSize;
+    _fontWeight = widget.state.lyricFontWeight;
+    _lines = widget.state.lyrics;
+    _hasWordTimings = _lines.any((line) => line.words.isNotEmpty);
+    _active = _activeAt(widget.state.precisePosition);
+    if (needsMeasure) {
+      _heights = [
+        for (final line in _lines)
+          _measureText(line.text, _originalStyle, _textWidth, scaler) +
+              (line.translation == null
+                  ? 0
+                  : 5 +
+                        _measureText(
+                          line.translation!,
+                          _translationStyle,
+                          _textWidth,
+                          scaler,
+                        )) +
+              20,
+      ];
+      var sum = 0.0;
+      _prefix = [
+        for (final height in _heights)
+          (() {
+            final y = sum;
+            sum += height;
+            return y;
+          })(),
+      ];
+      _rowUnit = _heights.isEmpty ? 0 : sum / _heights.length;
+      _rows = [];
     }
-    _startMotion();
-  }
-
-  int? _lyricIntervalMs() {
-    if (_active <= 0 || _active >= _lines.length) {
-      if (_lines.length < 2) return null;
-      return (_lines[1].time - _lines[0].time).inMilliseconds;
+    if (replaced) {
+      _ys = [
+        for (var i = 0; i < _lines.length; i++) LyricSpring(size.height * 2),
+      ];
+      _scales = [
+        for (var i = 0; i < _lines.length; i++)
+          LyricSpring(
+            i == _active ? 100 : 97,
+            params: const LyricSpringParams(
+              mass: 2,
+              damping: 25,
+              stiffness: 100,
+            ),
+          ),
+      ];
+      _manual = _selection.active;
     }
-    return (_lines[_active].time - _lines[_active - 1].time).inMilliseconds;
-  }
-
-  void _onMotionTick(Duration elapsed) {
-    if (!mounted) {
-      _motionTicker.stop();
-      return;
-    }
-    if (_lastMotionTick == Duration.zero) {
-      _lastMotionTick = elapsed;
-      return;
-    }
-    final double dt = ((elapsed - _lastMotionTick).inMicroseconds / 1e6).clamp(
-      0.0,
-      .05,
-    );
-    _lastMotionTick = elapsed;
-    var moving = false;
     if (_manual) {
-      if (_manualVelocity.abs() > 5) {
-        final double deltaY = _manualVelocity * dt;
-        final double moved = _shiftRows(deltaY);
-        if (moved.abs() < deltaY.abs() - .001) {
-          _manualVelocity = 0;
-        } else {
-          _manualVelocity *= math
-              .pow(_state.scrollRetention, dt * 60)
-              .toDouble();
-        }
-        moving = _manualVelocity.abs() > 5;
-      }
+      _setOffset(_offset);
     } else {
-      for (final LyricSpring spring in _rowYSprings) {
-        spring.update(dt);
-        moving = moving || !spring.arrived;
-      }
-      for (final LyricSpring spring in _scaleSprings) {
-        spring.update(dt);
-        moving = moving || !spring.arrived;
-      }
-      _motionTick.value++;
-    }
-    if (!moving) {
-      _seeking = false;
-      _motionTicker.stop();
+      _targets(stagger: false);
     }
   }
 
-  /// Clamp manual content movement to the first/last lyric.
-  ///
-  /// The top limit pins the first line to the focus band; the bottom limit
-  /// pins the last line there as well. This is the same safe scroll interval
-  /// AMLL's LayoutCalculator exposes to its scroll engine.
-  double _shiftRows(double requested) {
-    if (_rowYSprings.isEmpty ||
-        _rowYSprings.length != _heights.length ||
-        _viewportHeight <= 0) {
-      return 0;
+  void _beginManual({bool stopMomentum = true}) {
+    _resume?.cancel();
+    if (stopMomentum) _velocity = 0;
+    if (_manual || _ys.isEmpty) return;
+    final focus = _active.clamp(0, _lines.length - 1);
+    _offset = _prefix[focus] - _ys[focus].value;
+    _manual = true;
+    _updateBlur();
+    _frames.value++;
+  }
+
+  void _setOffset(double value) {
+    if (_ys.isEmpty) return;
+    final min = -_size.height * 0.35 + _heights.first / 2;
+    final max = math.max(
+      min,
+      _prefix.last - _size.height * 0.35 + _heights.last / 2,
+    );
+    _offset = value.clamp(min, max);
+    for (var i = 0; i < _ys.length; i++) {
+      _ys[i].setPosition(_prefix[i] - _offset);
     }
-    final double focusY = _viewportHeight * .35;
-    final double maxShift =
-        focusY - _heights.first / 2 - _rowYSprings.first.value;
-    final double minShift =
-        focusY - _heights.last / 2 - _rowYSprings.last.value;
-    if (minShift > maxShift) return 0;
-    final double shift = requested.clamp(minShift, maxShift);
-    if (shift.abs() < .001) return 0;
-    for (final LyricSpring spring in _rowYSprings) {
-      spring.setPosition(spring.value + shift);
-    }
-    _motionTick.value++;
-    return shift;
+    _frames.value++;
   }
 
-  void _beginManual() {
-    if (_manual) return;
-    _resumeTimer?.cancel();
-    if (_motionTicker.isActive) _motionTicker.stop();
-    setState(() => _manual = true);
-    _blurGate.animateTo(0, curve: Curves.easeOutCubic);
-  }
-
-  void _scheduleResume({Duration? after}) {
-    _resumeTimer?.cancel();
-    final Duration delay =
-        after ??
-        Duration(milliseconds: (_state.lyricResumeSeconds * 1000).round());
-    _resumeTimer = Timer(delay, () {
-      if (!mounted || _selection.active) return;
-      setState(() => _manual = false);
-      _manualVelocity = 0;
-      _blurGate.animateTo(1, curve: Curves.easeOutCubic);
-      _setRowTargets();
-      _setScaleTargets();
-    });
-  }
-
-  void _onPointerDown(PointerDownEvent event) {
-    _pointerDown = true;
-    _pointerTravel = 0;
-    _pointerVelocity = VelocityTracker.withKind(event.kind)
-      ..addPosition(event.timeStamp, event.position);
-  }
-
-  void _onPointerMove(PointerMoveEvent event) {
-    if (!_pointerDown) return;
-    _pointerTravel += event.delta.distance;
-    _pointerVelocity?.addPosition(event.timeStamp, event.position);
-    if (_pointerTravel > 6 && !_manual) _beginManual();
-    if (_manual) {
-      _manualVelocity = 0;
-      _shiftRows(event.delta.dy);
-    }
-  }
-
-  void _onPointerUp(PointerUpEvent event) {
-    if (!_pointerDown) return;
-    _pointerDown = false;
-    final Velocity? velocity = _pointerVelocity?.getVelocity();
-    _pointerVelocity = null;
-    if (_manual) {
-      final double dy = velocity?.pixelsPerSecond.dy ?? 0;
-      if (dy.abs() > 40) {
-        _manualVelocity = dy;
-        _lastMotionTick = Duration.zero;
-        if (!_motionTicker.isActive) _motionTicker.start();
-      } else {
-        _manualVelocity = 0;
-      }
-      _scheduleResume();
-    }
-  }
-
-  void _onPointerCancel(PointerCancelEvent event) {
-    _pointerDown = false;
-    _pointerVelocity = null;
-    _manualVelocity = 0;
-    if (_manual) _scheduleResume();
-  }
-
-  void _onPointerSignal(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent) return;
-    _resumeTimer?.cancel();
-    _beginManual();
-    final double delta = _shiftRows(-event.scrollDelta.dy);
-    _manualVelocity = delta * 18;
-    _lastMotionTick = Duration.zero;
-    if (!_motionTicker.isActive) _motionTicker.start();
-    _motionTick.value++;
-    _wheelTimer?.cancel();
-    _wheelTimer = Timer(
-      const Duration(milliseconds: 820),
-      () => _scheduleResume(),
+  void _scheduleResume() {
+    _resume?.cancel();
+    if (_selection.active) return;
+    _resume = Timer(
+      Duration(milliseconds: (widget.state.lyricResumeSeconds * 1000).round()),
+      () {
+        if (!mounted || _dragging) return;
+        _manual = _selection.active;
+        _velocity = 0;
+        _targets(seeking: true);
+        _updateBlur();
+      },
     );
   }
 
-  void _seekTo(int index) {
-    final Track? track = _state.current;
-    if (track == null || track.duration <= Duration.zero) return;
-    final double fraction =
-        (_lines[index].time.inMilliseconds / track.duration.inMilliseconds)
-            .clamp(0.0, 1.0);
-    _seeking = true;
-    _state.seek(fraction);
-    _wordTick.value++;
-  }
-
-  void _beginSelection(int index) {
-    _resumeTimer?.cancel();
-    if (_motionTicker.isActive) _motionTicker.stop();
-    setState(() {
-      _selection = _selection.begin(_lines, index);
-      _manual = true;
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        _ys.isEmpty ||
+        event.scrollDelta.dy == 0) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      _beginManual(stopMomentum: false);
+      _velocity = ScrollMotion.addWheelImpulse(
+        _velocity,
+        event.scrollDelta.dy,
+        acceleration: widget.state.scrollAcceleration,
+      );
+      _start();
+      _scheduleResume();
     });
-    _blurGate.animateTo(0, curve: Curves.easeOutCubic);
-    widget.onSelectionChanged?.call(_selection.active);
   }
 
-  void _toggleSelection(int index) {
-    setState(() => _selection = _selection.toggle(_lines, index));
-    widget.onSelectionChanged?.call(_selection.active);
+  void _seek(int index) {
+    final duration = widget.state.current?.duration.inMilliseconds ?? 0;
+    if (duration <= 0) return;
+    _resume?.cancel();
+    _manual = false;
+    _velocity = 0;
+    widget.state.seek(_lines[index].time.inMilliseconds / duration);
+    _targets(seeking: true);
+    _updateBlur();
   }
 
-  void _selectAll() {
-    setState(() => _selection = _selection.all(_lines));
-    widget.onSelectionChanged?.call(true);
+  void _tapLine(int index) {
+    unawaited(widget.state.feedback());
+    _seek(index);
   }
 
-  void _closeSelection() {
+  void _changeSelection(LyricSelection next, {bool resume = true}) {
+    final changed = _selection.active != next.active;
     setState(() {
-      _selection = const LyricSelection();
-      _manual = false;
+      _selection = next;
+      _selectionRevision++;
+      _copied = false;
+      _rows = [];
     });
-    widget.onSelectionChanged?.call(false);
-    _blurGate.animateTo(1, curve: Curves.easeOutCubic);
-    _setRowTargets();
-    _setScaleTargets();
+    _copiedTimer?.cancel();
+    if (changed) widget.onSelectionChanged?.call(next.active);
+    if (!next.active && resume) _scheduleResume();
   }
 
-  Future<void> _copySelection() async {
+  void _selectLyrics(int index) {
+    if (lyricSelectionKey(_lines[index]) == null) return;
+    unawaited(widget.state.feedback());
+    _beginManual();
+    // Freeze every row at its painted position, including unfinished springs.
+    for (final spring in _ys) {
+      spring.setPosition(spring.value);
+    }
+    _resume?.cancel();
+    _dragArmedAt = _wall.elapsedMilliseconds;
+    _changeSelection(
+      _selection.active
+          ? _selection.extend(_lines, index)
+          : _selection.begin(_lines, index),
+    );
+  }
+
+  void _extendSelection(Offset globalPosition) {
+    final box = _viewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || _lines.isEmpty) return;
+    final y = box.globalToLocal(globalPosition).dy;
+    var nearest = -1;
+    var distance = double.infinity;
+    for (var i = 0; i < _lines.length; i++) {
+      if (lyricSelectionKey(_lines[i]) == null) continue;
+      final delta = (_ys[i].value + _heights[i] / 2 - y).abs();
+      if (delta < distance) {
+        distance = delta;
+        nearest = i;
+      }
+    }
+    if (nearest >= 0) _changeSelection(_selection.extend(_lines, nearest));
+  }
+
+  Future<void> _copyLyrics() async {
+    final revision = _selectionRevision;
     await Clipboard.setData(ClipboardData(text: _selection.text(_lines)));
-    if (!mounted) return;
+    if (!mounted || revision != _selectionRevision) return;
     setState(() => _copied = true);
     _copiedTimer?.cancel();
     _copiedTimer = Timer(const Duration(seconds: 2), () {
@@ -646,393 +548,284 @@ class _LyricViewportState extends State<LyricViewport>
     });
   }
 
-  Future<void> _exportSelection() async {
-    final Track? track = _state.current;
+  Future<void> _createImage() async {
+    final track = widget.state.current;
     if (track == null) return;
-    final List<LyricLine> selected = <LyricLine>[
-      for (final LyricLine line in _lines)
+    final selected = [
+      for (final line in _lines)
         if (_selection.keys.contains(lyricSelectionKey(line))) line,
     ];
     if (selected.isEmpty) return;
     await showLyricImageDialog(context, track: track, lines: selected);
   }
 
-  TextStyle _mainStyle(BuildContext context) {
-    final int weightIndex = ((_fontWeight ~/ 100) - 1).clamp(0, 8);
-    return Theme.of(context).textTheme.bodyLarge!.copyWith(
-      fontSize: _fontSize,
-      height: 1.5,
-      fontWeight: FontWeight.values[weightIndex],
-      color: Theme.of(context).colorScheme.onSurface,
-    );
-  }
-
-  String get _semanticLabel {
-    if (_selection.active) return '已选择 ${_selection.keys.length} 行歌词';
-    if (_lines.isEmpty) return '歌词';
-    final int index = _active.clamp(0, _lines.length - 1);
-    final LyricLine line = _lines[index];
-    final String? translation = line.translation?.trim();
-    return translation == null || translation.isEmpty
-        ? line.text
-        : '${line.text}\n$translation';
-  }
-
-  TextStyle _translationStyle(BuildContext context) {
-    return Theme.of(context).textTheme.bodySmall!.copyWith(
-      fontSize: (_fontSize * 16 / 22).clamp(12, 30),
-      height: 1.45,
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      // A soft halo keeps the quieter translation readable over the cover
-      // wash. It is painted outside the row's colour filter, which would
-      // otherwise dye the shadow the same colour as the glyphs.
-      shadows: const <Shadow>[
-        Shadow(color: Color(0xE6000000), blurRadius: 10),
-        Shadow(color: Color(0x99000000), blurRadius: 3, offset: Offset(0, 1)),
-      ],
-    );
-  }
-
-  double _emphasisFor(int index) {
-    if (index < 0 || index >= _scaleSprings.length) return 0;
-    return ((_scaleSprings[index].value - 97) / 3).clamp(0.0, 1.0);
-  }
-
-  double _sigmaFor(int index) {
-    if (!_blurEnabled ||
-        _blurGate.value <= 0.001 ||
-        _rowUnit <= 0 ||
-        index >= _rowYSprings.length ||
-        index >= _heights.length) {
-      return 0;
-    }
-    // Derive blur from the row's actual spring position instead of its index:
-    // a row stays soft until it physically arrives in the 35% focus band, so
-    // the blur clears exactly in step with the upward float rather than
-    // finishing ahead of it.
-    final double centre = _rowYSprings[index].value + _heights[index] * 0.5;
-    final double distance = (centre - _viewportHeight * .35).abs() / _rowUnit;
-    final double gate = Curves.easeOutCubic.transform(_blurGate.value);
-    return (math.min(5.0, distance * 1.55) * gate).clamp(0.0, 5.0);
-  }
-
-  double _scaleFor(int index) {
-    if (index < 0 || index >= _scaleSprings.length) return .97;
-    return _scaleSprings[index].value / 100;
-  }
-
-  Color _toneFor(int index, ThemeData theme) {
-    if (_selection.active) {
-      final bool selected = _selection.keys.contains(
-        lyricSelectionKey(_lines[index]),
-      );
-      // The long-press highlight is plain bright white, not the theme accent.
-      return selected ? Colors.white : theme.colorScheme.onSurface;
-    }
-    // Line depth is produced by the AMLL bright/dim brightness layers, not by
-    // changing the semantic text colour per line.
-    return theme.colorScheme.onSurface;
-  }
-
-  Widget _interactive(int index, String text, TextStyle style, Widget child) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _selection.active ? _toggleSelection(index) : _seekTo(index),
-      onLongPress: () => _beginSelection(index),
-      child: child,
-    );
-  }
-
-  Widget _rowBody(int index, ThemeData theme) {
-    final LyricLine line = _lines[index];
-    final TextStyle style = _mainStyle(context);
-    final double brightness = _brightnessFor(index).clamp(0.0, 1.0);
-    final Widget brightMain = line.words.isNotEmpty
-        ? TimedLyricText(
-            line: line,
-            style: style,
-            active: index == _active,
-            emphasis: () => _emphasisFor(index),
-            position: () => _state.precisePosition,
-            repaint: index == _active ? _wordTick : _idleTick,
-          )
-        : Text(
-            line.text.isEmpty ? ' ' : line.text,
-            textAlign: TextAlign.left,
-            textDirection: TextDirection.ltr,
-            style: style,
-          );
-    // AMLL LineBrightness: the dim copy is a plain, unmasked clone at 0.2
-    // opacity; the bright original cross-fades above it. The timed painter
-    // keeps its own 0.4 dark-mask content for unsung words inside the bright
-    // layer, so no second animated copy is needed.
-    final Widget dimMain = IgnorePointer(
-      // RichText keeps the dim clone out of `find.text`/selection hit targets
-      // while matching the exact layout of the bright line.
-      child: RichText(
-        textAlign: TextAlign.left,
-        textDirection: TextDirection.ltr,
-        text: TextSpan(text: line.text.isEmpty ? ' ' : line.text, style: style),
-      ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        _interactive(
-          index,
-          line.text,
-          style,
-          SizedBox(
-            key: ValueKey<String>('lyric-main-$index'),
-            width: double.infinity,
-            child: Stack(
-              children: <Widget>[
-                Opacity(
-                  key: ValueKey<String>('lyric-dim-$index'),
-                  opacity: .2 * (1 - brightness),
-                  child: dimMain,
-                ),
-                Opacity(
-                  key: ValueKey<String>('lyric-bright-$index'),
-                  opacity: brightness,
-                  child: brightMain,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _row(int index, ThemeData theme) {
-    final double sigma = _sigmaFor(index);
-    final Color tone = _toneFor(index, theme);
-    final LyricLine line = _lines[index];
-    final String? translation = line.translation?.trim();
-    final bool translationSelected =
-        _selection.active && _selection.keys.contains(lyricSelectionKey(line));
-    return SizedBox(
-      key: ValueKey<String>('lyric-line-${_state.current?.id}-$index'),
-      height: _heights[index],
-      child: Transform.scale(
-        scale: _scaleFor(index),
-        alignment: Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            ImageFiltered(
-              key: ValueKey<String>('lyric-blur-$index'),
-              enabled: sigma > .02,
-              imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-              child: ColorFiltered(
-                key: ValueKey<String>('lyric-color-$index'),
-                colorFilter: ColorFilter.mode(tone, BlendMode.srcIn),
-                child: RepaintBoundary(child: _rowBody(index, theme)),
-              ),
-            ),
-            // The translation stays outside the depth blur so its halo reads
-            // as a real shadow instead of smearing into the cover wash.
-            if (translation != null && translation.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 5),
-              _interactive(
-                index,
-                translation,
-                _translationStyle(context),
-                Opacity(
-                  key: ValueKey<String>('lyric-translation-$index'),
-                  opacity: translationSelected ? 1 : .72,
-                  child: Text(
-                    translation,
-                    textAlign: TextAlign.left,
-                    textDirection: TextDirection.ltr,
-                    style: _translationStyle(context),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _measureLines(BuildContext context, double width) {
-    final TextScaler scaler = MediaQuery.textScalerOf(context);
-    if (identical(_measuredLines, _lines) &&
-        _measuredWidth == width &&
-        _measuredFont == _fontSize &&
-        _measuredWeight == _fontWeight &&
-        _measuredScaler == scaler) {
-      return;
-    }
-    _measuredLines = _lines;
-    _measuredWidth = width;
-    _measuredFont = _fontSize;
-    _measuredWeight = _fontWeight;
-    _measuredScaler = scaler;
-    final TextStyle main = _mainStyle(context);
-    final TextStyle translation = _translationStyle(context);
-    final double textWidth = math.max(1, width - 36);
-    final List<double> heights = <double>[];
-    final List<double> prefix = <double>[];
-    var sum = 0.0;
-    for (final LyricLine line in _lines) {
-      final double mainHeight = _measureText(
-        line.text,
-        main,
-        textWidth,
-        scaler,
-      );
-      final String? translated = line.translation?.trim();
-      final double translatedHeight = translated == null || translated.isEmpty
-          ? 0
-          : 5 + _measureText(translated, translation, textWidth, scaler);
-      final double height = math.max(52, mainHeight + translatedHeight + 20);
-      prefix.add(sum);
-      heights.add(height);
-      sum += height;
-    }
-    _heights = heights;
-    _prefix = prefix;
-    _rowUnit = heights.isEmpty ? 0 : sum / heights.length;
-    _positioned = false;
-  }
-
-  double _measureText(
+  Widget _interactiveText(
+    int index,
     String text,
     TextStyle style,
-    double width,
-    TextScaler scaler,
-  ) {
-    final TextPainter painter = TextPainter(
-      text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.left,
-      textScaler: scaler,
-    )..layout(maxWidth: width);
-    final double height = painter.height;
-    painter.dispose();
-    return height;
-  }
+    Widget child,
+  ) => LyricTextHitRegion(
+    text: text,
+    style: style,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _selection.active
+          ? _changeSelection(_selection.toggle(_lines, index))
+          : _tapLine(index),
+      onLongPress: () => _selectLyrics(index),
+      onLongPressMoveUpdate: (event) => _extendSelection(event.globalPosition),
+      onLongPressEnd: (_) => _dragArmedAt = _wall.elapsedMilliseconds,
+      child: child,
+    ),
+  );
 
-  Widget _empty(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    if (_state.lyricsLoading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    }
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              _state.lyricsError ??
-                  (_state.lyricsPureMusic ? '纯音乐' : '这首歌暂未提供歌词'),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (!_state.lyricsPureMusic) ...<Widget>[
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () =>
-                    unawaited(_state.ensureCurrentLyrics(force: true)),
-                child: const Text('重新加载歌词'),
-              ),
-            ],
-          ],
-        ),
+  Widget _row(int index) => Semantics(
+    selected: _selection.active
+        ? _selection.keys.contains(lyricSelectionKey(_lines[index]))
+        : null,
+    child: TweenAnimationBuilder<double>(
+      tween: Tween(
+        end: _selection.keys.contains(lyricSelectionKey(_lines[index])) ? 1 : 0,
       ),
-    );
-  }
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      builder: (context, selected, _) => AnimatedOpacity(
+        opacity: _selection.active ? 0.54 + selected * 0.46 : 1,
+        duration: const Duration(milliseconds: 180),
+        child: _rowBody(index, selected),
+      ),
+    ),
+  );
 
-  Widget _lineStack(BoxConstraints constraints, ThemeData theme) {
-    if (_heights.length != _lines.length ||
-        _rowYSprings.length != _lines.length) {
-      _rebuildScaleSprings();
-      _setRowTargets(snap: true);
-    }
-    // AMLL keeps a 40% motion buffer around the viewport so fast springs do
-    // not reveal a row only after it has already entered the visible frame.
-    final double overscan = 72 + constraints.maxHeight * .4;
-    final double width = math.max(0, constraints.maxWidth - 36);
-    final Widget stack = Stack(
-      clipBehavior: Clip.none,
-      children: <Widget>[
-        for (var i = 0; i < _lines.length; i++)
-          if (_rowYSprings[i].value + _heights[i] >= -overscan &&
-              _rowYSprings[i].value <= constraints.maxHeight + overscan)
-            Positioned(
-              key: ValueKey<String>('lyric-position-$i'),
-              top: _rowYSprings[i].value,
-              left: 18,
-              width: width,
-              height: _heights[i],
-              child: _row(i, theme),
+  Widget _rowBody(int index, double selected) {
+    final focused = index == _active;
+    double emphasis() => ((_scales[index].value - 97) / 3).clamp(0.0, 1.0);
+    double mainAlpha() => 0.48 + emphasis() * 0.52;
+    final style = _originalStyle.copyWith(color: Colors.white);
+    return SizedBox(
+      width: _textWidth,
+      height: _heights[index],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedBuilder(
+            animation: _frames,
+            builder: (context, child) => ColorFiltered(
+              key: ValueKey('lyric-color-$index'),
+              colorFilter: ColorFilter.mode(
+                Color.lerp(
+                  Colors.white.withValues(alpha: mainAlpha()),
+                  Colors.white,
+                  selected,
+                )!,
+                BlendMode.srcIn,
+              ),
+              child: child,
             ),
-      ],
-    );
-    return LyricEdgeFade(
-      verticalExtent: _blurEnabled
-          ? math.min(constraints.maxHeight * .18, 64)
-          : math.min(constraints.maxHeight * .11, 44),
-      horizontal: _blurEnabled,
-      child: stack,
+            child: _interactiveText(
+              index,
+              _lines[index].text,
+              style,
+              _lines[index].words.isNotEmpty
+                  ? TimedLyricText(
+                      line: _lines[index],
+                      style: style,
+                      active: focused,
+                      emphasis: emphasis,
+                      position: () => widget.state.precisePosition,
+                      repaint: _frames,
+                    )
+                  : Text(
+                      _lines[index].text.isEmpty ? ' ' : _lines[index].text,
+                      textAlign: TextAlign.left,
+                      textDirection: TextDirection.ltr,
+                      style: style,
+                    ),
+            ),
+          ),
+          if (_lines[index].translation != null) ...[
+            const SizedBox(height: 5),
+            ColorFiltered(
+              colorFilter: ColorFilter.mode(
+                Colors.white.withValues(alpha: mainAlpha() * 0.58),
+                BlendMode.srcIn,
+              ),
+              child: _interactiveText(
+                index,
+                _lines[index].translation!,
+                _translationStyle,
+                Text(
+                  _lines[index].translation!,
+                  textAlign: TextAlign.left,
+                  textDirection: TextDirection.ltr,
+                  style: _translationStyle,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    if (_lines.isEmpty) return _empty(context);
+    if (widget.state.lyricsLoading) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (widget.state.lyrics.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TrText(
+              widget.state.lyricsError ??
+                  (widget.state.lyricsPureMusic ? '纯音乐' : '这首歌暂未提供歌词'),
+              style: context.type.captionMuted,
+            ),
+            if (!widget.state.lyricsPureMusic)
+              TextButton(
+                onPressed: () =>
+                    unawaited(widget.state.ensureCurrentLyrics(force: true)),
+                child: const TrText('重新加载歌词'),
+              ),
+          ],
+        ),
+      );
+    }
     return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        if (!constraints.hasBoundedWidth ||
-            !constraints.hasBoundedHeight ||
-            constraints.maxWidth <= 0 ||
-            constraints.maxHeight <= 0) {
+      builder: (context, box) {
+        if (!box.hasBoundedHeight ||
+            !box.hasBoundedWidth ||
+            box.maxHeight <= 0 ||
+            box.maxWidth <= 0) {
           return const SizedBox.shrink();
         }
-        _measureLines(context, constraints.maxWidth);
-        _viewportHeight = constraints.maxHeight;
-        if (_active >= _lines.length) _active = _lines.length - 1;
-        if (!_positioned) {
-          _positioned = true;
-          _setRowTargets(snap: true);
+        _layout(
+          Size(box.maxWidth, box.maxHeight),
+          MediaQuery.textScalerOf(context),
+        );
+        if (_rows.isEmpty) {
+          _rows = [for (var i = 0; i < _lines.length; i++) _row(i)];
         }
-
         return PopScope<void>(
           canPop: !_selection.active,
-          onPopInvokedWithResult: (bool didPop, Object? result) {
-            if (!didPop && _selection.active) _closeSelection();
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && _selection.active) {
+              _changeSelection(const LyricSelection());
+            }
           },
           child: Stack(
+            key: _viewportKey,
             fit: StackFit.expand,
-            children: <Widget>[
-              Semantics(
-                key: const ValueKey<String>('lyric-live-region'),
-                container: true,
-                liveRegion: true,
-                label: _semanticLabel,
-                child: ExcludeSemantics(
-                  child: Listener(
-                    behavior: HitTestBehavior.opaque,
-                    onPointerDown: _onPointerDown,
-                    onPointerMove: _onPointerMove,
-                    onPointerUp: _onPointerUp,
-                    onPointerCancel: _onPointerCancel,
-                    onPointerSignal: _onPointerSignal,
-                    child: AnimatedBuilder(
-                      animation: Listenable.merge(<Listenable>[
-                        _motionTick,
-                        _brightnessTick,
-                        _blurGate,
-                      ]),
-                      builder: (BuildContext context, Widget? _) =>
-                          _lineStack(constraints, theme),
+            children: [
+              Listener(
+                onPointerSignal: _wheel,
+                onPointerDown: (event) {
+                  if (event.buttons & kMiddleMouseButton != 0) {
+                    _middlePointer = event.pointer;
+                    _dragging = true;
+                    _beginManual();
+                  }
+                },
+                onPointerMove: (event) {
+                  if (event.pointer == _middlePointer) {
+                    _setOffset(_offset - event.delta.dy);
+                  }
+                },
+                onPointerUp: (event) {
+                  if (event.pointer == _middlePointer) {
+                    _middlePointer = null;
+                    _dragging = false;
+                    _scheduleResume();
+                  }
+                },
+                onPointerCancel: (event) {
+                  if (event.pointer == _middlePointer) {
+                    _middlePointer = null;
+                    _dragging = false;
+                    _scheduleResume();
+                  }
+                },
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragStart: (_) {
+                    _extendingSelection =
+                        _selection.active &&
+                        _wall.elapsedMilliseconds - _dragArmedAt < 900;
+                    if (_extendingSelection) return;
+                    _dragging = true;
+                    _dragCarry = _velocity;
+                    _beginManual();
+                  },
+                  onVerticalDragUpdate: (event) => _extendingSelection
+                      ? _extendSelection(event.globalPosition)
+                      : _setOffset(_offset - event.delta.dy),
+                  onVerticalDragEnd: (event) {
+                    if (_extendingSelection) {
+                      _extendingSelection = false;
+                      return;
+                    }
+                    _dragging = false;
+                    final released = -event.velocity.pixelsPerSecond.dy;
+                    _velocity =
+                        released +
+                        (released.sign == _dragCarry.sign
+                            ? ScrollMotion.carriedVelocity(
+                                _dragCarry,
+                                acceleration: widget.state.scrollAcceleration,
+                              )
+                            : 0);
+                    _dragCarry = 0;
+                    _start();
+                    _scheduleResume();
+                  },
+                  onVerticalDragCancel: () {
+                    _extendingSelection = false;
+                    _dragCarry = 0;
+                    _dragging = false;
+                    _scheduleResume();
+                  },
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_frames, _blur]),
+                    builder: (context, _) => _edgeFade(
+                      Stack(
+                        fit: StackFit.expand,
+                        clipBehavior: Clip.none,
+                        children: [
+                          for (var i = 0; i < _lines.length; i++)
+                            if (_ys[i].value + _heights[i] >= -80 &&
+                                _ys[i].value <= _size.height + 80)
+                              Positioned(
+                                key: ValueKey(
+                                  'lyric-line-${widget.state.current?.id}-$i',
+                                ),
+                                top: 0,
+                                left: _gutter,
+                                width: _textWidth,
+                                height: _heights[i],
+                                child: Transform.translate(
+                                  offset: Offset(0, _ys[i].value),
+                                  child: Transform.scale(
+                                    scale: _scales[i].value / 100,
+                                    alignment: Alignment.centerLeft,
+                                    child: ImageFiltered(
+                                      key: ValueKey('lyric-blur-$i'),
+                                      enabled: _sigma(i) > 0.02,
+                                      imageFilter: ui.ImageFilter.blur(
+                                        sigmaX: _sigma(i),
+                                        sigmaY: _sigma(i),
+                                      ),
+                                      child: _lines[i].words.isEmpty
+                                          ? RepaintBoundary(child: _rows[i])
+                                          : _rows[i],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1041,37 +834,35 @@ class _LyricViewportState extends State<LyricViewport>
                 left: 12,
                 right: 12,
                 bottom: 12,
-                child: Center(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
+                    constraints: const BoxConstraints(maxWidth: 480),
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
+                      duration: const Duration(milliseconds: 260),
                       switchInCurve: Curves.easeOutCubic,
                       switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder:
-                          (Widget child, Animation<double> animation) =>
-                              FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: Tween<Offset>(
-                                    begin: const Offset(0, .3),
-                                    end: Offset.zero,
-                                  ).animate(animation),
-                                  child: child,
-                                ),
-                              ),
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween(
+                            begin: const Offset(0, .35),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
                       child: _selection.active
                           ? LyricSelectionToolbar(
-                              key: const ValueKey<String>(
-                                'lyric-selection-toolbar',
-                              ),
+                              key: const ValueKey('lyric-selection-toolbar'),
                               count: _selection.keys.length,
                               copied: _copied,
-                              onSelectAll: _selectAll,
-                              onCopy: () => unawaited(_copySelection()),
-                              onCreateImage: () =>
-                                  unawaited(_exportSelection()),
-                              onClose: _closeSelection,
+                              onSelectAll: () =>
+                                  _changeSelection(_selection.all(_lines)),
+                              onCopy: () => unawaited(_copyLyrics()),
+                              onCreateImage: () => unawaited(_createImage()),
+                              onClose: () =>
+                                  _changeSelection(const LyricSelection()),
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -1083,5 +874,17 @@ class _LyricViewportState extends State<LyricViewport>
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _resume?.cancel();
+    _followClock?.cancel();
+    _copiedTimer?.cancel();
+    widget.state.all.removeListener(_onLane);
+    _ticker?.dispose();
+    _blur.dispose();
+    _frames.dispose();
+    super.dispose();
   }
 }

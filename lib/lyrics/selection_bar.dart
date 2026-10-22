@@ -1,8 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:lazer_nextgen/theme/app_palette.dart';
+import 'package:flutter/material.dart';
 
-import '../theme/apple_design.dart';
+import '../l10n/app_localizations.dart';
+import '../widgets/accessible_controls.dart';
 
-/// Apple-style floating action bar for lyric selection.
 class LyricSelectionToolbar extends StatelessWidget {
   const LyricSelectionToolbar({
     super.key,
@@ -13,7 +14,6 @@ class LyricSelectionToolbar extends StatelessWidget {
     required this.onCreateImage,
     required this.onClose,
   });
-
   final int count;
   final bool copied;
   final VoidCallback onSelectAll;
@@ -22,97 +22,80 @@ class LyricSelectionToolbar extends StatelessWidget {
   final VoidCallback onClose;
 
   @override
-  Widget build(BuildContext context) {
-    final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    final ThemeData theme = Theme.of(context);
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 50),
-        padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
-        decoration: BoxDecoration(
-          color: apple.glassStrong,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: apple.separator, width: .5),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: Colors.black.withValues(alpha: .24),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                transitionBuilder: (Widget child, Animation<double> animation) =>
-                    FadeTransition(opacity: animation, child: child),
-                child: Text(
-                  copied ? '已复制' : '已选择 $count 行',
-                  key: ValueKey<bool>(copied),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: apple.label,
-                    fontWeight: FontWeight.w600,
-                  ),
+  Widget build(BuildContext context) => Material(
+    color: context.colors.ivoryLight,
+    shape: Border.fromBorderSide(context.borders.hairline),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween(
+                    begin: const Offset(0, .2),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
                 ),
               ),
+              child: TrText(
+                copied ? '已复制' : '已选择 $count 行',
+                key: ValueKey((copied, count)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.captionStrong,
+              ),
             ),
-            _Action(
-              tooltip: '全选',
-              icon: Icons.select_all_rounded,
-              onPressed: onSelectAll,
+          ),
+          AccessibleIconButton(
+            tooltip: '全选',
+            onPressed: onSelectAll,
+            icon: const Icon(Icons.select_all_rounded, size: 21),
+          ),
+          AccessibleIconButton(
+            tooltip: '生成歌词图片',
+            color: context.colors.clayDeep,
+            onPressed: onCreateImage,
+            icon: const Icon(Icons.image_outlined, size: 21),
+          ),
+          AccessibleIconButton(
+            tooltip: '复制所选歌词',
+            onPressed: onCopy,
+            icon: AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween(begin: .75, end: 1.0).animate(animation),
+                  child: child,
+                ),
+              ),
+              child: Icon(
+                copied ? Icons.check_rounded : Icons.content_copy_rounded,
+                key: ValueKey(copied),
+                size: 20,
+              ),
             ),
-            _Action(
-              tooltip: '生成歌词图片',
-              icon: Icons.image_outlined,
-              color: apple.accent,
-              onPressed: onCreateImage,
-            ),
-            _Action(
-              tooltip: '复制所选歌词',
-              icon: copied ? Icons.check_rounded : Icons.copy_rounded,
-              onPressed: onCopy,
-            ),
-            _Action(
-              tooltip: '关闭',
-              icon: Icons.close_rounded,
-              onPressed: onClose,
-            ),
-          ],
-        ),
+          ),
+          AccessibleIconButton(
+            tooltip: '关闭',
+            onPressed: onClose,
+            icon: const Icon(Icons.close_rounded, size: 21),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-class _Action extends StatelessWidget {
-  const _Action({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.color,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onPressed,
-      iconSize: 20,
-      constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-      padding: EdgeInsets.zero,
-      color: color ?? apple.secondaryLabel,
-      icon: Icon(icon),
-    );
-  }
+    ),
+  );
 }

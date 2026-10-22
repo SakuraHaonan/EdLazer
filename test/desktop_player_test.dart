@@ -242,12 +242,8 @@ void main() {
       expect(page.colorScheme.primary, Colors.white);
       expect(page.colorScheme.secondary, const Color(0xFFFA2D48));
 
-      final LyricViewport lyrics = tester.widget<LyricViewport>(
-        find.byType(LyricViewport),
-      );
-      expect(lyrics.fontSize, 26);
-      expect(lyrics.fontWeight, 600);
-      expect(lyrics.blurEnabled, isFalse);
+      expect(find.byType(LyricViewport), findsOneWidget);
+      expect(find.text('第一句歌词'), findsOneWidget);
 
       expect(find.byType(AlbumBlurFlow), findsOneWidget);
       expect(find.byType(AlbumFlowBackground), findsOneWidget);

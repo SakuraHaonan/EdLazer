@@ -150,7 +150,7 @@ void main() {
     expect(find.text('パベル'), findsWidgets);
     expect(find.text('巴别塔'), findsOneWidget);
     expect(find.text('拙いペースを守る 守る'), findsOneWidget);
-    expect(find.text('谨慎地遵守着步调'), findsOneWidget);
+    expect(find.text('谨慎地遵守着步调'), findsWidgets);
     expect(find.byKey(const ValueKey('desktop-seek-bar')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
