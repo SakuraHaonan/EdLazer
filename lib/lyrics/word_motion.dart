@@ -67,6 +67,7 @@ class LyricWordMotion {
     int index,
     int count, {
     bool last = false,
+    bool holdFloat = false,
   }) {
     var du = math.max(1000.0, durationMs);
     var amount = du / 2000, blur = du / 3000;
@@ -86,10 +87,19 @@ class LyricWordMotion {
       (elapsedMs - delay + 400) / (du * 1.4),
       _floatSamples,
     );
+    final settled = _bezier(
+      ((elapsedMs - delay) / du).clamp(0.0, 1.0),
+      0,
+      0,
+      .58,
+      1,
+    );
     return LyricWordMotion(
       scale: 1 + emp * .1 * amount,
       xEm: -emp * .03 * amount * (count / 2 - index),
-      yEm: -emp * .025 * amount - float * .05,
+      // Ordinary words rise monotonically to the float target instead of
+      // peaking with the emphasis curve and drifting back to the baseline.
+      yEm: holdFloat ? -.05 * settled : -emp * .025 * amount - float * .05,
       glow: emp * blur,
       glowRadiusEm: math.min(.3, blur * .3),
     );
