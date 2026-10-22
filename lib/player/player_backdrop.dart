@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -15,12 +15,17 @@ class AlbumBlurFlow extends StatefulWidget {
     required this.mode,
     required this.pageColor,
     this.animationsEnabled = true,
+    this.boundaryKey,
   });
 
   final Track? track;
   final LegacyBackgroundMode mode;
   final Color pageColor;
   final bool animationsEnabled;
+
+  /// Lets the player capture the currently painted backdrop frame, e.g. for
+  /// the exported lyric image.
+  final Key? boundaryKey;
 
   @override
   State<AlbumBlurFlow> createState() => _AlbumBlurFlowState();
@@ -60,6 +65,7 @@ class _AlbumBlurFlowState extends State<AlbumBlurFlow> {
   Widget build(BuildContext context) {
     return ExcludeSemantics(
       child: RepaintBoundary(
+        key: widget.boundaryKey,
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
@@ -67,7 +73,8 @@ class _AlbumBlurFlowState extends State<AlbumBlurFlow> {
             if (widget.mode != LegacyBackgroundMode.off)
               AlbumFlowBackground(
                 colors: _colors,
-                animated: widget.animationsEnabled &&
+                animated:
+                    widget.animationsEnabled &&
                     widget.mode == LegacyBackgroundMode.nowPlayingDynamic,
                 solid: widget.mode == LegacyBackgroundMode.nowPlayingStatic,
               ),

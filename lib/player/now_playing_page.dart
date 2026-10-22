@@ -152,6 +152,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   bool _queueOpen = false;
   bool? _desktopLayout;
   DesktopNowPlayingPane _desktopPane = DesktopNowPlayingPane.lyrics;
+  final GlobalKey _backdropKey = GlobalKey();
   late SongCommentsController _commentsController;
   Timer? _hideTimer;
 
@@ -346,6 +347,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
         Expanded(
           child: LyricViewport(
             state: widget.state,
+            backdropKey: _backdropKey,
             onSelectionChanged: _selectionChanged,
           ),
         ),
@@ -504,6 +506,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
             fit: StackFit.expand,
             children: [
               AlbumBlurFlow(
+                boundaryKey: _backdropKey,
                 track: track,
                 mode: widget.state.legacyBackground,
                 pageColor: Colors.black,
@@ -536,6 +539,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                           artwork: _cover(track),
                           lyrics: LyricViewport(
                             state: widget.state,
+                            backdropKey: _backdropKey,
                             onSelectionChanged: _selectionChanged,
                           ),
                           comments: SongCommentsView(

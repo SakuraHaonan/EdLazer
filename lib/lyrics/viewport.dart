@@ -26,9 +26,13 @@ class LyricViewport extends StatefulWidget {
   const LyricViewport({
     super.key,
     required this.state,
+    this.backdropKey,
     this.onSelectionChanged,
   });
   final AppState state;
+
+  /// The live player backdrop boundary, captured when exporting an image.
+  final GlobalKey? backdropKey;
   final ValueChanged<bool>? onSelectionChanged;
 
   @override
@@ -556,7 +560,17 @@ class _LyricViewportState extends State<LyricViewport>
         if (_selection.keys.contains(lyricSelectionKey(line))) line,
     ];
     if (selected.isEmpty) return;
-    await showLyricImageDialog(context, track: track, lines: selected);
+    final backdrop = await captureLyricBackdrop(widget.backdropKey);
+    if (!mounted) {
+      backdrop?.dispose();
+      return;
+    }
+    await showLyricImageDialog(
+      context,
+      track: track,
+      lines: selected,
+      background: backdrop,
+    );
   }
 
   Widget _interactiveText(
