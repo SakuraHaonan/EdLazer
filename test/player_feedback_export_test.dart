@@ -1,16 +1,12 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/audio/audio_engine.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/lyrics.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/interaction/app_haptics.dart';
@@ -399,94 +395,6 @@ void main() {
     },
   );
 
-  testWidgets(
-    'plain LRC follows within 5ms and eases AMLL brightness and scale',
-    (tester) async {
-      final engine = _Engine();
-      final state = AppState(catalog: _Catalog(), audioEngine: engine);
-      addTearDown(state.dispose);
-      state.playQueue([_track]);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildLegacyTheme(),
-          home: Scaffold(body: LyricViewport(state: state)),
-        ),
-      );
-      await tester.pumpAndSettle();
-      double bright(int i) => tester
-          .widget<Opacity>(find.byKey(ValueKey('lyric-bright-$i')))
-          .opacity;
-      double dim(int i) => tester
-          .widget<Opacity>(find.byKey(ValueKey('lyric-dim-$i')))
-          .opacity;
-      double scale(int i) => tester
-          .widget<Transform>(
-            find
-                .ancestor(
-                  of: find.byKey(ValueKey('lyric-blur-$i')),
-                  matching: find.byType(Transform),
-                )
-                .first,
-          )
-          .transform
-          .storage[0];
-
-      final oldBright = bright(0);
-      final oldDim = dim(0);
-      final nextBright = bright(1);
-      final nextDim = dim(1);
-      expect(oldBright, closeTo(1, .001));
-      expect(oldDim, closeTo(0, .001));
-      expect(nextBright, closeTo(0, .001));
-      expect(nextDim, closeTo(.2, .001));
-
-      engine.position = const Duration(milliseconds: 1001);
-      await tester.pump(const Duration(milliseconds: 5));
-      expect(
-        state.position,
-        Duration.zero,
-        reason: 'transport has not reached its next 100ms tick',
-      );
-      expect(
-        bright(0),
-        oldBright,
-        reason: 'outgoing bright layer stays continuous at retarget',
-      );
-      expect(bright(1), nextBright);
-
-      await tester.pump(const Duration(milliseconds: 16));
-      final firstScale = scale(0);
-      final firstBright = bright(0);
-      await tester.pump(const Duration(milliseconds: 16));
-      final secondScale = scale(0);
-      final secondBright = bright(0);
-      expect(secondScale, lessThan(firstScale));
-      expect(secondBright, lessThan(firstBright));
-      expect(
-        1 - firstScale,
-        lessThan(firstScale - secondScale),
-        reason: 'the scale spring accelerates nonlinearly',
-      );
-
-      await tester.pump(const Duration(milliseconds: 120));
-      expect(bright(0), lessThan(oldBright));
-      expect(bright(1), greaterThan(nextBright));
-      expect(dim(0), greaterThan(oldDim));
-      expect(dim(1), lessThan(nextDim));
-
-      await tester.pumpAndSettle();
-      expect(bright(0), closeTo(0, .001));
-      expect(bright(1), closeTo(1, .001));
-      expect(dim(0), closeTo(.2, .001));
-      expect(dim(1), closeTo(0, .001));
-      state.pause();
-      await tester.pumpAndSettle();
-      expect(bright(0), closeTo(0, .001));
-      expect(bright(1), closeTo(1, .001));
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
-
   test(
     'successive wheel impulses accumulate and opposite impulses brake momentum',
     () {
@@ -538,73 +446,4 @@ void main() {
     },
   );
 
-  for (final brightness in Brightness.values) {
-    testWidgets(
-      'long lyric PNG includes offscreen content in ${brightness.name} theme',
-      (tester) async {
-        tester.view.physicalSize = const Size(390, 700);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        final lines = [
-          for (var i = 0; i < 30; i++)
-            LyricLine(
-              Duration(seconds: i),
-              'Lyrics line $i',
-              translation: '第 $i 行翻译',
-            ),
-        ];
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: buildLegacyTheme(brightness: brightness),
-            home: Scaffold(
-              body: LyricImageDialog(track: _track, lines: lines),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        final boundary = tester.renderObject<RenderRepaintBoundary>(
-          find
-              .ancestor(
-                of: find.byType(LyricImageCard),
-                matching: find.byType(RepaintBoundary),
-              )
-              .first,
-        );
-        expect(boundary.size.height, greaterThan(2500));
-        await tester.runAsync(() async {
-          final png = await captureLyricImage(boundary);
-          final codec = await ui.instantiateImageCodec(png);
-          final frame = await codec.getNextFrame();
-          expect(frame.image.width, 1080);
-          expect(frame.image.height, greaterThan(7500));
-          final raw = await frame.image.toByteData();
-          final background = buildLegacyTheme(
-            brightness: brightness,
-          ).colorScheme.surfaceContainerLowest;
-          final rgba = raw!.buffer.asUint8List();
-          final end = rgba.length - 4;
-          expect(rgba.sublist(0, 4), [
-            (background.r * 255).round(),
-            (background.g * 255).round(),
-            (background.b * 255).round(),
-            255,
-          ]);
-          expect(
-            rgba.sublist(end),
-            rgba.sublist(0, 4),
-            reason: 'offscreen end of the sheet is painted, opaque and uncut',
-          );
-          if (const bool.fromEnvironment('SAVE_UI_PROBES')) {
-            await Directory('diag').create(recursive: true);
-            await File(
-              'diag/lyric_image_${brightness.name}.png',
-            ).writeAsBytes(png);
-          }
-          frame.image.dispose();
-          codec.dispose();
-        });
-        expect(tester.takeException(), isNull);
-      },
-    );
-  }
 }

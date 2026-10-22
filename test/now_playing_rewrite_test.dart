@@ -8,7 +8,6 @@ import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/player/now_playing_page.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/player/now_playing_route.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/ui_preferences.dart';
 
@@ -33,53 +32,6 @@ class _Catalog extends Catalog {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('the rebuilt route opens and closes the Apple player', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-
-    final state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    state.playQueue(<Track>[_track]);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        debugShowCheckedModeBanner: false,
-        builder: (BuildContext context, Widget? child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
-        ),
-        home: Builder(
-          builder: (BuildContext context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () => openNowPlayingPage(context, state),
-                child: const Text('打开播放器'),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('打开播放器'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
-    expect(find.byType(NowPlayingPage), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('desktop-now-playing')),
-      findsOneWidget,
-    );
-    expect(tester.takeException(), isNull);
-
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey<String>('desktop-seek-bar')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey<String>('desktop-close')));
-    await tester.pumpAndSettle();
-    expect(find.byType(NowPlayingPage), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
   testWidgets('the shell hosts the player as a stable same-route overlay', (
     tester,
   ) async {

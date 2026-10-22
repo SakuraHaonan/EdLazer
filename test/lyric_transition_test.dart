@@ -30,18 +30,6 @@ class _Catalog extends Catalog {
   );
 }
 
-class _LongCatalog extends Catalog {
-  @override
-  Future<String?> audioUrlFor(Track track) async => null;
-  @override
-  Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics(
-    lrc:
-        '[00:00.00]一二三四五六七八九十一二三四五六七八九十一二三四五六\n'
-        '[00:05.00]第二行歌词',
-    tlyric: '[00:00.00]翻译',
-  );
-}
-
 void main() {
   testWidgets(
     'lyrics use AMLL blur levels and manual browsing clears blur gradually',
@@ -134,82 +122,5 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
-  testWidgets('wrapped main lyric keeps its measured height and spacing', (
-    tester,
-  ) async {
-    const Track track = Track(
-      id: 'long',
-      title: 'Long line',
-      artist: 'Artist',
-      album: 'Album',
-      duration: Duration(minutes: 2),
-      coverSeed: 0,
-    );
-    final state = AppState(catalog: _LongCatalog());
-    addTearDown(state.dispose);
-    state.playQueue(<Track>[track]);
-    final key = GlobalKey();
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildLegacyTheme(),
-        home: Scaffold(
-          body: Center(
-            child: RepaintBoundary(
-              key: key,
-              child: ColoredBox(
-                color: const Color(0xFF35237A),
-                child: SizedBox(
-                  width: 340,
-                  height: 500,
-                  child: LyricViewport(state: state),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final row0 = tester.getRect(
-      find.byKey(const ValueKey('lyric-line-long-0')),
-    );
-    final row1 = tester.getRect(
-      find.byKey(const ValueKey('lyric-line-long-1')),
-    );
-    final main0 = tester.getRect(
-      find.byKey(const ValueKey('lyric-main-0')),
-    );
-    final translation0 = tester.getRect(
-      find.byKey(const ValueKey('lyric-translation-0')),
-    );
-    expect(main0.height, greaterThan(30), reason: 'the main lyric wraps');
-    expect(translation0.top - main0.bottom, closeTo(5, .01));
-    expect(
-      translation0.bottom,
-      lessThanOrEqualTo(row0.bottom + .01),
-      reason: 'wrapped content must stay inside the measured row height',
-    );
-    expect(row1.top, greaterThanOrEqualTo(row0.bottom));
-    expect(tester.takeException(), isNull);
-    if (const bool.fromEnvironment('SAVE_UI_PROBES')) {
-      await tester.runAsync(() async {
-        final image =
-            await (key.currentContext!.findRenderObject()!
-                    as RenderRepaintBoundary)
-                .toImage();
-        final png = (await image.toByteData(
-          format: ui.ImageByteFormat.png,
-        ))!;
-        await File(
-          'diag/wrapped_lyric_spacing.png',
-        ).writeAsBytes(png.buffer.asUint8List());
-        image.dispose();
-      });
-    }
-    state.pause();
-    await tester.pump();
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
 
 }

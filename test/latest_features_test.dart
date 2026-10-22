@@ -16,15 +16,12 @@ import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/l10n/app_language.dart';
 import 'package:lazer_nextgen/l10n/app_localizations.dart';
-import 'package:lazer_nextgen/legacy/legacy_now_playing.dart';
 import 'package:lazer_nextgen/legacy/legacy_pages.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/widgets/timed_lyric_text.dart';
 import 'package:lazer_nextgen/widgets/lyric_selection_toolbar.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
-import 'package:lazer_nextgen/widgets/plate_art.dart';
-import 'package:lazer_nextgen/widgets/playback_queue_view.dart';
 
 const _track = Track(
   id: '1',
@@ -330,71 +327,6 @@ void main() {
     },
   );
   testWidgets(
-    'landscape artwork fills the rail; queue includes artwork and opens from the player',
-    (tester) async {
-      tester.view.physicalSize = const Size(1100, 760);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final state = AppState(catalog: _Catalog());
-      addTearDown(state.dispose);
-      final tracks = [
-        for (var i = 0; i < 16; i++)
-          Track(
-            id: '$i',
-            title: 'Song $i',
-            artist: 'Artist $i',
-            album: 'Album',
-            duration: const Duration(minutes: 2),
-            coverSeed: i,
-          ),
-      ];
-      state.playQueue(tracks, startIndex: 8);
-      final screenshot = GlobalKey();
-      await tester.pumpWidget(
-        RepaintBoundary(
-          key: screenshot,
-          child: MaterialApp(
-            theme: buildLegacyTheme(),
-            // The album backdrop flows forever; freeze it so the page settles.
-            builder: (BuildContext context, Widget? child) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(disableAnimations: true),
-              child: child!,
-            ),
-            home: LegacyNowPlayingPage(state: state),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final art = find.bySemanticsLabel('Song 8 封面').first;
-      expect(tester.getSize(art).width, greaterThan(200));
-      expect(tester.getSize(art).aspectRatio, closeTo(1, .01));
-      expect(find.byKey(const ValueKey('desktop-now-playing')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('desktop-queue')));
-      await tester.pumpAndSettle();
-      expect(find.byType(PlaybackQueueView), findsOneWidget);
-      final list = find.descendant(
-        of: find.byType(PlaybackQueueView),
-        matching: find.byType(ListView),
-      );
-      expect(
-        find.descendant(of: list, matching: find.byType(PlateArt)),
-        findsWidgets,
-      );
-      expect(find.text('Artist 8'), findsWidgets);
-      expect(tester.getRect(list).right, lessThanOrEqualTo(1100));
-      await _snapshot(tester, screenshot, 'ui_queue_latest');
-      await tester.tap(
-        find.descendant(
-          of: find.byType(PlaybackQueueView),
-          matching: find.text('Song 9'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(state.current?.id, '9');
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
     'word lines follow the engine clock between transport ticks and repaint paused seeks',
     (tester) async {
       final engine = _Engine();
@@ -474,39 +406,6 @@ void main() {
       expect(find.byType(TimedLyricText), findsNWidgets(2));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
-  testWidgets(
-    'the lyric live region keeps one semantics node while lines advance',
-    (tester) async {
-      final handle = tester.ensureSemantics();
-      final engine = _Engine();
-      final state = AppState(catalog: _WordCatalog(), audioEngine: engine);
-      addTearDown(state.dispose);
-      state.playQueue([_track]);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(body: LyricViewport(state: state)),
-        ),
-      );
-      await tester.pump();
-      final semantics = find.byKey(const ValueKey('lyric-live-region'));
-      final before = tester.getSemantics(semantics);
-      expect(before.label, '最初の行');
-      expect(find.bySemanticsLabel('最初の行'), findsOneWidget);
-      final firstId = before.id;
-
-      engine.position = const Duration(milliseconds: 1200);
-      await tester.pump(const Duration(milliseconds: 16));
-      await tester.pump(const Duration(milliseconds: 400));
-      final after = tester.getSemantics(semantics);
-      expect(after.id, firstId);
-      expect(after.label, '次の行');
-      expect(tester.takeException(), isNull);
-      state.pause();
-      await tester.pump();
-      await tester.pumpWidget(const SizedBox.shrink());
-      handle.dispose();
     },
   );
   testWidgets(

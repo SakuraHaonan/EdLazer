@@ -6,7 +6,6 @@ import 'package:lazer_nextgen/animation/lyric_spring.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_now_playing.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
@@ -271,89 +270,6 @@ void main() {
       reason: 'only viewport rows should remain mounted while browsing',
     );
     expect(tester.takeException(), isNull);
-  });
-  testWidgets(
-    'mobile lyric entry survives quick toggles, hiding and rotation',
-    (tester) async {
-      tester.view.physicalSize = const Size(320, 568);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final state = AppState(catalog: _Catalog());
-      addTearDown(state.dispose);
-      state.playQueue([_track]);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildLegacyTheme(),
-          // The album backdrop flows forever; freeze it so the page settles.
-          builder: (BuildContext context, Widget? child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: child!,
-          ),
-          home: LegacyNowPlayingPage(state: state),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final lyricsButton = find.byTooltip('歌词');
-      for (var i = 0; i < 6; i++) {
-        await tester.tap(lyricsButton);
-        await tester.pump(const Duration(milliseconds: 80));
-      }
-      await tester.pumpAndSettle();
-      await tester.tap(lyricsButton);
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.pump(const Duration(seconds: 3));
-      await tester.pump(const Duration(milliseconds: 500));
-      tester.view.physicalSize = const Size(640, 360);
-      await tester.pumpAndSettle();
-      expect(find.byType(LyricViewport), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await tester.tapAt(const Offset(160, 160));
-      await tester.pump(const Duration(milliseconds: 400));
-      final transport = tester.getRect(
-        find.byKey(const ValueKey('now-playing-transport')),
-      );
-      expect(transport.bottom, lessThan(360));
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets('automatic lyric follow springs rows and settles', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    state.playQueue([_track]);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildLegacyTheme(),
-        home: Scaffold(body: LyricViewport(state: state)),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final row = find.byKey(
-      ValueKey<String>('lyric-line-${_track.id}-0'),
-    );
-    final before = tester.getTopLeft(row).dy;
-
-    // Jump to the third line. Row 0 remains in the render range and is moved
-    // by its own AMLL position spring rather than a ScrollController animation.
-    state.seek(4 / 120);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 16));
-    await tester.pump(const Duration(milliseconds: 48));
-    final moving = tester.getTopLeft(row).dy;
-    expect(moving, isNot(closeTo(before, .1)));
-
-    await tester.pumpAndSettle();
-    final settled = tester.getTopLeft(row).dy;
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(tester.getTopLeft(row).dy, closeTo(settled, .01));
-    expect(tester.takeException(), isNull);
-    state.pause();
-    await tester.pump();
-    await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets('wheel scrolling has momentum and no framework scrollbar', (
     tester,

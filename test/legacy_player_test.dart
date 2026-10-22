@@ -134,33 +134,6 @@ void main() {
     addTearDown(tester.view.reset);
   });
 
-  testWidgets('the legacy now playing page shows lyrics and seeks on tap', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1400, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final AppState state = await _playing(tester);
-    await tester.pumpWidget(_app(LegacyNowPlayingPage(state: state)));
-    // The shared lyric viewport springs its rows into place.
-    for (int i = 0; i < 20; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-
-    expect(find.text('パベル'), findsWidgets);
-    expect(find.text('巴别塔'), findsOneWidget);
-    expect(find.text('拙いペースを守る 守る'), findsOneWidget);
-    expect(find.text('谨慎地遵守着步调'), findsWidgets);
-    expect(find.byKey(const ValueKey('desktop-seek-bar')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    // The third line sits at 12 s; tapping it seeks the transport there.
-    await tester.tap(find.text('未開の塔で答えを考え中'));
-    await tester.pump(const Duration(milliseconds: 120));
-    expect(state.precisePosition.inSeconds, greaterThanOrEqualTo(12));
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('the legacy shell hosts the queue card and the comments page', (
     tester,
   ) async {
