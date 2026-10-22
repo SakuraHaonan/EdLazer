@@ -439,17 +439,34 @@ class LegacyPlaylistPage extends StatefulWidget {
 class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
   final ScrollController _scroll = ScrollController();
   final GlobalKey _headerKey = GlobalKey();
+  final ValueNotifier<bool> _showLocate = ValueNotifier<bool>(false);
+  bool _refreshScheduled = false;
   List<Track>? _tracks;
   String? _error;
+  List<double>? _rowTops;
+  List<double>? _rowHeights;
+  bool _metricsDirty = true;
 
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_scheduleLocateRefresh);
+    widget.state.addListener(_scheduleLocateRefresh);
     unawaited(_load());
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _metricsDirty = true;
+    _scheduleLocateRefresh();
+  }
+
+  @override
   void dispose() {
+    _scroll.removeListener(_scheduleLocateRefresh);
+    widget.state.removeListener(_scheduleLocateRefresh);
+    _showLocate.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -461,7 +478,11 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
         widget.playlist.id,
       );
       if (!mounted) return;
-      setState(() => _tracks = tracks);
+      setState(() {
+        _tracks = tracks;
+        _metricsDirty = true;
+      });
+      _scheduleLocateRefresh();
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = '歌单读取失败，请重试。');
@@ -493,27 +514,92 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     return math.max(44.0, title + artist + translation) + 16.0;
   }
 
+  void _ensureRowMetrics() {
+    final List<Track>? tracks = _tracks;
+    if (tracks == null) {
+      _rowTops = null;
+      _rowHeights = null;
+      return;
+    }
+    if (!_metricsDirty &&
+        _rowTops?.length == tracks.length &&
+        _rowHeights?.length == tracks.length) {
+      return;
+    }
+    final ThemeData theme = Theme.of(context);
+    final TextScaler scaler = MediaQuery.textScalerOf(context);
+    final List<double> tops = <double>[];
+    final List<double> heights = <double>[];
+    var offset = 0.0;
+    for (final Track track in tracks) {
+      tops.add(offset);
+      final double extent = _rowExtent(track, theme, scaler);
+      heights.add(extent);
+      offset += extent;
+    }
+    _rowTops = tops;
+    _rowHeights = heights;
+    _metricsDirty = false;
+  }
+
+  int _currentIndex(List<Track> tracks) {
+    final Track? current = widget.state.current;
+    return current == null
+        ? -1
+        : tracks.indexWhere((Track track) => track.id == current.id);
+  }
+
+  void _scheduleLocateRefresh() {
+    if (_refreshScheduled) return;
+    _refreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshScheduled = false;
+      _refreshLocate();
+    });
+  }
+
+  void _refreshLocate() {
+    if (!mounted) return;
+    final bool show = _shouldShowLocate();
+    if (_showLocate.value != show) _showLocate.value = show;
+  }
+
+  /// Show the locator only when the playing track belongs to this playlist
+  /// and its row is currently outside the visible scroll range.
+  bool _shouldShowLocate() {
+    final List<Track>? tracks = _tracks;
+    if (tracks == null || tracks.isEmpty || !_scroll.hasClients) return false;
+    final int index = _currentIndex(tracks);
+    if (index < 0) return false;
+    _ensureRowMetrics();
+    final List<double>? tops = _rowTops;
+    final List<double>? heights = _rowHeights;
+    final double? header = _headerKey.currentContext?.size?.height;
+    if (tops == null || heights == null || header == null) return false;
+    final double top = 12 + header + tops[index];
+    final double bottom = top + heights[index];
+    final double viewTop = _scroll.offset;
+    final double viewBottom = viewTop + _scroll.position.viewportDimension;
+    return bottom <= viewTop || top >= viewBottom;
+  }
+
   Future<void> _locateCurrent() async {
     final List<Track>? tracks = _tracks;
     if (tracks == null || tracks.isEmpty || !_scroll.hasClients) return;
-    final Track? current = widget.state.current;
-    final int index = current == null
-        ? -1
-        : tracks.indexWhere((Track track) => track.id == current.id);
+    final int index = _currentIndex(tracks);
     if (index < 0) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('当前歌曲不在这个歌单中')));
       return;
     }
-    final ThemeData theme = Theme.of(context);
-    final TextScaler scaler = MediaQuery.textScalerOf(context);
+    _ensureRowMetrics();
+    final List<double>? tops = _rowTops;
+    final List<double>? heights = _rowHeights;
+    if (tops == null || heights == null) return;
     final double header = _headerKey.currentContext?.size?.height ?? 0;
-    var top = 12 + header;
-    for (var i = 0; i < index; i++) {
-      top += _rowExtent(tracks[i], theme, scaler);
-    }
-    final double extent = _rowExtent(tracks[index], theme, scaler);
+    final double top = 12 + header + tops[index];
+    final double extent = heights[index];
     final double viewport = _scroll.position.viewportDimension;
     final double target = (top - (viewport - extent) / 2).clamp(
       0.0,
@@ -605,14 +691,20 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
             Positioned(
               right: 18,
               bottom: 18,
-              child: FloatingActionButton.small(
-                key: const ValueKey<String>('playlist-locate'),
-                heroTag: null,
-                tooltip: '定位正在播放',
-                backgroundColor: AppleSemanticColors.of(context).accent,
-                foregroundColor: Colors.white,
-                onPressed: () => unawaited(_locateCurrent()),
-                child: const Icon(Icons.my_location_rounded, size: 20),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _showLocate,
+                builder: (BuildContext context, bool show, Widget? _) {
+                  if (!show) return const SizedBox.shrink();
+                  return FloatingActionButton.small(
+                    key: const ValueKey<String>('playlist-locate'),
+                    heroTag: null,
+                    tooltip: '定位正在播放',
+                    backgroundColor: AppleSemanticColors.of(context).accent,
+                    foregroundColor: Colors.white,
+                    onPressed: () => unawaited(_locateCurrent()),
+                    child: const Icon(Icons.my_location_rounded, size: 20),
+                  );
+                },
               ),
             ),
           ],
@@ -1285,11 +1377,19 @@ class LegacySettingsPage extends StatelessWidget {
             const _LegacySectionLabel('关于'),
             AppleGroupedCard(
               margin: EdgeInsets.zero,
-              child: const AppleListTile(
+              child: AppleListTile(
                 title: 'Lazer',
                 subtitle: 'Apple Music 风格界面 · 自适应桌面与移动端',
-                leading: AppleIconTile(icon: Icons.graphic_eq_rounded),
-                trailing: Text('2.0'),
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: Image.asset(
+                    'assets/app_icon.png',
+                    width: 30,
+                    height: 30,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                trailing: const Text('2.0'),
               ),
             ),
           ],
