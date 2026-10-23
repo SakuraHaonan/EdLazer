@@ -809,16 +809,19 @@ class _PlaylistHeader extends StatelessWidget {
   }
 }
 
+/// Search page reached from the rail (desktop) or the 搜索 tab (phones).
+///
+/// The field lives here rather than in the toolbar, so the page owns the
+/// query, the debounce and the results. Switching pages disposes it, which is
+/// also what resets the search.
 class LegacySearchPage extends StatefulWidget {
   const LegacySearchPage({
     super.key,
     required this.state,
-    required this.query,
     required this.onOpenPlaylist,
   });
 
   final AppState state;
-  final String query;
   final ValueChanged<Playlist> onOpenPlaylist;
 
   @override
@@ -826,34 +829,56 @@ class LegacySearchPage extends StatefulWidget {
 }
 
 class _LegacySearchPageState extends State<LegacySearchPage> {
+  final TextEditingController _search = TextEditingController();
+  Timer? _debounce;
   SearchResults? _results;
+  String _query = '';
   bool _loading = false;
   String? _error;
   int _generation = 0;
 
   @override
-  void initState() {
-    super.initState();
-    unawaited(_run());
+  void dispose() {
+    _debounce?.cancel();
+    _search.dispose();
+    super.dispose();
   }
 
-  @override
-  void didUpdateWidget(covariant LegacySearchPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.query != widget.query) unawaited(_run());
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      unawaited(_run(value.trim()));
+    });
+    // Rebuild right away for the clear affordance; the query stays debounced.
+    setState(() {});
   }
 
-  Future<void> _run() async {
+  void _clear() {
+    _debounce?.cancel();
+    _search.clear();
+    _generation++;
+    setState(() {
+      _query = '';
+      _results = null;
+      _loading = false;
+      _error = null;
+    });
+  }
+
+  Future<void> _run(String query) async {
     final int generation = ++_generation;
-    final String query = widget.query.trim();
     if (query.isEmpty) {
       setState(() {
+        _query = '';
         _results = null;
         _loading = false;
+        _error = null;
       });
       return;
     }
     setState(() {
+      _query = query;
       _loading = true;
       _error = null;
     });
@@ -875,7 +900,30 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final SearchResults? results = _results;
+    final double inset = _pageInset(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: EdgeInsets.fromLTRB(inset, 14, inset, 12),
+              child: AppleSearchField(
+                controller: _search,
+                autofocus: true,
+                onChanged: _onChanged,
+                onClear: _clear,
+              ),
+            ),
+            Expanded(child: _body(inset)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _body(double inset) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -884,9 +932,16 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
         message: _error!,
         icon: Icons.search_off_rounded,
         action: FilledButton(
-          onPressed: () => unawaited(_run()),
+          onPressed: () => unawaited(_run(_query)),
           child: const Text('重试'),
         ),
+      );
+    }
+    final SearchResults? results = _results;
+    if (_query.isEmpty) {
+      return const LegacyNotice(
+        message: '搜索歌曲、歌手或歌单。',
+        icon: Icons.search_rounded,
       );
     }
     if (results == null || results.hits == 0) {
@@ -895,46 +950,35 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
         icon: Icons.search_rounded,
       );
     }
-    final double inset = _pageInset(context);
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1180),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(inset, 8, inset, 28),
-          children: <Widget>[
-            ApplePageTitle(
-              title: '搜索',
-              subtitle: widget.query,
-              padding: const EdgeInsets.fromLTRB(0, 12, 0, 14),
+    return ListView(
+      padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+      children: <Widget>[
+        if (results.tracks.isNotEmpty) ...<Widget>[
+          LegacySectionHeader(
+            title: '单曲',
+            subtitle: '${results.tracks.length} 首',
+          ),
+          const SizedBox(height: 8),
+          for (int i = 0; i < results.tracks.length; i++)
+            LegacyTrackRow(
+              track: results.tracks[i],
+              index: i,
+              current: widget.state.current?.id == results.tracks[i].id,
+              playing: widget.state.playing,
+              onTap: () =>
+                  widget.state.playQueue(results.tracks, startIndex: i),
             ),
-            if (results.tracks.isNotEmpty) ...<Widget>[
-              LegacySectionHeader(
-                title: '单曲',
-                subtitle: '${results.tracks.length} 首',
-              ),
-              const SizedBox(height: 8),
-              for (int i = 0; i < results.tracks.length; i++)
-                LegacyTrackRow(
-                  track: results.tracks[i],
-                  index: i,
-                  current: widget.state.current?.id == results.tracks[i].id,
-                  playing: widget.state.playing,
-                  onTap: () =>
-                      widget.state.playQueue(results.tracks, startIndex: i),
-                ),
-              const SizedBox(height: 28),
-            ],
-            if (results.playlists.isNotEmpty) ...<Widget>[
-              const LegacySectionHeader(title: '歌单'),
-              const SizedBox(height: 14),
-              LegacyPlaylistGrid(
-                playlists: results.playlists,
-                onOpen: widget.onOpenPlaylist,
-              ),
-            ],
-          ],
-        ),
-      ),
+          const SizedBox(height: 28),
+        ],
+        if (results.playlists.isNotEmpty) ...<Widget>[
+          const LegacySectionHeader(title: '歌单'),
+          const SizedBox(height: 14),
+          LegacyPlaylistGrid(
+            playlists: results.playlists,
+            onOpen: widget.onOpenPlaylist,
+          ),
+        ],
+      ],
     );
   }
 }

@@ -226,6 +226,31 @@ void main() {
     expect(find.text('70%'), findsOneWidget);
     // DPI 100% and the default scroll acceleration both read 100%.
     expect(find.text('100%'), findsWidgets);
+    final Finder aboutTile = find.ancestor(
+      of: find.text('Apple Music 风格界面 · 自适应桌面与移动端'),
+      matching: find.byType(AppleListTile),
+    );
+    expect(
+      find.descendant(
+        of: aboutTile,
+        matching: find.byWidgetPredicate(
+          (Widget widget) =>
+              widget is Image &&
+              widget.image is AssetImage &&
+              (widget.image as AssetImage).assetName == 'assets/app_icon.png',
+        ),
+      ),
+      findsOneWidget,
+      reason: 'the About row must use the app icon',
+    );
+    expect(
+      find.descendant(
+        of: aboutTile,
+        matching: find.byIcon(Icons.graphic_eq_rounded),
+      ),
+      findsNothing,
+      reason: 'the About row must not use the Apple Music-style tile',
+    );
 
     Finder controlFor<T extends Widget>(String label) => find.descendant(
       of: find
@@ -275,7 +300,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the legacy top bar searches and lists the results', (
+  testWidgets('the rail search page searches and lists the results', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1280, 900);
@@ -284,6 +309,11 @@ void main() {
     final AppState state = AppState(catalog: _Catalog());
     addTearDown(state.dispose);
     await tester.pumpWidget(_legacyApp(state));
+    await tester.pumpAndSettle();
+
+    // The toolbar has no field any more: 搜索 is a rail destination.
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.text('搜索'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'まにまに');
     await tester.pump(const Duration(milliseconds: 400));
@@ -318,11 +348,7 @@ void main() {
       findsOneWidget,
       reason: 'the signed-in account must use its avatar, not an initial',
     );
-    expect(
-      find.descendant(of: tile, matching: find.text('C')),
-      findsNothing,
-    );
+    expect(find.descendant(of: tile, matching: find.text('C')), findsNothing);
     expect(tester.takeException(), isNull);
   });
-
 }

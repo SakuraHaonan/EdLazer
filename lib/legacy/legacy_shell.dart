@@ -24,7 +24,7 @@ import 'legacy_widgets.dart';
 /// Desktop gets a translucent source-list sidebar, a content toolbar and the
 /// full transport, while phones get an inline navigation bar, the iOS tab bar
 /// and a floating mini-player. Both compositions share one content tree, one
-/// search state and one set of playback controls, so switching layouts never
+/// search page and one set of playback controls, so switching layouts never
 /// loses context.
 class LegacyShell extends StatefulWidget {
   const LegacyShell({super.key, required this.state});
@@ -35,17 +35,13 @@ class LegacyShell extends StatefulWidget {
   State<LegacyShell> createState() => _LegacyShellState();
 }
 
-enum _LegacySection { home, library, likes, settings }
+enum _LegacySection { home, search, library, likes, settings }
 
 class _LegacyShellState extends State<LegacyShell>
     with SingleTickerProviderStateMixin {
   _LegacySection _section = _LegacySection.home;
   Playlist? _playlist;
-  final TextEditingController _search = TextEditingController();
-  String _query = '';
-  Timer? _searchDebounce;
   bool _comments = false;
-  bool _mobileSearchOpen = false;
   SongCommentsController? _commentsController;
   late final AnimationController _nowPlayingMotion;
   late final Animation<Offset> _nowPlayingSlide;
@@ -86,35 +82,15 @@ class _LegacyShellState extends State<LegacyShell>
     _nowPlayingMotion
       ..removeStatusListener(_onNowPlayingStatus)
       ..dispose();
-    _searchDebounce?.cancel();
-    _search.dispose();
     _commentsController?.dispose();
     super.dispose();
   }
 
-  void _onQueryChanged(String value) {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      setState(() {
-        _query = value.trim();
-        if (_query.isNotEmpty) _comments = false;
-      });
-    });
-    // Rebuild immediately for the clear affordance, even though the actual
-    // query is debounced.
-    if (mounted) setState(() {});
-  }
-
   void _select(_LegacySection section) {
-    _searchDebounce?.cancel();
     setState(() {
       _section = section;
       _playlist = null;
       _comments = false;
-      _query = '';
-      _mobileSearchOpen = false;
-      if (_search.text.isNotEmpty) _search.clear();
     });
   }
 
@@ -122,20 +98,13 @@ class _LegacyShellState extends State<LegacyShell>
     setState(() {
       _playlist = playlist;
       _comments = false;
-      _query = '';
-      _search.clear();
-      _mobileSearchOpen = false;
     });
   }
 
   void _backToRoot() {
-    _searchDebounce?.cancel();
     setState(() {
       _playlist = null;
       _comments = false;
-      _query = '';
-      _mobileSearchOpen = false;
-      if (_search.text.isNotEmpty) _search.clear();
     });
   }
 
@@ -144,15 +113,7 @@ class _LegacyShellState extends State<LegacyShell>
       _comments = !_comments;
       if (_comments) {
         _commentsController ??= SongCommentsController(state.gateway);
-        _mobileSearchOpen = false;
       }
-    });
-  }
-
-  void _toggleMobileSearch() {
-    setState(() {
-      _mobileSearchOpen = !_mobileSearchOpen;
-      if (!_mobileSearchOpen && _search.text.isEmpty) _query = '';
     });
   }
 
@@ -312,19 +273,6 @@ class _LegacyShellState extends State<LegacyShell>
     return Column(
       children: <Widget>[
         _mobileToolbar(apple),
-        if (_mobileSearchOpen)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: AppleSearchField(
-              controller: _search,
-              autofocus: true,
-              onChanged: _onQueryChanged,
-              onClear: () {
-                _search.clear();
-                setState(() => _query = '');
-              },
-            ),
-          ),
         Expanded(child: RepaintBoundary(child: _content())),
         if (state.current != null)
           RepaintBoundary(
@@ -350,6 +298,11 @@ class _LegacyShellState extends State<LegacyShell>
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home_rounded),
                 label: '主页',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.search_outlined),
+                selectedIcon: Icon(Icons.search_rounded),
+                label: '搜索',
               ),
               NavigationDestination(
                 icon: Icon(Icons.library_music_outlined),
@@ -401,6 +354,16 @@ class _LegacyShellState extends State<LegacyShell>
                 padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                 children: <Widget>[
                   _sidebarLabel(apple, '浏览'),
+                  LegacyRailItem(
+                    icon: Icons.search_rounded,
+                    label: '搜索',
+                    selected:
+                        _section == _LegacySection.search &&
+                        _playlist == null &&
+                        !_comments,
+                    onTap: () => _select(_LegacySection.search),
+                  ),
+                  const SizedBox(height: 2),
                   LegacyRailItem(
                     icon: Icons.home_rounded,
                     label: '主页',
@@ -484,7 +447,7 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _desktopToolbar(AppleSemanticColors apple) {
-    final bool canGoBack = _playlist != null || _comments || _query.isNotEmpty;
+    final bool canGoBack = _playlist != null || _comments;
     return SizedBox(
       height: 64,
       child: Padding(
@@ -500,22 +463,16 @@ class _LegacyShellState extends State<LegacyShell>
               const SizedBox(width: 8),
             ],
             Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 360),
-                  child: AppleSearchField(
-                    controller: _search,
-                    onChanged: _onQueryChanged,
-                    onClear: () {
-                      _search.clear();
-                      setState(() => _query = '');
-                    },
-                  ),
+              child: Text(
+                _pageTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: apple.label,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-            const Spacer(),
             _ToolbarButton(
               tooltip: Theme.of(context).brightness == Brightness.dark
                   ? '浅色外观'
@@ -540,7 +497,7 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _mobileToolbar(AppleSemanticColors apple) {
-    final bool canGoBack = _playlist != null || _comments || _query.isNotEmpty;
+    final bool canGoBack = _playlist != null || _comments;
     return SizedBox(
       height: 50,
       child: Padding(
@@ -568,14 +525,6 @@ class _LegacyShellState extends State<LegacyShell>
               ),
             ),
             _ToolbarButton(
-              tooltip: _mobileSearchOpen ? '关闭搜索' : '搜索',
-              icon: _mobileSearchOpen
-                  ? Icons.close_rounded
-                  : Icons.search_rounded,
-              selected: _mobileSearchOpen,
-              onPressed: _toggleMobileSearch,
-            ),
-            _ToolbarButton(
               tooltip: Theme.of(context).brightness == Brightness.dark
                   ? '浅色外观'
                   : '深色外观',
@@ -600,10 +549,10 @@ class _LegacyShellState extends State<LegacyShell>
 
   String get _pageTitle {
     if (_comments) return '评论';
-    if (_query.isNotEmpty) return '搜索';
     if (_playlist != null) return _playlist!.name;
     return switch (_section) {
       _LegacySection.home => '现在就听',
+      _LegacySection.search => '搜索',
       _LegacySection.library => '资料库',
       _LegacySection.likes => '我喜欢的音乐',
       _LegacySection.settings => '设置',
@@ -752,7 +701,6 @@ class _LegacyShellState extends State<LegacyShell>
 
   String get _contentKey {
     if (_comments) return 'comments';
-    if (_query.isNotEmpty) return 'search:$_query';
     final Playlist? playlist = _playlist;
     if (playlist != null) return 'playlist:${playlist.id}';
     return 'section:${_section.name}';
@@ -782,13 +730,6 @@ class _LegacyShellState extends State<LegacyShell>
         ],
       );
     }
-    if (_query.isNotEmpty) {
-      return LegacySearchPage(
-        state: state,
-        query: _query,
-        onOpenPlaylist: _openPlaylist,
-      );
-    }
     final Playlist? playlist = _playlist;
     if (playlist != null) {
       return LegacyPlaylistPage(state: state, playlist: playlist);
@@ -799,6 +740,10 @@ class _LegacyShellState extends State<LegacyShell>
         onOpenPlaylist: _openPlaylist,
         onPlayTrack: (List<Track> tracks, int index) =>
             state.playQueue(tracks, startIndex: index),
+      ),
+      _LegacySection.search => LegacySearchPage(
+        state: state,
+        onOpenPlaylist: _openPlaylist,
       ),
       _LegacySection.library => LegacyLibraryPage(
         state: state,
@@ -815,13 +760,11 @@ class _ToolbarButton extends StatefulWidget {
     required this.tooltip,
     required this.icon,
     required this.onPressed,
-    this.selected = false,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
-  final bool selected;
 
   @override
   State<_ToolbarButton> createState() => _ToolbarButtonState();
@@ -847,17 +790,13 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: widget.selected
-                  ? apple.fill
-                  : _hovering
-                  ? apple.tertiaryFill
-                  : Colors.transparent,
+              color: _hovering ? apple.tertiaryFill : Colors.transparent,
               shape: BoxShape.circle,
             ),
             child: Icon(
               widget.icon,
               size: 20,
-              color: widget.selected ? apple.accent : apple.secondaryLabel,
+              color: apple.secondaryLabel,
             ),
           ),
         ),

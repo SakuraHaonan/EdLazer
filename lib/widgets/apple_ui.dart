@@ -396,7 +396,12 @@ class AppleEmptyState extends StatelessWidget {
   }
 }
 
-/// A capsule search field with the iCloud-style filled background.
+/// The shell's search input: Material 3's stock [SearchBar], nothing else.
+///
+/// No custom fill, border or icon tint — the bar takes its shape, color,
+/// elevation, focus overlay and text field straight from the Material theme,
+/// so it matches any `searchBarTheme` the app installs. The toolbar and the
+/// mobile search row only decide how wide and tall it is.
 class AppleSearchField extends StatelessWidget {
   const AppleSearchField({
     super.key,
@@ -405,7 +410,7 @@ class AppleSearchField extends StatelessWidget {
     this.hintText = '搜索歌曲、歌手或歌单',
     this.onClear,
     this.autofocus = false,
-    this.height = 46,
+    this.height = 56,
     this.textInputAction = TextInputAction.search,
   });
 
@@ -414,70 +419,44 @@ class AppleSearchField extends StatelessWidget {
   final String hintText;
   final VoidCallback? onClear;
   final bool autofocus;
+
+  /// How tall the bar draws. 56 is Material's own search bar height.
   final double height;
   final TextInputAction textInputAction;
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return SizedBox(
       height: height,
-      child: TextField(
+      child: SearchBar(
         controller: controller,
         onChanged: onChanged,
-        autofocus: autofocus,
+        hintText: hintText,
+        autoFocus: autofocus,
         textInputAction: textInputAction,
-        style: theme.textTheme.bodyMedium?.copyWith(color: apple.label),
-        cursorColor: apple.accent,
-        decoration: InputDecoration(
-          isDense: true,
-          filled: true,
-          fillColor: apple.fill,
-          hintText: hintText,
-          hintStyle: theme.textTheme.bodyMedium?.copyWith(
-            color: apple.tertiaryLabel,
+        leading: const Icon(Icons.search),
+        // A rounded rectangle rather than Material's default stadium: the bar
+        // spans the page width, so a pill would read as a button.
+        shape: const WidgetStatePropertyAll<OutlinedBorder>(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
           ),
-          contentPadding: EdgeInsets.zero,
-          prefixIcon: Icon(
-            Icons.search_rounded,
-            size: 17,
-            color: apple.secondaryLabel,
-          ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 36),
-          suffixIcon: controller.text.isEmpty
-              ? null
-              : IconButton(
-                  tooltip: '清除',
-                  padding: EdgeInsets.zero,
-                  iconSize: 16,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 32,
-                    height: 32,
-                  ),
-                  onPressed: onClear,
-                  icon: Icon(
-                    Icons.cancel_rounded,
-                    size: 16,
-                    color: apple.tertiaryLabel,
-                  ),
-                ),
-          suffixIconConstraints: const BoxConstraints(minWidth: 32),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(
-              color: apple.accent.withValues(alpha: .7),
-              width: 1.5,
+        ),
+        trailing: <Widget>[
+          if (controller.text.isNotEmpty)
+            IconButton(
+              tooltip: '清除',
+              onPressed: onClear,
+              icon: const Icon(Icons.close),
             ),
-          ),
+        ],
+        // Stock Material reserves 360 px of width; here the toolbar and the
+        // mobile row own the width, and the bar fills whatever they give it.
+        constraints: BoxConstraints(
+          minWidth: 0,
+          maxWidth: double.infinity,
+          minHeight: height,
+          maxHeight: height,
         ),
       ),
     );
