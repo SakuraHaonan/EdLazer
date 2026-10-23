@@ -83,6 +83,19 @@ Future<void> _locateCurrentTrack(WidgetTester tester, Size size) async {
     closeTo(viewport.center.dy, 24),
     reason: 'locating centres the current row in the list viewport',
   );
+  expect(
+    locate,
+    findsNothing,
+    reason: 'the locator hides once the current row is on screen',
+  );
+
+  await tester.drag(find.byType(CustomScrollView), const Offset(0, 800));
+  await tester.pumpAndSettle();
+  expect(
+    locate,
+    findsOneWidget,
+    reason: 'scrolling the current row out of view restores the locator',
+  );
   expect(tester.takeException(), isNull);
   state.pause();
   await tester.pump();
@@ -103,4 +116,43 @@ void main() {
       await _locateCurrentTrack(tester, const Size(1280, 800));
     },
   );
+
+  testWidgets('no locator when the playing track is not in the playlist', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    state.playQueue(<Track>[
+      const Track(
+        id: 'somewhere-else',
+        title: 'Elsewhere',
+        artist: 'Other',
+        album: 'Other',
+        duration: Duration(minutes: 3),
+        coverSeed: 0,
+      ),
+    ]);
+    const playlist = Playlist(
+      id: 'playlist-fixture',
+      name: 'Playlist fixture',
+      trackIds: <String>[],
+      coverSeed: 1,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(),
+        home: Scaffold(
+          body: LegacyPlaylistPage(state: state, playlist: playlist),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('playlist-locate')), findsNothing);
+    expect(tester.takeException(), isNull);
+    state.pause();
+    await tester.pump();
+  });
 }
