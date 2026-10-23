@@ -1,38 +1,96 @@
-# Lazer
+<p align="center">
+  <img src="docs/images/hero.png" width="860" alt="Lazer：跨平台音乐客户端">
+</p>
 
-[简体中文](README.md) | [English](README.en.md)
+<h1 align="center">Lazer · nextgen</h1>
 
-> `nextgen` 为开发中的 Flutter 版本，功能和界面仍在调整。
+<p align="center">
+  <a href="https://github.com/chuxuehaocai/Lazer/actions/workflows/build.yml"><img alt="build" src="https://img.shields.io/badge/build-GitHub%20Actions-6C8EBF"></a>
+  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.0-54C5F8?logo=flutter&logoColor=white">
+  <img alt="version" src="https://img.shields.io/badge/nextgen-v2.0.0-8E7CC3">
+  <img alt="platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20Android%20%C2%B7%20iOS-7FB6A4">
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-4C9A7A"></a>
+</p>
 
-跨平台音乐客户端，内置网易云音乐 WEAPI/EAPI 协议实现，无需第三方 API 网关。
-歌曲、封面、歌词和推荐歌单均从服务读取。
+<p align="center">
+  <b>一个用 Flutter 手写的网易云音乐客户端。</b><br>
+  WEAPI / EAPI 就住在客户端里，不挂任何第三方网关，<br>
+  曲库、歌词、评论、私人雷达，都从服务本身现取。
+</p>
 
-## 功能
+<p align="center">简体中文 | <a href="README.en.md">English</a></p>
 
-- 真实曲库、搜索、推荐歌单、账户与收藏。
-- 歌手详情、热门歌曲与专辑列表，专辑详情、简介和完整曲目；点击歌手或专辑名称进入。
-- 同步歌词、翻译歌词、逐字效果、歌词多选复制与图片导出。
-- 歌词字号、字重调节与即时预览，偏好自动保存。
-- 正在播放页完全重写：桌面端为 Apple Music 风格沉浸式布局，移动端为封面/无边框歌词画布；AMLL 网格流动背景，封面与歌词互切，玻璃播放条、队列/评论面板及 M/L/Q/C/F 等键盘快捷键一应俱全。入场改为同路由 Material 从窗口底部上滑动画，外壳与播放器背景在转场期间暂停，避免整页缩放/裁剪造成的掉帧；同时稳定 Windows 无障碍语义根，避免 AXTree 根节点更新错误。
-- 歌词链路全部重写：按 AMLL 方案实现 35% 焦点带、Apple 左对齐歌词栏、逐字 emphasized/ordinary 弹簧、发光与渐进遮罩、距离模糊、AMLL 弹簧跟随滚动与逐字 `createEmphasizeAnimation` 发光；新的 LRC/YRC 解析、点按命中、行选择、复制与 PNG 导出实现位于 `lib/lyrics/`。
-- 查看热门与最新评论、分页加载、点赞与取消点赞；游客可阅读，点赞时引导登录。
-- Android、iOS、Windows、macOS、Linux 系统媒体控件。
-- 简体中文、繁体中文、日语、英语界面。
-- 可调节的滚动加速度与惯性、歌词模糊；歌词行按帧对齐，手动浏览后平滑恢复跟随。
-- 操作控件与进度条刻度震动反馈，iOS 支持强度调节。
-- 界面布局（自动／桌面端／移动端）、DPI 缩放（80–175%）与车机形态：车机自动放大到 135% 起并放宽控件密度。
-- 全页面采用 Apple 设计语言：语义化系统色与字阶、玻璃导航与分组列表、Apple Music 红色强调色及封面取色主题；桌面端为侧栏 + 完整播放条，移动端为底部标签栏 + 迷你播放器，同一套页面与状态自适应双端。
-- 性能：所有界面动画按 8.3 ms（120 fps）帧预算设计；流动背景与歌词逐字动画跟随显示器刷新率，封面按实际绘制尺寸请求 CDN 清晰度，设置中可开启实时帧率/帧时间浮层。
-- 移动端“我”页直达“我喜欢”，歌曲、封面、歌词与歌单数据自动缓存。
+---
 
-缓存完整的歌曲优先从本地播放；首次播放边听边在后台缓存。
-歌曲缓存上限 1 GiB，封面 256 MiB，歌单等数据 64 MiB，超出时淘汰较久未使用的内容。
-歌单曲目缓存 10 分钟，账户歌单 5 分钟，首页 20 分钟；过期后重新请求，网络失败时保留旧数据。
-歌单详情可手动刷新，账户数据按会话隔离。缓存位于系统应用缓存目录，系统清理后会重新获取。
+## 先和看板娘打个招呼
 
-## 开发
+<p align="center">
+  <img src="docs/images/mascot.png" width="220" alt="Lazer 看板娘">
+</p>
 
-使用 **Flutter 3.47.0 stable**。
+<p align="center"><i>「歌单交给我，你负责觉得好听。」</i></p>
+
+灰头发、水手服、蓝眼睛，安静地站在这里挥手——这是 Lazer 的看板娘。
+她不太爱说话，但会陪你把一首歌听完。
+
+## 它都会些什么
+
+**听歌这件事**
+
+- 真实曲库、搜索、推荐歌单、私人雷达、账号与收藏。
+- 歌手主页有热门歌曲和分页专辑；专辑详情带简介与完整曲目，点名字就钻进去了。
+- 热门 / 最新评论、分页加载、点赞与取消点赞。游客可以看，想说话就先登录。
+- 系统媒体控件：Windows、macOS、Linux、Android、iOS 都认得它。
+
+**歌词这件小事**
+
+- LRC / YRC 解析、逐字 emphasized 弹簧、35% 焦点带、渐进遮罩与距离模糊。
+- 字号、字重随手调，改完立刻预览；多选复制、导出成 PNG 也可以。
+- 跟着音乐滚，手动翻过歌词后会平滑地回到跟随。
+
+**界面这件事**
+
+- 全页面 Apple 设计语言：语义化系统色与字阶、玻璃导航、分组列表、Apple Music 红，还有从封面取色的主题。
+- 桌面是侧边栏 + 完整播放条，手机是底部标签栏 + 迷你播放器——同一套页面与状态，换个姿势陪你听。
+- 布局可以强制桌面 / 移动，DPI 80–175%，车机形态自动放大到 135%。
+- 简体中文、繁体中文、日语、英语四种界面。
+
+**细节这件事**
+
+- 滚动惯性与加速度可调，进度条刻度带触感反馈。
+- 界面动画按 8.3 ms（120 fps）的帧预算排队，流动背景跟着显示器刷新率呼吸；设置里能打开实时帧率浮层。
+- 正在播放页有 AMLL 网格背景、封面与歌词互切、队列与评论面板，还有 M / L / Q / C / F 一把快捷键。
+
+## 长这样
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/images/shot-home.jpg" width="100%" alt="首页：现在就听"></td>
+    <td align="center" width="50%"><img src="docs/images/shot-library.jpg" width="100%" alt="曲库：真实曲库"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>现在就听</b><br><sub>推荐歌单、私人雷达与每日推荐，打开就在第一屏。</sub></td>
+    <td align="center"><b>真实曲库</b><br><sub>搜索、歌手、专辑与收藏，全部读自服务本身。</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/shot-playing.jpg" width="100%" alt="正在播放：沉浸式播放"></td>
+    <td align="center"><img src="docs/images/shot-adaptive.jpg" width="100%" alt="自适应：一套页面"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>沉浸式播放</b><br><sub>AMLL 逐字歌词、35% 焦点带，与弹簧跟随滚动。</sub></td>
+    <td align="center"><b>一套页面</b><br><sub>桌面侧栏与移动标签栏，共享同一份页面与状态。</sub></td>
+  </tr>
+</table>
+
+## 缓存的小心思
+
+听过的会悄悄存下来：音频最多 1 GiB、封面 256 MiB、歌单数据 64 MiB，满了就先丢最久没碰的。
+歌单曲目 10 分钟、账号歌单 5 分钟、首页 20 分钟过期；网络抽风时留着旧数据，不让你对着空白发呆。
+缓存完整时优先本地播放，第一次播放边听边在后台攒。文件放在系统应用缓存目录，系统清理后会自己再取回来。
+
+## 开始折腾
+
+需要 **Flutter 3.47.0 stable**。
 
 ```sh
 flutter pub get
@@ -44,8 +102,8 @@ flutter run
 ## 自动构建
 
 向 `nextgen` 推送代码后，[GitHub Actions](https://github.com/chuxuehaocai/Lazer/actions/workflows/build.yml)
-会先检查代码，再构建以下产物。推送 `v*` 版本标签会在所有构建成功后自动创建 GitHub Release；
-带 `-beta.1` 等后缀的版本会标为预发布版。文件名统一为 `Lazer-<系统>-<架构>`。
+会先检查代码，再构建下面的产物。推送 `v*` 版本标签会在所有构建成功后自动创建 GitHub Release；
+带 `-beta.1` 等后缀的版本会标为预发布。文件名统一为 `Lazer-<系统>-<架构>`。
 
 | 产物 | 说明 |
 | --- | --- |
@@ -58,15 +116,21 @@ flutter run
 | `Lazer-iOS-aarch64.ipa` | 未签名的 iOS 真机 IPA |
 
 构建完成后，在对应运行页面的 **Artifacts** 中下载，需登录 GitHub，保留 30 天。
-Windows 请完整解压后运行；AppImage 下载后执行 `chmod +x`。
+Windows 请完整解压后运行；AppImage 下载后先 `chmod +x`；
 macOS 包使用 ad-hoc 签名，IPA 需要自行签名后安装。
-详细配置见[构建说明](docs/builds.md)与[系统媒体控件说明](docs/system-media.md)。
 
-## 参考
+更多说明书：[构建说明](docs/builds.md) · [系统媒体控件](docs/system-media.md) · [正在播放](docs/now-playing.md) · [车机形态](docs/car-head-unit.md) · [扫码登录](docs/login-qr.md) · [旧版界面](docs/legacy-ui.md)
 
-接口实现参考 [API Enhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)，
-正在播放页版式参考 [AMLL Player](https://github.com/amll-dev/amll-player)，
-歌词动画参考 [Apple Music Like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics)。
-应用使用小米 **MiSans** 字体。
+## 参考与致谢
 
-项目自主代码采用 [MIT 协议](LICENSE)。
+- 接口实现参考 [API Enhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)。
+- 正在播放页版式参考 [AMLL Player](https://github.com/amll-dev/amll-player)。
+- 歌词动画参考 [Apple Music Like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics)。
+- 界面字体是小米的 **MiSans**，谢谢你，MiSans。
+- 还有屏幕前的你：愿意把它下载下来，认真听完一首歌，就已经很好了。
+
+<p align="center">
+  <img src="docs/images/mark.png" width="44" alt="Lazer">
+  <br>
+  <sub>MIT License · 用 Flutter 和一点点耐心做成</sub>
+</p>

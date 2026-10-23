@@ -1,40 +1,92 @@
-# Lazer
+<p align="center">
+  <img src="docs/images/hero.png" width="860" alt="Lazer, a cross-platform music client">
+</p>
 
-[简体中文](README.md) | [English](README.en.md)
+<h1 align="center">Lazer · nextgen</h1>
 
-> `nextgen` is the Flutter development version. Features and interfaces are still evolving.
+<p align="center">
+  <a href="https://github.com/chuxuehaocai/Lazer/actions/workflows/build.yml"><img alt="build" src="https://img.shields.io/badge/build-GitHub%20Actions-6C8EBF"></a>
+  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.0-54C5F8?logo=flutter&logoColor=white">
+  <img alt="version" src="https://img.shields.io/badge/nextgen-v2.0.0-8E7CC3">
+  <img alt="platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20Android%20%C2%B7%20iOS-7FB6A4">
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-4C9A7A"></a>
+</p>
 
-A cross-platform music client with an embedded NetEase WEAPI/EAPI implementation.
-No third-party API gateway is required. Tracks, artwork, lyrics and recommended
-playlists come from the service.
+<p align="center">
+  <b>A NetEase Cloud Music client written by hand in Flutter.</b><br>
+  WEAPI / EAPI live inside the app — no third-party gateway —<br>
+  and the catalogue, lyrics, comments and daily picks come straight from the service.
+</p>
 
-## Features
+<p align="center"><a href="README.md">简体中文</a> | English</p>
 
-- Live catalogue, search, recommended playlists, accounts and favorites.
-- Artist profiles with popular tracks and paged albums, plus album descriptions and full track lists; open them from artist or album names.
-- Synchronized lyrics, translations, word timing, multi-line copying and lyric image export.
-- Adjustable lyric font size and weight, with a live preview and saved preferences.
-- The now-playing page is rebuilt from scratch: desktop gets an immersive Apple Music split layout, mobile gets a cover/borderless lyric canvas over an AMLL mesh-gradient backdrop. It includes cover/lyrics switching, glass transport, queue/comments panels and Space / arrows / M / L / Q / C / F shortcuts, introduced by a same-route Material open-upwards slide that pauses shell/player ambient tickers, removes full-screen scale/clip work, gates the mesh flow until settled, and stabilises the Windows accessibility semantics root to prevent AXTree root-update errors.
-- The complete lyric stack is new and follows AMLL: a 35% focus band, Apple-style left-aligned lyric column, per-grapheme emphasized/ordinary spring motion, glow and progressive masks, distance blur, AMLL spring follow scrolling and per-grapheme `createEmphasizeAnimation` glow. LRC/YRC parsing, glyph hit testing, multi-line selection, copy and PNG export live under `lib/lyrics/`.
-- Popular and latest comments with pagination, likes and unlikes; guests can read and sign in to react.
-- System media controls on Android, iOS, Windows, macOS and Linux.
-- Simplified Chinese, Traditional Chinese, Japanese and English interfaces.
-- Adjustable scroll acceleration and momentum, lyric blur, and frame-accurate lyric line changes with a smooth return to following.
-- Haptics on controls and seek detents, with adjustable intensity on iOS.
-- Layout override (automatic / desktop / mobile), DPI scaling (80–175%) and a car head-unit profile that starts at 135% with roomier controls.
-- Every page now follows Apple's design language: semantic system colours and type, translucent navigation and grouped lists, the Apple Music red accent and cover-derived tints; desktop gets a source-list sidebar plus full transport, while mobile gets a tab bar plus mini-player from the same adaptive page tree.
-- Performance: every interface animation is designed against an 8.3 ms (120 fps) frame budget; the flowing backdrop and word-level lyric animation run at the display refresh rate, artwork is fetched at the size it is painted instead of decoding a 1024² image for every thumbnail, and Settings can show a live FPS/frame-time overlay.
-- A mobile Favorites shortcut, with automatic caching of audio, artwork, lyrics and playlists.
+---
 
-Completed audio downloads play locally; the first play streams while caching in the background.
-The cache keeps up to 1 GiB of audio, 256 MiB of artwork and 64 MiB of catalogue data,
-evicting the least recently used files. Playlist tracks stay fresh for 10 minutes,
-account collections for 5 minutes and the home feed for 20 minutes. Expired data is
-refreshed, with the previous snapshot retained if the network fails. Playlist details
-also offer manual refresh. Account data is separated by session. Files live in the
-system application cache directory and are fetched again if the system removes them.
+## Say hi to the mascot
 
-## Development
+<p align="center">
+  <img src="docs/images/mascot.png" width="220" alt="The Lazer mascot">
+</p>
+
+<p align="center"><i>“Leave the playlist to me. You just enjoy it.”</i></p>
+
+Grey hair, sailor collar, blue eyes, waving quietly from the README.
+She does not talk much, but she will stay until the last note.
+
+## What it does
+
+**The listening part**
+
+- A real catalogue, search, recommended playlists, personal radar, accounts and favourites.
+- Artist pages with popular tracks and paged albums; album pages carry the description and the full track list — tap a name and you are there.
+- Popular and latest comments with pagination, likes and unlikes. Guests can read; sign in to react.
+- System media controls on Windows, macOS, Linux, Android and iOS.
+
+**The lyric part**
+
+- LRC / YRC parsing, per-grapheme emphasized springs, a 35% focus band, progressive masks and distance blur.
+- Font size and weight adjust with a live preview; copy several lines or export them as a PNG.
+- Lyrics follow the music, and glide back to following after you scroll away by hand.
+
+**The interface part**
+
+- Apple's design language throughout: semantic system colours and type, translucent navigation, grouped lists, the Apple Music red, and tints pulled from the cover art.
+- Desktop gets a sidebar and the full transport; phones get a tab bar and a mini-player — one page tree and one state, just a different posture.
+- Layout override (desktop / mobile), DPI 80–175%, and a car head-unit profile that starts at 135%.
+- Simplified Chinese, Traditional Chinese, Japanese and English.
+
+**The fussy part**
+
+- Adjustable scroll inertia and acceleration; haptic detents on the seek bar.
+- Every interface animation is planned against an 8.3 ms (120 fps) frame budget, the flowing backdrop breathes at the display refresh rate, and Settings can show a live frame-time overlay.
+- The now-playing page brings an AMLL mesh backdrop, cover/lyrics switching, queue and comment panels, and the M / L / Q / C / F shortcuts.
+
+## A look at it
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/images/shot-home.jpg" width="100%" alt="Home"></td>
+    <td align="center" width="50%"><img src="docs/images/shot-library.jpg" width="100%" alt="Library"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Listen now</b><br><sub>Recommended playlists, personal radar and daily picks, right on the first screen.</sub></td>
+    <td align="center"><b>A real library</b><br><sub>Search, artists, albums and favourites, all read from the service itself.</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/shot-playing.jpg" width="100%" alt="Now playing"></td>
+    <td align="center"><img src="docs/images/shot-adaptive.jpg" width="100%" alt="Adaptive layout"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Immersive playback</b><br><sub>AMLL word-by-word lyrics, a 35% focus band and spring-follow scrolling.</sub></td>
+    <td align="center"><b>One set of pages</b><br><sub>A desktop sidebar and a mobile tab bar sharing the same pages and state.</sub></td>
+  </tr>
+</table>
+
+## A tidy little cache
+
+What you have played is kept quietly: up to 1 GiB of audio, 256 MiB of artwork and 64 MiB of catalogue data, evicting whatever sat untouched the longest. Playlist tracks stay fresh for 10 minutes, account collections for 5 and the home feed for 20; when the network sulks, the previous snapshot stays instead of an empty screen. Fully cached tracks play locally, and the first play streams while caching in the background. Files live in the system application cache directory and are fetched again if the system clears them.
+
+## Build it yourself
 
 Use **Flutter 3.47.0 stable**.
 
@@ -62,17 +114,23 @@ marked as pre-releases. Output filenames follow `Lazer-<OS>-<Arch>`.
 | `Lazer-Android-universal.apk` | Universal APK using the current development signing configuration |
 | `Lazer-iOS-aarch64.ipa` | Unsigned device IPA |
 
-Download from a completed run's **Artifacts** section while signed in to GitHub.
-Artifacts are retained for 30 days. Extract the complete Windows ZIP before
-launching its EXE. Run `chmod +x` on a downloaded AppImage. macOS Apps are ad-hoc
-signed; the IPA requires your own signing before installation.
-See [build details](docs/builds.md) and [system media integration](docs/system-media.md).
+Download from a completed run's **Artifacts** section while signed in to GitHub;
+artifacts are retained for 30 days. Extract the complete Windows ZIP before
+launching its EXE, run `chmod +x` on a downloaded AppImage, and note that macOS
+Apps are ad-hoc signed while the IPA needs your own signing.
 
-## References
+More documentation: [build details](docs/builds.md) · [system media](docs/system-media.md) · [now playing](docs/now-playing.md) · [car head unit](docs/car-head-unit.md) · [QR sign-in](docs/login-qr.md) · [legacy UI](docs/legacy-ui.md)
 
-The protocol implementation references [API Enhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced).
-The now-playing composition references [AMLL Player](https://github.com/amll-dev/amll-player).
-Lyric animation references [Apple Music Like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics).
-The application uses **MiSans** by Xiaomi.
+## References and thanks
 
-Original project code is licensed under the [MIT License](LICENSE).
+- The protocol implementation references [API Enhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced).
+- The now-playing composition references [AMLL Player](https://github.com/amll-dev/amll-player).
+- Lyric animation references [Apple Music Like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics).
+- The interface uses **MiSans** by Xiaomi. Thank you, MiSans.
+- And you, reading this: downloading it and finishing one song is already plenty.
+
+<p align="center">
+  <img src="docs/images/mark.png" width="44" alt="Lazer">
+  <br>
+  <sub>MIT License · made with Flutter and a little patience</sub>
+</p>
