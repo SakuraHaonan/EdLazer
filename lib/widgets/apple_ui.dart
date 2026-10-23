@@ -405,7 +405,7 @@ class AppleSearchField extends StatelessWidget {
     this.hintText = '搜索歌曲、歌手或歌单',
     this.onClear,
     this.autofocus = false,
-    this.height = 38,
+    this.height = 46,
     this.textInputAction = TextInputAction.search,
   });
 
