@@ -356,18 +356,6 @@ class _LegacyTrackRowState extends State<LegacyTrackRow> {
                     ),
                   ),
                 ),
-              SizedBox(
-                width: 30,
-                child: Icon(
-                  widget.current && widget.playing
-                      ? Icons.pause_circle_filled_rounded
-                      : Icons.play_circle_fill_rounded,
-                  size: 20,
-                  color: _hovering || widget.current
-                      ? apple.accent
-                      : Colors.transparent,
-                ),
-              ),
             ],
           ),
         ),
