@@ -30,9 +30,6 @@
 
 <p align="center"><i>“Leave the playlist to me. You just enjoy it.”</i></p>
 
-Grey hair, sailor collar, blue eyes, waving quietly from the README.
-She does not talk much, but she will stay until the last note.
-
 ## What it does
 
 **The listening part**
