@@ -147,7 +147,9 @@ void main() {
     expect(find.text('推荐歌单'), findsOneWidget);
 
     // 设置 opens the preferences page.
-    await tester.tap(find.text('设置').first);
+    await tester.tap(find.byKey(const ValueKey('rail-account')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置').last);
     await tester.pumpAndSettle();
     expect(find.text('配色'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -198,7 +200,9 @@ void main() {
     addTearDown(state.dispose);
     await tester.pumpWidget(_legacyApp(state));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('设置').first);
+    await tester.tap(find.byKey(const ValueKey('rail-account')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置').last);
     await tester.pumpAndSettle();
 
     for (final String label in <String>[
@@ -340,7 +344,7 @@ void main() {
     expect(find.text('3 个字段'), findsNothing);
     final tile = find.ancestor(
       of: find.text('CYP2D6_Official'),
-      matching: find.byType(AppleListTile),
+      matching: find.byType(PopupMenuButton<String>),
     );
     expect(tile, findsOneWidget);
     expect(

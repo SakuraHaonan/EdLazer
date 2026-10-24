@@ -9,6 +9,44 @@ FlutterWindow::FlutterWindow(const flutter::DartProject& project)
 
 FlutterWindow::~FlutterWindow() {}
 
+namespace {
+
+WNDPROC g_flutter_view_proc = nullptr;
+
+// The Flutter view is a child window that covers the entire client area, so
+// the cursor is always "over the child" and Windows never asks the top-level
+// window where its resize borders are. Report the root's hit test from the
+// child, and hand non-client clicks back to the root so Windows runs its own
+// sizing loop instead of dropping the click on the child.
+LRESULT CALLBACK FlutterViewProc(HWND hwnd,
+                                 UINT message,
+                                 WPARAM wparam,
+                                 LPARAM lparam) {
+  switch (message) {
+    case WM_NCHITTEST: {
+      const HWND root = GetAncestor(hwnd, GA_ROOT);
+      if (root != nullptr) {
+        const LRESULT hit = SendMessage(root, WM_NCHITTEST, wparam, lparam);
+        if (hit != HTCLIENT) {
+          return hit;
+        }
+      }
+      break;
+    }
+    case WM_NCLBUTTONDOWN: {
+      const HWND root = GetAncestor(hwnd, GA_ROOT);
+      if (root != nullptr) {
+        ReleaseCapture();
+        return SendMessage(root, WM_NCLBUTTONDOWN, wparam, lparam);
+      }
+      break;
+    }
+  }
+  return CallWindowProc(g_flutter_view_proc, hwnd, message, wparam, lparam);
+}
+
+}  // namespace
+
 bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
@@ -27,7 +65,13 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   system_media_ = std::make_unique<SystemMediaControls>(
       flutter_controller_->engine()->messenger(), GetHandle());
-  SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  const HWND view = flutter_controller_->view()->GetNativeWindow();
+  SetChildContent(view);
+
+  // Route the child's hit test through the root so the frameless window still
+  // has real resize borders (see FlutterViewHitTestProc above).
+  g_flutter_view_proc = reinterpret_cast<WNDPROC>(SetWindowLongPtr(
+      view, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(FlutterViewProc)));
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();

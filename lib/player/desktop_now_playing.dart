@@ -8,7 +8,6 @@ import '../data/models.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../theme/app_palette.dart';
-import '../theme/paper_widgets.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/animated_notice.dart';
 import '../widgets/player_seek_bar.dart';
@@ -72,53 +71,6 @@ class DesktopNowPlaying extends StatelessWidget {
                     onPressed: onBack,
                     icon: const Icon(Icons.keyboard_arrow_down_rounded),
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(child: InlineLabel('正在播放')),
-                  _PaneTab(
-                    key: const ValueKey('desktop-lyrics'),
-                    label: '歌词',
-                    icon: Icons.lyrics_outlined,
-                    active: pane == DesktopNowPlayingPane.lyrics,
-                    onPressed: () =>
-                        onPaneChanged(DesktopNowPlayingPane.lyrics),
-                  ),
-                  const SizedBox(width: 8),
-                  AccessibleTooltip(
-                    message: '查看评论',
-                    child: _PaneTab(
-                      key: const ValueKey('desktop-comments'),
-                      label: '评论',
-                      icon: Icons.chat_bubble_outline_rounded,
-                      active: pane == DesktopNowPlayingPane.comments,
-                      onPressed: () =>
-                          onPaneChanged(DesktopNowPlayingPane.comments),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  AccessibleTooltip(
-                    message: '播放队列 (Q)',
-                    child: _PaneTab(
-                      key: const ValueKey('desktop-queue'),
-                      label: '播放队列',
-                      icon: Icons.queue_music_rounded,
-                      active: pane == DesktopNowPlayingPane.queue,
-                      onPressed: () =>
-                          onPaneChanged(DesktopNowPlayingPane.queue),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  AccessibleIconButton(
-                    key: const ValueKey('desktop-fullscreen'),
-                    tooltip: '全屏 (F)',
-                    onPressed: onFullscreen,
-                    icon: const Icon(Icons.fullscreen_rounded),
-                  ),
-                  AccessibleIconButton(
-                    key: const ValueKey('desktop-more'),
-                    tooltip: '保存封面',
-                    onPressed: onSaveArtwork,
-                    icon: const Icon(Icons.more_horiz_rounded),
-                  ),
                 ],
               ),
             ),
@@ -135,6 +87,7 @@ class DesktopNowPlaying extends StatelessWidget {
                           track: track,
                           state: state,
                           artwork: artwork,
+                          onSaveArtwork: onSaveArtwork,
                         ),
                       ),
                       const SizedBox(width: 32),
@@ -184,7 +137,13 @@ class DesktopNowPlaying extends StatelessWidget {
                 ),
               ),
             ),
-            _DesktopDock(state: state, visible: controlsVisible),
+            _DesktopDock(
+              state: state,
+              visible: controlsVisible,
+              pane: pane,
+              onPaneChanged: onPaneChanged,
+              onFullscreen: onFullscreen,
+            ),
           ],
         ),
       ),
@@ -205,32 +164,43 @@ class _PaneTab extends StatelessWidget {
   final bool active;
   final VoidCallback onPressed;
   @override
-  Widget build(BuildContext context) => Semantics(
-    selected: active,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            width: 2,
-            color: active ? context.colors.slateDark : Colors.transparent,
+  Widget build(BuildContext context) {
+    final Color activeColor = context.colors.onPlayer;
+    final Color mutedColor = context.colors.cloudDark;
+    return Semantics(
+      button: true,
+      selected: active,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: feedbackAction(context, onPressed),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                // The selected pane keeps a soft chip around its glyph, the way
+                // the mobile player marks the active tab.
+                color: active
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(
+                icon,
+                size: 21,
+                color: active ? activeColor : mutedColor,
+              ),
+            ),
           ),
         ),
       ),
-      child: TextButton.icon(
-        onPressed: feedbackAction(context, onPressed),
-        style: TextButton.styleFrom(
-          shape: const RoundedRectangleBorder(),
-          minimumSize: const Size(0, 44),
-          foregroundColor: active
-              ? context.colors.slateDark
-              : context.colors.cloudDark,
-        ),
-        icon: Icon(icon, size: 19),
-        label: TrText(label),
-      ),
-    ),
-  );
+    );
+  }
 }
 
 class _Presentation extends StatelessWidget {
@@ -238,10 +208,39 @@ class _Presentation extends StatelessWidget {
     required this.track,
     required this.state,
     required this.artwork,
+    required this.onSaveArtwork,
   });
   final Track track;
   final AppState state;
   final Widget artwork;
+  final VoidCallback onSaveArtwork;
+
+  /// The cover is the download affordance now: right-clicking it offers the
+  /// save action instead of a toolbar button.
+  Widget _cover(BuildContext context) => GestureDetector(
+    onSecondaryTapDown: (TapDownDetails details) => unawaited(
+      _showCoverMenu(context, details.globalPosition),
+    ),
+    child: artwork,
+  );
+
+  Future<void> _showCoverMenu(BuildContext context, Offset position) async {
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final String? choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        overlay.size.width - position.dx,
+        overlay.size.height - position.dy,
+      ),
+      items: const <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(value: 'save', child: Text('保存封面')),
+      ],
+    );
+    if (choice == 'save') onSaveArtwork();
+  }
 
   Widget _metadata(BuildContext context, {bool compact = false}) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,7 +316,7 @@ class _Presentation extends StatelessWidget {
             children: [
               SizedBox.square(
                 dimension: 72,
-                child: RepaintBoundary(child: artwork),
+                child: RepaintBoundary(child: _cover(context)),
               ),
               const SizedBox(width: 16),
               Expanded(child: _metadata(context, compact: true)),
@@ -332,7 +331,7 @@ class _Presentation extends StatelessWidget {
             child: Center(
               child: AspectRatio(
                 aspectRatio: 1,
-                child: RepaintBoundary(child: artwork),
+                child: RepaintBoundary(child: _cover(context)),
               ),
             ),
           ),
@@ -345,9 +344,18 @@ class _Presentation extends StatelessWidget {
 }
 
 class _DesktopDock extends StatelessWidget {
-  const _DesktopDock({required this.state, required this.visible});
+  const _DesktopDock({
+    required this.state,
+    required this.visible,
+    required this.pane,
+    required this.onPaneChanged,
+    required this.onFullscreen,
+  });
   final AppState state;
   final bool visible;
+  final DesktopNowPlayingPane pane;
+  final ValueChanged<DesktopNowPlayingPane> onPaneChanged;
+  final VoidCallback onFullscreen;
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: state,
@@ -451,9 +459,47 @@ class _DesktopDock extends StatelessWidget {
                         ),
                         Row(
                           children: [
-                            const Spacer(flex: 2),
                             Expanded(
-                              flex: 3,
+                              flex: 2,
+                              child: Row(
+                                children: [
+                            _PaneTab(
+                              key: const ValueKey('desktop-lyrics'),
+                              label: '歌词',
+                              icon: Icons.lyrics_outlined,
+                              active: pane == DesktopNowPlayingPane.lyrics,
+                              onPressed: () =>
+                                  onPaneChanged(DesktopNowPlayingPane.lyrics),
+                            ),
+                            _PaneTab(
+                              key: const ValueKey('desktop-comments'),
+                              label: '评论',
+                              icon: Icons.chat_bubble_outline_rounded,
+                              active: pane == DesktopNowPlayingPane.comments,
+                              onPressed: () => onPaneChanged(
+                                DesktopNowPlayingPane.comments,
+                              ),
+                            ),
+                            _PaneTab(
+                              key: const ValueKey('desktop-queue'),
+                              label: '播放队列 (Q)',
+                              icon: Icons.queue_music_rounded,
+                              active: pane == DesktopNowPlayingPane.queue,
+                              onPressed: () =>
+                                  onPaneChanged(DesktopNowPlayingPane.queue),
+                            ),
+                            _PaneTab(
+                              key: const ValueKey('desktop-fullscreen'),
+                              label: '全屏 (F)',
+                              icon: Icons.fullscreen_rounded,
+                              active: false,
+                              onPressed: onFullscreen,
+                            ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Row(

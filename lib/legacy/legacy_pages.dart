@@ -426,11 +426,17 @@ class LegacyPlaylistPage extends StatefulWidget {
     required this.state,
     required this.playlist,
     this.embedded = false,
+    this.album,
   });
 
   final AppState state;
   final Playlist playlist;
   final bool embedded;
+
+  /// When set, the page loads album tracks instead of playlist tracks. The
+  /// album still travels through [playlist] for the header and title, so both
+  /// details share one implementation.
+  final Album? album;
 
   @override
   State<LegacyPlaylistPage> createState() => _LegacyPlaylistPageState();
@@ -474,9 +480,10 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final List<Track> tracks = await widget.state.catalog.playlistTracks(
-        widget.playlist.id,
-      );
+      final Album? album = widget.album;
+      final List<Track> tracks = album != null
+          ? await widget.state.catalog.albumTracks(int.parse(album.id))
+          : await widget.state.catalog.playlistTracks(widget.playlist.id);
       if (!mounted) return;
       setState(() {
         _tracks = tracks;
@@ -636,6 +643,8 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
                         _PlaylistHeader(
                           playlist: widget.playlist,
                           compact: compact,
+                          artist: widget.album?.artist,
+                          note: widget.album?.note,
                           onPlay: tracks == null || tracks.isEmpty
                               ? null
                               : () => widget.state.playQueue(tracks),
@@ -719,11 +728,35 @@ class _PlaylistHeader extends StatelessWidget {
     required this.playlist,
     required this.compact,
     required this.onPlay,
+    this.artist,
+    this.note,
   });
 
   final Playlist playlist;
   final bool compact;
   final VoidCallback? onPlay;
+
+  /// Album-only extras. A playlist leaves both null and renders as before.
+  final String? artist;
+  final String? note;
+
+  static Future<void> _showNote(BuildContext context, String note) =>
+      showDialog<void>(
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          title: const Text('专辑简介'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(child: Text(note)),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -753,6 +786,19 @@ class _PlaylistHeader extends StatelessWidget {
             letterSpacing: -.6,
           ),
         ),
+        if (artist != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            artist!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: compact ? TextAlign.center : TextAlign.start,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: apple.secondaryLabel,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
         const SizedBox(height: 7),
         Text(
           <String>[
@@ -766,6 +812,25 @@ class _PlaylistHeader extends StatelessWidget {
             color: apple.secondaryLabel,
           ),
         ),
+        if (note != null && note!.trim().isNotEmpty) ...[
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => _showNote(context, note!),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Text(
+                note!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                textAlign: compact ? TextAlign.center : TextAlign.start,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: apple.tertiaryLabel,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -799,7 +864,7 @@ class _PlaylistHeader extends StatelessWidget {
       );
     }
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         cover,
         const SizedBox(width: 24),

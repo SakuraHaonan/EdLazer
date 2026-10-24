@@ -618,8 +618,118 @@ class _LegacyThinSeekBarState extends State<LegacyThinSeekBar> {
   }
 }
 
-/// `VolumePanelControl`: hovering the speaker opens a 196 dp panel with the
-/// volume percentage and its own thin bar.
+/// Vertical twin of [LegacyThinSeekBar] used by the volume popover.
+///
+/// Same 3 dp track and 10 dp thumb as the horizontal rail, filled from the
+/// bottom up. Keeping the slider vertical is what lets the popover stay a
+/// narrow column above the speaker instead of reserving a wide strip for a
+/// horizontal bar.
+class _VerticalVolumeBar extends StatefulWidget {
+  const _VerticalVolumeBar({
+    required this.value,
+    required this.semanticLabel,
+    this.onChanged,
+    this.onFinished,
+  });
+
+  final double value;
+  final String semanticLabel;
+  final ValueChanged<double>? onChanged;
+  final VoidCallback? onFinished;
+
+  @override
+  State<_VerticalVolumeBar> createState() => _VerticalVolumeBarState();
+}
+
+class _VerticalVolumeBarState extends State<_VerticalVolumeBar> {
+  double? _drag;
+
+  void _seekTo(double dy, double height) {
+    if (height <= 0 || widget.onChanged == null) return;
+    final double value = (1 - dy / height).clamp(0.0, 1.0);
+    setState(() => _drag = value);
+    widget.onChanged!(value);
+  }
+
+  void _finish() {
+    setState(() => _drag = null);
+    widget.onFinished?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+    final double value = (_drag ?? widget.value).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints box) {
+        final double height = box.maxHeight;
+        final double width = box.maxWidth;
+        return Semantics(
+          slider: true,
+          label: widget.semanticLabel,
+          value: '${(value * 100).round()}%',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (TapDownDetails details) =>
+                _seekTo(details.localPosition.dy, height),
+            onTapUp: (TapUpDetails details) => _finish(),
+            onVerticalDragStart: (DragStartDetails details) =>
+                _seekTo(details.localPosition.dy, height),
+            onVerticalDragUpdate: (DragUpdateDetails details) =>
+                _seekTo(details.localPosition.dy, height),
+            onVerticalDragEnd: (DragEndDetails details) => _finish(),
+            onVerticalDragCancel: _finish,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  left: (width - 3) / 2,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const SizedBox(width: 3),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: (width - 3) / 2,
+                  height: height * value,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const SizedBox(width: 3),
+                  ),
+                ),
+                Positioned(
+                  left: (width - 10) / 2,
+                  bottom: (height - 10) * value,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// `VolumePanelControl`: hovering the speaker opens a narrow vertical column
+/// holding the volume bar and its percentage.
 class _VolumeButton extends StatefulWidget {
   const _VolumeButton({required this.state});
 
@@ -663,8 +773,13 @@ class _VolumeButtonState extends State<_VolumeButton> {
     final double volume = (_drag ?? widget.state.volume).clamp(0.0, 1.0);
     return OverlayPortal(
       controller: _portal,
-      overlayChildBuilder: (BuildContext context) =>
-          CompositedTransformFollower(
+      // The overlay hands its entries the window's tight constraints, which
+      // would stretch this panel across the whole window. Align passes loose
+      // constraints down, so the column keeps its own size while the follower
+      // transform still parks it just above the speaker.
+      overlayChildBuilder: (BuildContext context) => Align(
+        alignment: Alignment.topLeft,
+        child: CompositedTransformFollower(
             link: _link,
             showWhenUnlinked: false,
             targetAnchor: Alignment.topCenter,
@@ -680,56 +795,57 @@ class _VolumeButtonState extends State<_VolumeButton> {
                 _sync();
               },
               child: Container(
-                width: 196,
+                width: 60,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
-                  vertical: 12,
+                  vertical: 14,
                 ),
                 decoration: BoxDecoration(
                   color: scheme.surface.withValues(alpha: 0.98),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.85),
-                  ),
+                  borderRadius: BorderRadius.circular(26),
                   boxShadow: <BoxShadow>[
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.28),
-                      blurRadius: 24,
+                      color: Colors.black.withValues(alpha: 0.26),
+                      blurRadius: 26,
                       offset: const Offset(0, 8),
                     ),
                   ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '音量 ${(volume * 100).round()}%',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                    SizedBox(
+                      width: 32,
+                      height: 128,
+                      child: _VerticalVolumeBar(
+                        value: volume,
+                        semanticLabel: '音量',
+                        onChanged: (double value) {
+                          setState(() => _drag = value);
+                          widget.state.previewVolume(value);
+                        },
+                        onFinished: () {
+                          final double? value = _drag;
+                          setState(() => _drag = null);
+                          if (value != null) {
+                            unawaited(widget.state.setVolume(value));
+                          }
+                        },
                       ),
                     ),
                     const SizedBox(height: 8),
-                    LegacyThinSeekBar(
-                      progress: volume,
-                      semanticLabel: '音量',
-                      onSeek: (double value) {
-                        setState(() => _drag = value);
-                        widget.state.previewVolume(value);
-                      },
-                      onSeekFinished: () {
-                        final double? value = _drag;
-                        setState(() => _drag = null);
-                        if (value != null) {
-                          unawaited(widget.state.setVolume(value));
-                        }
-                      },
+                    Text(
+                      '${(volume * 100).round()}%',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
+        ),
       child: CompositedTransformTarget(
         link: _link,
         child: MouseRegion(
@@ -816,9 +932,6 @@ class _LegacyQueueButtonState extends State<LegacyQueueButton> {
                 decoration: BoxDecoration(
                   color: scheme.surface.withValues(alpha: 0.98),
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.85),
-                  ),
                   boxShadow: <BoxShadow>[
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.32),
