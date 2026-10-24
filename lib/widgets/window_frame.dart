@@ -23,6 +23,12 @@ final bool kCustomWindowFrame =
     (Platform.isWindows || Platform.isMacOS || Platform.isLinux) &&
     !Platform.environment.containsKey('FLUTTER_TEST');
 
+/// Top inset a page must leave so its own controls never slide under the
+/// floating caption buttons. Non-zero only where the frame floats over the
+/// content (Windows); macOS still reserves a strip above the page.
+double get floatingFrameInset =>
+    kCustomWindowFrame && Platform.isWindows ? _barHeight : 0;
+
 /// macOS keeps its native traffic lights (they must live top-left there);
 /// Windows and Linux draw the custom hairline glyphs on the right instead.
 bool get _usesNativeWindowButtons => Platform.isMacOS;
@@ -41,7 +47,11 @@ Future<void> initWindowFrame() async {
   );
   if (Platform.isWindows) {
     await windowManager.setAsFrameless();
-    await windowManager.setHasShadow(false);
+    // Keep the DWM frame on Windows: it is what supplies the drop shadow and
+    // the Windows 11 rounded corners. Turning it off (the previous behaviour)
+    // left the window a flat white rectangle with no edge against the equally
+    // white desktop behind it.
+    await windowManager.setHasShadow(true);
   } else if (Platform.isMacOS) {
     await windowManager.setHasShadow(false);
   }
@@ -59,8 +69,23 @@ class WindowFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!kCustomWindowFrame) return child;
-    // The bar wraps the Navigator inside MaterialApp's localized builder.
-    final frame = Directionality(
+    if (Platform.isWindows) {
+      // Windows has no traffic lights to reserve space for, so the page owns
+      // the whole window and the drag strip with the caption buttons floats on
+      // top of it. That keeps the frame inside the app's own surface instead of
+      // making it read as a native title bar bolted above the content.
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: Stack(
+          children: <Widget>[
+            Positioned.fill(child: child),
+            const Positioned(top: 0, left: 0, right: 0, child: DesktopTitleBar()),
+          ],
+        ),
+      );
+    }
+    // macOS keeps its own strip: the traffic lights live in it.
+    return Directionality(
       textDirection: TextDirection.ltr,
       child: Column(
         children: [
@@ -69,12 +94,6 @@ class WindowFrame extends StatelessWidget {
         ],
       ),
     );
-    return Platform.isWindows
-        ? Directionality(
-            textDirection: TextDirection.ltr,
-            child: DragToResizeArea(resizeEdgeSize: 4, child: frame),
-          )
-        : frame;
   }
 }
 
@@ -138,6 +157,9 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
+    // Floating over the page means no strip, no title and no hairline: only
+    // the caption buttons are drawn on top of whatever the page shows.
+    final bool floating = kCustomWindowFrame && Platform.isWindows;
     return DefaultTextStyle(
       style: theme.textTheme.labelMedium!.copyWith(
         decoration: TextDecoration.none,
@@ -147,45 +169,61 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
         children: [
           Container(
             height: _barHeight,
-            color: scheme.surface,
+            color: floating ? null : scheme.surface,
             child: DragToMoveArea(
               child: Row(
                 children: [
                   // Traffic lights own the left edge on macOS.
-                  SizedBox(width: _usesNativeWindowButtons ? 84 : 16),
+                  SizedBox(
+                    width: _usesNativeWindowButtons ? 84 : (floating ? 8 : 16),
+                  ),
                   // Expanded (not Flexible): the title yields its unused width
                   // to the controls so they stay flush against the edge.
                   Expanded(
-                    child: Text(
-                      kWindowTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                    child: floating
+                        ? const SizedBox.shrink()
+                        : Text(
+                            kWindowTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                  ),
+                  if (!_usesNativeWindowButtons)
+                    Padding(
+                      // Floating controls sit a little inboard of the corner so
+                      // they read as part of the page instead of hugging it.
+                      padding: EdgeInsets.only(
+                        right: floating ? 10 : 0,
+                        top: floating ? 6 : 0,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          _WindowButton(
+                            control: _FrameControl.minimize,
+                            onPressed: () => windowManager.minimize(),
+                          ),
+                          _WindowButton(
+                            control: _maximized
+                                ? _FrameControl.restore
+                                : _FrameControl.maximize,
+                            onPressed: _toggleMaximize,
+                          ),
+                          _WindowButton(
+                            control: _FrameControl.close,
+                            onPressed: () => windowManager.close(),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  if (!_usesNativeWindowButtons) ...[
-                    _WindowButton(
-                      control: _FrameControl.minimize,
-                      onPressed: () => windowManager.minimize(),
-                    ),
-                    _WindowButton(
-                      control: _maximized
-                          ? _FrameControl.restore
-                          : _FrameControl.maximize,
-                      onPressed: _toggleMaximize,
-                    ),
-                    _WindowButton(
-                      control: _FrameControl.close,
-                      onPressed: () => windowManager.close(),
-                    ),
-                  ],
                 ],
               ),
             ),
           ),
-          Container(height: 1, color: scheme.outlineVariant),
+          if (!floating) Container(height: 1, color: scheme.outlineVariant),
         ],
       ),
     );
@@ -221,6 +259,10 @@ class _WindowButtonState extends State<_WindowButton> {
   Widget build(BuildContext context) {
     final bool isClose = widget.control == _FrameControl.close;
     final ColorScheme scheme = Theme.of(context).colorScheme;
+    // Windows floats these buttons over the page, and the page can be dark (the
+    // now-playing surface), so they carry their own translucent chip instead of
+    // relying on the strip behind them.
+    final bool floating = kCustomWindowFrame && Platform.isWindows;
     final Color background = !_hovering
         ? Colors.transparent
         : isClose
@@ -231,6 +273,13 @@ class _WindowButtonState extends State<_WindowButton> {
         : isClose
         ? scheme.onError
         : scheme.onSecondaryContainer;
+    final Widget glyphView = SizedBox(
+      width: _glyphBox,
+      height: _glyphBox,
+      child: CustomPaint(
+        painter: _ControlGlyphPainter(control: widget.control, color: glyph),
+      ),
+    );
 
     return Semantics(
       button: true,
@@ -246,18 +295,22 @@ class _WindowButtonState extends State<_WindowButton> {
             duration: const Duration(milliseconds: 100),
             width: _buttonWidth,
             height: _barHeight,
-            color: background,
+            color: floating ? Colors.transparent : background,
             alignment: Alignment.center,
-            child: SizedBox(
-              width: _glyphBox,
-              height: _glyphBox,
-              child: CustomPaint(
-                painter: _ControlGlyphPainter(
-                  control: widget.control,
-                  color: glyph,
-                ),
-              ),
-            ),
+            child: floating
+                ? Container(
+                    width: 24,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _hovering
+                          ? background
+                          : scheme.surface.withValues(alpha: 0.72),
+                      shape: BoxShape.circle,
+                    ),
+                    child: glyphView,
+                  )
+                : glyphView,
           ),
         ),
       ),

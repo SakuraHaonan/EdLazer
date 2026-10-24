@@ -21,6 +21,7 @@ import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/lyric_viewport.dart';
 import '../widgets/playback_queue_view.dart';
+import '../widgets/motion_artwork.dart';
 import '../widgets/player_seek_bar.dart';
 import '../widgets/song_comments_view.dart';
 import 'desktop_now_playing.dart';
@@ -536,7 +537,12 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                           key: const ValueKey('desktop-now-playing'),
                           state: widget.state,
                           track: track,
-                          artwork: _cover(track),
+                          artwork: MotionArtwork(
+                radius: 12,
+                artist: track.artist,
+                album: track.album,
+                child: _cover(track),
+              ),
                           lyrics: LyricViewport(
                             state: widget.state,
                             backdropKey: _backdropKey,

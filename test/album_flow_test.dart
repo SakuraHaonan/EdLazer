@@ -277,7 +277,9 @@ void main() {
     addTearDown(state.dispose);
     await tester.pumpWidget(_app(_reducedMotion(LegacyShell(state: state))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('设置').first);
+    await tester.tap(find.byKey(const ValueKey('rail-account')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置').last);
     await tester.pumpAndSettle();
 
     expect(find.text('背景'), findsOneWidget);

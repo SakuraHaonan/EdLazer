@@ -527,6 +527,47 @@ class Catalog {
     );
   }
 
+  Future<List<Track>> artistSongs(int id, {bool force = false}) async {
+    if (id <= 0) throw ArgumentError.value(id, 'artistId');
+    final key = 'artist-songs:$id';
+    if (force) await cache.expireJson(key);
+    return _cached(
+      key,
+      const Duration(minutes: 30),
+      (json) => _decodeTracks(json['tracks']),
+      (tracks) => <String, dynamic>{
+        'tracks': tracks.map((track) => track.toJson()).toList(),
+      },
+      () async {
+        const int limit = 100;
+        var offset = 0;
+        var more = true;
+        final List<Track> tracks = <Track>[];
+        final Set<String> ids = <String>{};
+        while (more) {
+          final payload = await gateway.artistSongs(
+            id,
+            limit: limit,
+            offset: offset,
+          );
+          final dynamic raw = payload['songs'];
+          final List<dynamic> page = raw is List ? raw : const <dynamic>[];
+          for (final item in page.whereType<Map<String, dynamic>>()) {
+            final song = GatewaySong.fromJson(item);
+            if (song.id > 0) {
+              final track = trackFromSong(song);
+              if (ids.add(track.id)) tracks.add(track);
+            }
+          }
+          offset += page.length;
+          more = payload['more'] == true && page.isNotEmpty;
+        }
+        _online = true;
+        return tracks;
+      },
+    );
+  }
+
   /// Playback URL for a track, or null when the gateway has none (VIP /
   /// region lock / offline).
   Future<String?> audioUrlFor(Track track) async {
@@ -676,6 +717,8 @@ class Catalog {
       accent: _accentFrom(album.id),
       trackCount: album.trackCount > 0 ? album.trackCount : null,
       coverUrl: album.coverUrl,
+      releaseType: album.releaseType,
+      subType: album.subType,
     );
   }
 

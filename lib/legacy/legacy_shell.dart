@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
 import '../state/song_comments_controller.dart';
+import '../state/detail_requests.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
 import '../utils/artwork.dart';
@@ -41,6 +42,12 @@ class _LegacyShellState extends State<LegacyShell>
     with SingleTickerProviderStateMixin {
   _LegacySection _section = _LegacySection.home;
   Playlist? _playlist;
+
+  /// Set when the open detail is an album; the playlist pipeline renders it.
+  Album? _album;
+  ArtistRef? _artist;
+  bool _artistSongs = false;
+  AlbumReleaseGroup? _artistReleases;
   bool _comments = false;
   SongCommentsController? _commentsController;
   late final AnimationController _nowPlayingMotion;
@@ -66,6 +73,9 @@ class _LegacyShellState extends State<LegacyShell>
             reverseCurve: Curves.fastOutSlowIn,
           ),
         );
+    albumDetailRequest.addListener(_onAlbumRequest);
+    artistDetailRequest.addListener(_onArtistRequest);
+
   }
 
   void _onNowPlayingStatus(AnimationStatus status) {
@@ -83,6 +93,8 @@ class _LegacyShellState extends State<LegacyShell>
       ..removeStatusListener(_onNowPlayingStatus)
       ..dispose();
     _commentsController?.dispose();
+    albumDetailRequest.removeListener(_onAlbumRequest);
+    artistDetailRequest.removeListener(_onArtistRequest);
     super.dispose();
   }
 
@@ -90,6 +102,9 @@ class _LegacyShellState extends State<LegacyShell>
     setState(() {
       _section = section;
       _playlist = null;
+      _artist = null;
+      _artistSongs = false;
+      _artistReleases = null;
       _comments = false;
     });
   }
@@ -97,13 +112,70 @@ class _LegacyShellState extends State<LegacyShell>
   void _openPlaylist(Playlist playlist) {
     setState(() {
       _playlist = playlist;
+      _album = null;
+      _artist = null;
+      _artistSongs = false;
+      _artistReleases = null;
       _comments = false;
     });
   }
 
+  /// An album row anywhere in the app asks for the right-hand slot. The album
+  /// rides the playlist pipeline, so there is one list implementation.
+  void _onAlbumRequest() {
+    final Album? album = albumDetailRequest.value;
+    if (album == null) return;
+    albumDetailRequest.value = null;
+    if (!mounted) return;
+    _closeNowPlaying();
+    setState(() {
+      _album = album;
+      _artist = null;
+      _artistSongs = false;
+      _artistReleases = null;
+      _playlist = Playlist(
+        id: album.id,
+        name: album.title,
+        trackIds: const <String>[],
+        coverSeed: album.coverSeed,
+        coverUrl: album.coverUrl,
+        trackCount: album.trackCount ?? 0,
+      );
+      _comments = false;
+    });
+  }
+
+  void _onArtistRequest() {
+    final ArtistRef? artist = artistDetailRequest.value;
+    if (artist == null) return;
+    artistDetailRequest.value = null;
+    if (!mounted) return;
+    _closeNowPlaying();
+    setState(() {
+      _artist = artist;
+      _artistSongs = false;
+      _artistReleases = null;
+      _playlist = null;
+      _album = null;
+      _comments = false;
+    });
+  }
+
+  void _openArtistSongs() => setState(() => _artistSongs = true);
+
+  void _openArtistReleases(AlbumReleaseGroup group) =>
+      setState(() => _artistReleases = group);
+
   void _backToRoot() {
     setState(() {
+      if (_artistSongs || _artistReleases != null) {
+        _artistSongs = false;
+        _artistReleases = null;
+        return;
+      }
       _playlist = null;
+      _album = null;
+      _artist = null;
       _comments = false;
     });
   }
@@ -360,6 +432,7 @@ class _LegacyShellState extends State<LegacyShell>
                     selected:
                         _section == _LegacySection.search &&
                         _playlist == null &&
+                        _artist == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.search),
                   ),
@@ -370,6 +443,7 @@ class _LegacyShellState extends State<LegacyShell>
                     selected:
                         _section == _LegacySection.home &&
                         _playlist == null &&
+                        _artist == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.home),
                   ),
@@ -380,6 +454,7 @@ class _LegacyShellState extends State<LegacyShell>
                     selected:
                         _section == _LegacySection.library &&
                         _playlist == null &&
+                        _artist == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.library),
                   ),
@@ -390,13 +465,14 @@ class _LegacyShellState extends State<LegacyShell>
                     selected:
                         _section == _LegacySection.likes &&
                         _playlist == null &&
+                        _artist == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.likes),
                   ),
                   const SizedBox(height: 22),
                   Row(
                     children: <Widget>[
-                      Expanded(child: _sidebarLabel(apple, '资料库')),
+                      _sidebarLabel(apple, '资料库'),
                       if (state.signedIn)
                         _SidebarIconButton(
                           tooltip: '同步歌单',
@@ -404,6 +480,7 @@ class _LegacyShellState extends State<LegacyShell>
                           onPressed: () =>
                               unawaited(state.refreshCollections(force: true)),
                         ),
+                      const Spacer(),
                     ],
                   ),
                   const SizedBox(height: 5),
@@ -413,17 +490,12 @@ class _LegacyShellState extends State<LegacyShell>
             ),
             Container(height: .5, color: apple.separator),
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
-              child: Column(
+              padding: const EdgeInsets.fromLTRB(10, 8, 8, 10),
+              child: Row(
                 children: <Widget>[
-                  LegacyRailItem(
-                    icon: Icons.settings_rounded,
-                    label: '设置',
-                    selected: _section == _LegacySection.settings,
-                    onTap: () => _select(_LegacySection.settings),
-                  ),
-                  const SizedBox(height: 4),
-                  _accountRow(apple),
+                  Expanded(child: _accountRow(apple)),
+                  const SizedBox(width: 6),
+                  _themeToggleButton(),
                 ],
               ),
             ),
@@ -447,7 +519,7 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _desktopToolbar(AppleSemanticColors apple) {
-    final bool canGoBack = _playlist != null || _comments;
+    final bool canGoBack = _playlist != null || _artist != null || _comments;
     return SizedBox(
       height: 64,
       child: Padding(
@@ -473,23 +545,6 @@ class _LegacyShellState extends State<LegacyShell>
                 ),
               ),
             ),
-            _ToolbarButton(
-              tooltip: Theme.of(context).brightness == Brightness.dark
-                  ? '浅色外观'
-                  : '深色外观',
-              icon: Theme.of(context).brightness == Brightness.dark
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
-              onPressed: () => unawaited(
-                state.setThemeMode(
-                  Theme.of(context).brightness == Brightness.dark
-                      ? ThemeMode.light
-                      : ThemeMode.dark,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            _accountButton(apple),
           ],
         ),
       ),
@@ -497,7 +552,7 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _mobileToolbar(AppleSemanticColors apple) {
-    final bool canGoBack = _playlist != null || _comments;
+    final bool canGoBack = _playlist != null || _artist != null || _comments;
     return SizedBox(
       height: 50,
       child: Padding(
@@ -550,6 +605,12 @@ class _LegacyShellState extends State<LegacyShell>
   String get _pageTitle {
     if (_comments) return '评论';
     if (_playlist != null) return _playlist!.name;
+    if (_artist != null) {
+      if (_artistSongs) return '全部歌曲';
+      if (_artistReleases == AlbumReleaseGroup.album) return '全部专辑';
+      if (_artistReleases == AlbumReleaseGroup.singleEp) return '全部单曲 / EP';
+      return _artist!.name;
+    }
     return switch (_section) {
       _LegacySection.home => '现在就听',
       _LegacySection.search => '搜索',
@@ -588,32 +649,115 @@ class _LegacyShellState extends State<LegacyShell>
     );
   }
 
-  Widget _accountRow(AppleSemanticColors apple) {
-    final String name = state.isGuest ? '游客' : state.user.name;
-    final String detail = state.isGuest
-        ? '登录以同步资料库'
-        : state.user.vipLabel ?? '普通用户';
-    return AppleListTile(
-      title: name,
-      subtitle: detail,
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      minHeight: 40,
-      leading: _Avatar(
-        apple: apple,
-        radius: 14,
-        label: _accountInitial,
-        avatarUrl: state.isGuest ? null : state.user.avatarUrl,
-        signedIn: !state.isGuest,
-      ),
-      onTap: () => unawaited(showLegacyLoginDialog(context, state)),
-    );
-  }
-
   String get _accountInitial {
     if (state.isGuest) return '访';
     final String name = state.user.name.trim();
     if (name.isEmpty) return '你';
     return name.characters.first;
+  }
+
+  void _onAccountSelected(String value) {
+    if (value == 'login') {
+      unawaited(showLegacyLoginDialog(context, state));
+    } else if (value == 'logout') {
+      state.signOut();
+    } else if (value == 'settings') {
+      _select(_LegacySection.settings);
+    }
+  }
+
+  List<PopupMenuEntry<String>> _accountMenuItems(
+    BuildContext context,
+    AppleSemanticColors apple,
+  ) => <PopupMenuEntry<String>>[
+    PopupMenuItem<String>(
+      value: 'header',
+      enabled: false,
+      child: Text(
+        state.isGuest
+            ? '游客模式'
+            : '${state.user.name} · ${state.user.vipLabel ?? '普通用户'}',
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
+      ),
+    ),
+    if (state.isGuest)
+      const PopupMenuItem<String>(value: 'login', child: Text('登录'))
+    else
+      const PopupMenuItem<String>(value: 'logout', child: Text('退出登录')),
+    const PopupMenuItem<String>(value: 'settings', child: Text('设置')),
+  ];
+
+  /// avatar + name on the left, the theme toggle on its right. Tapping the
+  /// avatar opens the account menu; a guest gets the login flow instead.
+  Widget _accountRow(AppleSemanticColors apple) {
+    final String name = state.isGuest ? '游客' : state.user.name;
+    final String detail = state.isGuest
+        ? '登录以同步资料库'
+        : state.user.vipLabel ?? '普通用户';
+    return PopupMenuButton<String>(
+      key: const ValueKey('rail-account'),
+      tooltip: state.isGuest ? '登录' : state.user.name,
+      offset: const Offset(0, -6),
+      color: apple.tertiaryBackground,
+      surfaceTintColor: Colors.transparent,
+      elevation: 18,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: _onAccountSelected,
+      itemBuilder: (BuildContext context) => _accountMenuItems(context, apple),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        child: Row(
+          children: <Widget>[
+            _Avatar(
+              apple: apple,
+              radius: 14,
+              label: _accountInitial,
+              avatarUrl: state.isGuest ? null : state.user.avatarUrl,
+              signedIn: !state.isGuest,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: apple.label,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: apple.secondaryLabel,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _themeToggleButton() {
+    final bool dark = Theme.of(context).brightness == Brightness.dark;
+    return _ToolbarButton(
+      tooltip: dark ? '浅色外观' : '深色外观',
+      icon: dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+      onPressed: () => unawaited(
+        state.setThemeMode(dark ? ThemeMode.light : ThemeMode.dark),
+      ),
+    );
   }
 
   Widget _accountButton(AppleSemanticColors apple, {double radius = 15}) {
@@ -624,34 +768,8 @@ class _LegacyShellState extends State<LegacyShell>
       surfaceTintColor: Colors.transparent,
       elevation: 18,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (String value) {
-        if (value == 'login') {
-          unawaited(showLegacyLoginDialog(context, state));
-        } else if (value == 'logout') {
-          state.signOut();
-        } else if (value == 'settings') {
-          _select(_LegacySection.settings);
-        }
-      },
-      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(
-          value: 'header',
-          enabled: false,
-          child: Text(
-            state.isGuest
-                ? '游客模式'
-                : '${state.user.name} · ${state.user.vipLabel ?? '普通用户'}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
-          ),
-        ),
-        if (state.isGuest)
-          const PopupMenuItem<String>(value: 'login', child: Text('登录'))
-        else
-          const PopupMenuItem<String>(value: 'logout', child: Text('退出登录')),
-        const PopupMenuItem<String>(value: 'settings', child: Text('设置')),
-      ],
+      onSelected: _onAccountSelected,
+      itemBuilder: (BuildContext context) => _accountMenuItems(context, apple),
       child: _Avatar(
         apple: apple,
         radius: radius,
@@ -692,15 +810,20 @@ class _LegacyShellState extends State<LegacyShell>
           ),
         );
       },
-      child: KeyedSubtree(
-        key: ValueKey<String>(_contentKey),
-        child: page,
-      ),
+      child: KeyedSubtree(key: ValueKey<String>(_contentKey), child: page),
     );
   }
 
   String get _contentKey {
     if (_comments) return 'comments';
+    if (_artist != null) {
+      final String view = _artistSongs
+          ? 'songs'
+          : _artistReleases == null
+          ? 'overview'
+          : 'releases:${_artistReleases!.name}';
+      return 'artist:${_artist!.id}:$view';
+    }
     final Playlist? playlist = _playlist;
     if (playlist != null) return 'playlist:${playlist.id}';
     return 'section:${_section.name}';
@@ -730,9 +853,34 @@ class _LegacyShellState extends State<LegacyShell>
         ],
       );
     }
+    final ArtistRef? artist = _artist;
+    if (artist != null) {
+      if (_artistSongs) {
+        return LegacyArtistSongsPage(state: state, artist: artist);
+      }
+      final AlbumReleaseGroup? releaseGroup = _artistReleases;
+      if (releaseGroup != null) {
+        return LegacyArtistReleasesPage(
+          state: state,
+          artist: artist,
+          group: releaseGroup,
+        );
+      }
+      return LegacyArtistPage(
+        state: state,
+        artist: artist,
+        onOpenAllSongs: _openArtistSongs,
+        onOpenAlbums: () => _openArtistReleases(AlbumReleaseGroup.album),
+        onOpenSingles: () => _openArtistReleases(AlbumReleaseGroup.singleEp),
+      );
+    }
     final Playlist? playlist = _playlist;
     if (playlist != null) {
-      return LegacyPlaylistPage(state: state, playlist: playlist);
+      return LegacyPlaylistPage(
+        state: state,
+        playlist: playlist,
+        album: _album,
+      );
     }
     return switch (_section) {
       _LegacySection.home => LegacyHomePage(
@@ -793,11 +941,7 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
               color: _hovering ? apple.tertiaryFill : Colors.transparent,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              widget.icon,
-              size: 20,
-              color: apple.secondaryLabel,
-            ),
+            child: Icon(widget.icon, size: 20, color: apple.secondaryLabel),
           ),
         ),
       ),
@@ -826,8 +970,9 @@ class _SidebarIconButton extends StatelessWidget {
       constraints: const BoxConstraints.tightFor(width: 26, height: 26),
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
-        foregroundColor: apple.accent,
-        backgroundColor: apple.fill,
+        // A quiet gray glyph next to the section label, no chip behind it.
+        foregroundColor: apple.secondaryLabel,
+        hoverColor: apple.fill,
       ),
       icon: Icon(icon),
     );

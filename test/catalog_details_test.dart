@@ -69,6 +69,19 @@ class _Gateway extends NeteaseGateway {
   }
 
   @override
+  Future<Map<String, dynamic>> artistSongs(
+    int id, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    offsets.add(offset);
+    return {
+      'songs': offset == 0 ? [_song()] : <Map<String, dynamic>>[],
+      'more': false,
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> artistAlbums(
     int id, {
     int limit = 30,
@@ -111,8 +124,25 @@ void main() {
         'artist': {'id': 11, 'name': '歌手甲'},
       });
       expect(singular.artists.single.id, 11);
+      final full = Catalog.albumFromGateway(
+        GatewayAlbum.fromJson({..._album(79), 'type': '\u4e13\u8f91'}),
+      );
+      final ep = Catalog.albumFromGateway(
+        GatewayAlbum.fromJson({..._album(80), 'type': 'EP/Single'}),
+      );
+      expect(full.releaseGroup, AlbumReleaseGroup.album);
+      expect(ep.releaseGroup, AlbumReleaseGroup.singleEp);
+      expect(Album.fromJson(ep.toJson()).releaseType, 'EP/Single');
     },
   );
+
+  test('artist songs use the paged endpoint and are cached', () async {
+    final gateway = _Gateway();
+    final catalog = Catalog(gateway: gateway, cache: disk);
+    expect((await catalog.artistSongs(11)).single.title, '\u6b4c\u66f2');
+    expect((await catalog.artistSongs(11)).single.id, '1');
+    expect(gateway.offsets, [0]);
+  });
 
   test(
     'album detail and playback share a coalesced persistent snapshot, including offline refresh',

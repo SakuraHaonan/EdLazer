@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
-import '../screens/catalog_detail_page.dart';
 import '../state/app_state.dart';
+import '../state/detail_requests.dart';
 import '../theme/app_palette.dart';
 import 'interaction_feedback.dart';
 
@@ -24,6 +24,12 @@ Future<void> openArtists(
       : await showDialog<ArtistRef>(
           context: context,
           builder: (context) => AlertDialog(
+            // The legacy theme squares off dialogs; the artist chooser wants
+            // the rounded card shape the rest of the app uses.
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.surface,
             title: const TrText('选择歌手'),
             content: SizedBox(
               width: 360,
@@ -48,11 +54,8 @@ Future<void> openArtists(
           ),
         );
   if (selected == null || !context.mounted) return;
-  await Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => CatalogDetailPage.artist(state: state, artist: selected),
-    ),
-  );
+  Navigator.of(context).popUntil((Route<void> route) => route.isFirst);
+  artistDetailRequest.value = selected;
 }
 
 Future<void> openAlbumDetails(
@@ -61,11 +64,10 @@ Future<void> openAlbumDetails(
   Album album,
 ) async {
   if ((int.tryParse(album.id) ?? 0) <= 0) return;
-  await Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => CatalogDetailPage.album(state: state, album: album),
-    ),
-  );
+  // The shell owns the detail slot and slides the player away, so an album tap
+  // loads on the right of the main page instead of taking over the window.
+  Navigator.of(context).popUntil((Route<void> route) => route.isFirst);
+  albumDetailRequest.value = album;
 }
 
 class CatalogTextLink extends StatelessWidget {

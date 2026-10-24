@@ -286,6 +286,8 @@ class GatewayAlbum {
     this.publishTime,
     this.trackCount = 0,
     this.artists = const [],
+    this.releaseType = '',
+    this.subType = '',
   });
 
   final int id;
@@ -295,6 +297,8 @@ class GatewayAlbum {
   final int? publishTime;
   final int trackCount;
   final List<GatewayArtist> artists;
+  final String releaseType;
+  final String subType;
 
   factory GatewayAlbum.fromJson(Map<String, dynamic> json) {
     final dynamic artist =
@@ -321,6 +325,8 @@ class GatewayAlbum {
       publishTime: (json['publishTime'] as num?)?.toInt(),
       trackCount: (json['size'] as num?)?.toInt() ?? 0,
       artists: artists,
+      releaseType: json['type'] as String? ?? '',
+      subType: json['subType'] as String? ?? '',
     );
   }
 }
@@ -835,6 +841,22 @@ class NeteaseGateway {
               .map<GatewaySong>(GatewaySong.fromJson)
               .toList()
         : const <GatewaySong>[];
+  }
+
+  Future<Map<String, dynamic>> artistSongs(
+    int id, {
+    int limit = 100,
+    int offset = 0,
+  }) {
+    if (id <= 0 || limit <= 0 || limit > 500 || offset < 0) {
+      throw ArgumentError('Invalid artist song page.');
+    }
+    return _transport.request('/artist/songs', <String, String>{
+      'id': '$id',
+      'limit': '$limit',
+      'offset': '$offset',
+      'order': 'hot',
+    });
   }
 
   Future<List<GatewayBanner>> banners() async {

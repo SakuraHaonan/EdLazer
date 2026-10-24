@@ -152,6 +152,15 @@ bool Win32Window::Create(const std::wstring& title,
   const COLORREF no_border = 0xFFFFFFFE;  // DWMWA_COLOR_NONE
   DwmSetWindowAttribute(window, kDwmBorderColor, &no_border, sizeof(no_border));
 
+  // Round the window corners. The app is frameless (it paints its own title
+  // bar) and DWM gives a frameless window a hard rectangle by default, which
+  // reads as pasted onto the white desktop behind it. Unsupported attributes
+  // (Windows 10 and older) are ignored, leaving the square frame as before.
+  constexpr DWORD kDwmCornerPreference = 33;  // DWMWA_WINDOW_CORNER_PREFERENCE
+  const DWORD round_corners = 2;              // DWMWCP_ROUND
+  DwmSetWindowAttribute(window, kDwmCornerPreference, &round_corners,
+                        sizeof(round_corners));
+
   return OnCreate();
 }
 
@@ -203,6 +212,40 @@ Win32Window::MessageHandler(HWND hwnd,
 
       return 0;
     }
+    // The window is frameless: the plugin answers WM_NCCALCSIZE with an empty
+    // non-client area, so DefWindowProc never reports a resize border and the
+    // app has to drive every resize from Dart. Hand the edges back to the OS
+    // instead - Windows then owns the resize loop, the cursor cannot drift out
+    // of sync with the drag, and no pointer traffic round-trips through the
+    // Flutter engine.
+    case WM_NCHITTEST: {
+      if (IsZoomed(hwnd) || IsIconic(hwnd)) break;
+
+      const LONG frame = GetSystemMetrics(SM_CXSIZEFRAME) +
+                         GetSystemMetrics(SM_CXPADDEDBORDER);
+      const LONG grab = frame > 0 ? frame : 8;
+
+      POINT cursor{static_cast<short>(LOWORD(lparam)),
+                   static_cast<short>(HIWORD(lparam))};
+      RECT bounds;
+      GetWindowRect(hwnd, &bounds);
+
+      const bool on_left = cursor.x < bounds.left + grab;
+      const bool on_right = cursor.x >= bounds.right - grab;
+      const bool on_top = cursor.y < bounds.top + grab;
+      const bool on_bottom = cursor.y >= bounds.bottom - grab;
+
+      if (on_top && on_left) return HTTOPLEFT;
+      if (on_top && on_right) return HTTOPRIGHT;
+      if (on_bottom && on_left) return HTBOTTOMLEFT;
+      if (on_bottom && on_right) return HTBOTTOMRIGHT;
+      if (on_left) return HTLEFT;
+      if (on_right) return HTRIGHT;
+      if (on_top) return HTTOP;
+      if (on_bottom) return HTBOTTOM;
+      break;
+    }
+
     case WM_SIZE: {
       RECT rect = GetClientArea();
       if (child_content_ != nullptr) {
