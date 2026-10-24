@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 
 import '../data/catalog.dart';
+import '../data/catalog_details.dart';
 import '../data/models.dart';
 import '../l10n/app_language.dart';
 import '../scrolling/scroll_motion.dart';
@@ -15,9 +16,768 @@ import '../theme/apple_design.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
+import '../widgets/interaction_feedback.dart';
+import '../widgets/motion_artwork.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
 import 'legacy_widgets.dart';
+
+/// Apple Music-inspired artist overview that lives inside the shell's content
+/// pane. It deliberately keeps the hero compact and lets releases carry the
+/// visual weight below it.
+class LegacyArtistPage extends StatefulWidget {
+  const LegacyArtistPage({
+    super.key,
+    required this.state,
+    required this.artist,
+    required this.onOpenAllSongs,
+    required this.onOpenAlbums,
+    required this.onOpenSingles,
+  });
+
+  final AppState state;
+  final ArtistRef artist;
+  final VoidCallback onOpenAllSongs;
+  final VoidCallback onOpenAlbums;
+  final VoidCallback onOpenSingles;
+
+  @override
+  State<LegacyArtistPage> createState() => _LegacyArtistPageState();
+}
+
+class _LegacyArtistPageState extends State<LegacyArtistPage> {
+  ArtistDetails? _details;
+  final List<Album> _albums = <Album>[];
+  String? _error;
+  bool _loading = true;
+  int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(covariant LegacyArtistPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.artist.id != widget.artist.id) unawaited(_load());
+  }
+
+  Future<void> _load({bool force = false}) async {
+    final int generation = ++_generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _albums.clear();
+    });
+    try {
+      final ArtistDetails details = await widget.state.catalog.artistDetails(
+        widget.artist,
+        force: force,
+      );
+      if (!mounted || generation != _generation) return;
+      setState(() => _details = details);
+      var offset = 0;
+      var more = true;
+      final List<Album> albums = <Album>[];
+      final Set<String> ids = <String>{};
+      while (more) {
+        final ArtistAlbumPage page = await widget.state.catalog.artistAlbumPage(
+          widget.artist.id,
+          offset: offset,
+          force: force,
+        );
+        albums.addAll(page.albums.where((album) => ids.add(album.id)));
+        offset += page.receivedCount;
+        more = page.more && page.receivedCount > 0;
+      }
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _albums.addAll(albums);
+      });
+    } catch (_) {
+      if (mounted && generation == _generation) {
+        setState(
+          () => _error =
+              '\u6b4c\u624b\u8d44\u6599\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+        );
+      }
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ArtistRef artist = _details?.artist ?? widget.artist;
+    final List<Track> popular =
+        _details?.tracks.take(9).toList() ?? const <Track>[];
+    final List<Album> fullAlbums = _albums
+        .where((album) => album.releaseGroup == AlbumReleaseGroup.album)
+        .toList();
+    final List<Album> singles = _albums
+        .where((album) => album.releaseGroup != AlbumReleaseGroup.album)
+        .toList();
+    final double inset = _pageInset(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(inset, 20, inset, 42),
+          children: <Widget>[
+            _ArtistHero(
+              artist: artist,
+              songCount: _details?.musicCount ?? 0,
+              albumCount: _details?.albumCount ?? 0,
+              onPlay: popular.isEmpty
+                  ? null
+                  : () => widget.state.playQueue(_details!.tracks),
+            ),
+            if (_loading && _details == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 72),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null && _details == null)
+              LegacyNotice(
+                message: _error!,
+                action: FilledButton(
+                  onPressed: () => unawaited(_load(force: true)),
+                  child: const Text('\u91cd\u8bd5'),
+                ),
+              )
+            else ...<Widget>[
+              const SizedBox(height: 38),
+              LegacySectionHeader(
+                title: '\u6b4c\u66f2\u6392\u884c',
+                subtitle: popular.isEmpty
+                    ? null
+                    : '\u70ed\u95e8 ${popular.length} \u9996',
+                trailing: TextButton.icon(
+                  key: const ValueKey<String>('artist-all-songs'),
+                  onPressed: widget.onOpenAllSongs,
+                  iconAlignment: IconAlignment.end,
+                  icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                  label: const Text('\u67e5\u770b\u5168\u90e8'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (popular.isEmpty)
+                const LegacyNotice(
+                  message: '\u6682\u65e0\u70ed\u95e8\u6b4c\u66f2',
+                )
+              else
+                LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints box) {
+                    final int columns = box.maxWidth >= 920
+                        ? 3
+                        : box.maxWidth >= 560
+                        ? 2
+                        : 1;
+                    final double width =
+                        (box.maxWidth - (columns - 1) * 10) / columns;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        for (int i = 0; i < popular.length; i++)
+                          SizedBox(
+                            width: width,
+                            child: _ArtistTrackCard(
+                              track: popular[i],
+                              current:
+                                  widget.state.current?.id == popular[i].id,
+                              onTap: () => widget.state.playQueue(
+                                _details!.tracks,
+                                startIndex: i,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              if (fullAlbums.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 36),
+                LegacySectionHeader(
+                  title: '\u4e13\u8f91',
+                  subtitle:
+                      '${fullAlbums.length} \u5f20\u5168\u957f\u4e13\u8f91',
+                  trailing: TextButton.icon(
+                    key: const ValueKey<String>('artist-all-albums'),
+                    onPressed: widget.onOpenAlbums,
+                    iconAlignment: IconAlignment.end,
+                    icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                    label: const Text('\u67e5\u770b\u5168\u90e8'),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _ArtistReleaseShelf(state: widget.state, albums: fullAlbums),
+              ],
+              if (singles.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 36),
+                LegacySectionHeader(
+                  title: '\u5355\u66f2 / EP',
+                  subtitle: '${singles.length} \u5f20',
+                  trailing: TextButton.icon(
+                    key: const ValueKey<String>('artist-all-singles'),
+                    onPressed: widget.onOpenSingles,
+                    iconAlignment: IconAlignment.end,
+                    icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                    label: const Text('\u67e5\u770b\u5168\u90e8'),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _ArtistReleaseShelf(state: widget.state, albums: singles),
+              ],
+              if ((_details?.description ?? '').trim().isNotEmpty) ...<Widget>[
+                const SizedBox(height: 38),
+                const LegacySectionHeader(title: '\u5173\u4e8e'),
+                const SizedBox(height: 12),
+                Text(
+                  _details!.description,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    height: 1.55,
+                    color: AppleSemanticColors.of(context).secondaryLabel,
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtistHero extends StatelessWidget {
+  const _ArtistHero({
+    required this.artist,
+    required this.songCount,
+    required this.albumCount,
+    required this.onPlay,
+  });
+
+  final ArtistRef artist;
+  final int songCount;
+  final int albumCount;
+  final VoidCallback? onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return Column(
+      children: <Widget>[
+        ClipOval(
+          child: SizedBox.square(
+            dimension: 180,
+            child: LegacyCover(url: artist.coverUrl, radius: 0, iconSize: 50),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          artist.name,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.displaySmall?.copyWith(
+            color: apple.label,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -1.1,
+          ),
+        ),
+        if (songCount > 0 || albumCount > 0) ...<Widget>[
+          const SizedBox(height: 7),
+          Text(
+            <String>[
+              if (songCount > 0) '$songCount \u9996\u6b4c\u66f2',
+              if (albumCount > 0) '$albumCount \u5f20\u53d1\u884c',
+            ].join(' \u00b7 '),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
+          ),
+        ],
+        const SizedBox(height: 17),
+        FilledButton.icon(
+          onPressed: onPlay,
+          icon: const Icon(Icons.play_arrow_rounded, size: 23),
+          label: const Text('\u64ad\u653e'),
+          style: FilledButton.styleFrom(
+            shape: const StadiumBorder(),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ArtistTrackCard extends StatefulWidget {
+  const _ArtistTrackCard({
+    required this.track,
+    required this.current,
+    required this.onTap,
+  });
+  final Track track;
+  final bool current;
+  final VoidCallback onTap;
+
+  @override
+  State<_ArtistTrackCard> createState() => _ArtistTrackCardState();
+}
+
+class _ArtistTrackCardState extends State<_ArtistTrackCard> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: feedbackAction(context, widget.onTap),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 66,
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: widget.current
+                  ? apple.accentSoft
+                  : _hover
+                  ? apple.fill
+                  : apple.secondaryGroupedBackground,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: apple.separator, width: .5),
+            ),
+            child: Row(
+              children: <Widget>[
+                LegacyCover(url: widget.track.coverUrl, size: 52, radius: 6),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        widget.track.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: widget.current ? apple.accent : apple.label,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        <String>[
+                          widget.track.album,
+                          if (widget.track.duration > Duration.zero)
+                            legacyDuration(widget.track.duration),
+                        ].join(' \u00b7 '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: apple.secondaryLabel,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.more_horiz_rounded, color: apple.tertiaryLabel),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtistReleaseShelf extends StatelessWidget {
+  const _ArtistReleaseShelf({required this.state, required this.albums});
+  final AppState state;
+  final List<Album> albums;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 220,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      itemCount: albums.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 16),
+      itemBuilder: (BuildContext context, int index) {
+        final Album album = albums[index];
+        return SizedBox(
+          width: 160,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: feedbackAction(
+              context,
+              () => unawaited(openAlbumDetails(context, state, album)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                LegacyCover(url: album.coverUrl, size: 160, radius: 9),
+                const SizedBox(height: 8),
+                Text(
+                  album.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  <String>[
+                    if (album.year.isNotEmpty) album.year,
+                    if (album.releaseType.isNotEmpty) album.releaseType,
+                  ].join(' \u00b7 '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppleSemanticColors.of(context).secondaryLabel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+class LegacyArtistReleasesPage extends StatefulWidget {
+  const LegacyArtistReleasesPage({
+    super.key,
+    required this.state,
+    required this.artist,
+    required this.group,
+  });
+
+  final AppState state;
+  final ArtistRef artist;
+  final AlbumReleaseGroup group;
+
+  @override
+  State<LegacyArtistReleasesPage> createState() =>
+      _LegacyArtistReleasesPageState();
+}
+
+class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
+  List<Album>? _albums;
+  String? _error;
+
+  String get _title => widget.group == AlbumReleaseGroup.album
+      ? '\u5168\u90e8\u4e13\u8f91'
+      : '\u5168\u90e8\u5355\u66f2 / EP';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load({bool force = false}) async {
+    setState(() {
+      _error = null;
+      if (force) _albums = null;
+    });
+    try {
+      var offset = 0;
+      var more = true;
+      final List<Album> releases = <Album>[];
+      final Set<String> ids = <String>{};
+      while (more) {
+        final ArtistAlbumPage page = await widget.state.catalog.artistAlbumPage(
+          widget.artist.id,
+          offset: offset,
+          force: force,
+        );
+        for (final Album album in page.albums) {
+          final bool matches = widget.group == AlbumReleaseGroup.album
+              ? album.releaseGroup == AlbumReleaseGroup.album
+              : album.releaseGroup != AlbumReleaseGroup.album;
+          if (matches && ids.add(album.id)) releases.add(album);
+        }
+        offset += page.receivedCount;
+        more = page.more && page.receivedCount > 0;
+      }
+      if (mounted) setState(() => _albums = releases);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              '\u53d1\u884c\u4f5c\u54c1\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Album>? albums = _albums;
+    final double inset = _pageInset(context);
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 980),
+        child: CustomScrollView(
+          slivers: <Widget>[
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(inset, 12, inset, 16),
+              sliver: SliverToBoxAdapter(
+                child: ApplePageTitle(
+                  title: _title,
+                  subtitle: albums == null
+                      ? widget.artist.name
+                      : '${widget.artist.name} \u00b7 ${albums.length} \u5f20',
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+            if (_error != null)
+              SliverToBoxAdapter(
+                child: LegacyNotice(
+                  message: _error!,
+                  action: FilledButton(
+                    onPressed: () => unawaited(_load(force: true)),
+                    child: const Text('\u91cd\u8bd5'),
+                  ),
+                ),
+              )
+            else if (albums == null)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (albums.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: LegacyNotice(message: '\u6682\u65e0$_title'),
+              )
+            else
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: inset),
+                sliver: SliverList.separated(
+                  itemCount: albums.length,
+                  separatorBuilder: (_, _) =>
+                      Divider(height: 1, indent: 80, color: apple.separator),
+                  itemBuilder: (BuildContext context, int index) {
+                    final Album album = albums[index];
+                    final String detail = <String>[
+                      if (album.year.isNotEmpty) album.year,
+                      if (album.releaseType.isNotEmpty) album.releaseType,
+                      if (album.trackCount != null)
+                        '${album.trackCount} \u9996',
+                    ].join(' \u00b7 ');
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: feedbackAction(
+                          context,
+                          () => unawaited(
+                            openAlbumDetails(context, widget.state, album),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              LegacyCover(
+                                url: album.coverUrl,
+                                size: 62,
+                                radius: 7,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Text(
+                                      album.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge
+                                          ?.copyWith(
+                                            color: apple.label,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    if (detail.isNotEmpty) ...<Widget>[
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        detail,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: apple.secondaryLabel,
+                                            ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                color: apple.tertiaryLabel,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 36)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class LegacyArtistSongsPage extends StatefulWidget {
+  const LegacyArtistSongsPage({
+    super.key,
+    required this.state,
+    required this.artist,
+  });
+  final AppState state;
+  final ArtistRef artist;
+
+  @override
+  State<LegacyArtistSongsPage> createState() => _LegacyArtistSongsPageState();
+}
+
+class _LegacyArtistSongsPageState extends State<LegacyArtistSongsPage> {
+  List<Track>? _tracks;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load({bool force = false}) async {
+    setState(() => _error = null);
+    try {
+      final tracks = await widget.state.catalog.artistSongs(
+        widget.artist.id,
+        force: force,
+      );
+      if (mounted) setState(() => _tracks = tracks);
+    } catch (_) {
+      try {
+        final fallback = await widget.state.catalog.artistDetails(
+          widget.artist,
+        );
+        if (mounted && fallback.tracks.isNotEmpty) {
+          setState(() => _tracks = fallback.tracks);
+          return;
+        }
+      } catch (_) {}
+      if (mounted) {
+        setState(
+          () => _error =
+              '\u5168\u90e8\u6b4c\u66f2\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Track>? tracks = _tracks;
+    final double inset = _pageInset(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1100),
+        child: CustomScrollView(
+          slivers: <Widget>[
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(inset, 12, inset, 8),
+              sliver: SliverToBoxAdapter(
+                child: ApplePageTitle(
+                  title: '\u5168\u90e8\u6b4c\u66f2',
+                  subtitle: tracks == null
+                      ? widget.artist.name
+                      : '${widget.artist.name} \u00b7 ${tracks.length} \u9996',
+                  padding: EdgeInsets.zero,
+                  trailing: tracks == null || tracks.isEmpty
+                      ? null
+                      : FilledButton.icon(
+                          onPressed: () => widget.state.playQueue(tracks),
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: const Text('\u64ad\u653e'),
+                        ),
+                ),
+              ),
+            ),
+            if (_error != null)
+              SliverToBoxAdapter(
+                child: LegacyNotice(
+                  message: _error!,
+                  action: FilledButton(
+                    onPressed: () => unawaited(_load(force: true)),
+                    child: const Text('\u91cd\u8bd5'),
+                  ),
+                ),
+              )
+            else if (tracks == null)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (tracks.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: LegacyNotice(
+                  message: '\u6682\u65e0\u53ef\u64ad\u653e\u6b4c\u66f2',
+                ),
+              )
+            else
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: inset),
+                sliver: SliverList.builder(
+                  itemCount: tracks.length,
+                  itemBuilder: (BuildContext context, int index) =>
+                      LegacyTrackRow(
+                        track: tracks[index],
+                        index: index,
+                        current: widget.state.current?.id == tracks[index].id,
+                        playing: widget.state.playing,
+                        onTap: () =>
+                            widget.state.playQueue(tracks, startIndex: index),
+                      ),
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 36)),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// Horizontal page margin. Phones use the 16 pt iOS inset; windowed layouts
 /// breathe with a 24 pt margin, while the content itself is capped below.
@@ -787,12 +1547,22 @@ class _PlaylistHeader extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final double coverSize = compact ? 168 : 190;
+    final Widget stillCover = LegacyCover(
+      url: playlist.coverUrl,
+      size: coverSize,
+      radius: 14,
+    );
     final Widget cover = RepaintBoundary(
-      child: LegacyCover(
-        url: playlist.coverUrl,
-        size: coverSize,
-        radius: 14,
-      ),
+      // Albums try Apple's motion artwork; playlists keep the still cover.
+      child: artist == null
+          ? stillCover
+          : MotionArtwork(
+              size: coverSize,
+              radius: 14,
+              artist: artist,
+              album: playlist.name,
+              child: stillCover,
+            ),
     );
     final Widget? summary = note == null || note!.trim().isEmpty
         ? null
@@ -802,8 +1572,8 @@ class _PlaylistHeader extends StatelessWidget {
               cursor: SystemMouseCursors.click,
               child: Text(
                 note!,
-                maxLines: compact ? 3 : null,
-                overflow: compact ? TextOverflow.ellipsis : null,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 textAlign: compact ? TextAlign.center : TextAlign.start,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: apple.tertiaryLabel,
@@ -818,6 +1588,9 @@ class _PlaylistHeader extends StatelessWidget {
           : CrossAxisAlignment.start,
       mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: <Widget>[
+        // Albums stack the title, artist and summary against the transport row
+        // instead of the cover's top edge.
+        if (!compact && artistWidget != null) const Spacer(),
         Text(
           playlist.name,
           maxLines: 2,
@@ -845,37 +1618,27 @@ class _PlaylistHeader extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 7),
-        Text(
-          <String>[
-            if (playlist.trackCount > 0) '${playlist.trackCount} 首歌曲',
-            if (playlist.description.isNotEmpty) playlist.description,
-          ].join(' · '),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: compact ? TextAlign.center : TextAlign.start,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: apple.secondaryLabel,
+        // Albums drop the count line: it only forced a blank row between the
+        // artist and the summary.
+        if (artist == null) ...[
+          const SizedBox(height: 7),
+          Text(
+            <String>[
+              if (playlist.trackCount > 0) '${playlist.trackCount} 首歌曲',
+              if (playlist.description.isNotEmpty) playlist.description,
+            ].join(' · '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: compact ? TextAlign.center : TextAlign.start,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: apple.secondaryLabel,
+            ),
           ),
-        ),
+        ],
         // Desktop spends the leftover height on the summary, which is what
         // pins the transport row to the cover's bottom edge. Compact layouts
         // have no bounded height, so they keep a plain three-line block.
-        if (!compact)
-          Expanded(
-            child: summary == null
-                ? const SizedBox.shrink()
-                : ClipRect(
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: summary,
-                      ),
-                    ),
-                  ),
-          )
-        else if (summary != null)
+        if (summary != null)
           Padding(padding: const EdgeInsets.only(top: 8), child: summary),
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -913,7 +1676,9 @@ class _PlaylistHeader extends StatelessWidget {
       children: <Widget>[
         cover,
         const SizedBox(width: 24),
-        Expanded(child: SizedBox(height: coverSize, child: info)),
+        Expanded(
+          child: SizedBox(height: coverSize, child: info),
+        ),
       ],
     );
   }

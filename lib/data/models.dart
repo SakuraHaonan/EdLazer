@@ -136,6 +136,8 @@ class Album {
     this.trackCount,
     this.coverUrl,
     this.artists = const [],
+    this.releaseType = '',
+    this.subType = '',
   });
 
   final String id;
@@ -150,6 +152,27 @@ class Album {
   final String? coverUrl;
   final List<ArtistRef> artists;
 
+  /// NetEase exposes values such as `\u4e13\u8f91` and `EP/Single` here.
+  final String releaseType;
+  final String subType;
+
+  AlbumReleaseGroup get releaseGroup {
+    final String value = '$releaseType $subType'.toLowerCase();
+    if (value.contains('single') ||
+        value.contains('ep') ||
+        value.contains('\u5355\u66f2')) {
+      return AlbumReleaseGroup.singleEp;
+    }
+    if (value.contains('album') || value.contains('\u4e13\u8f91')) {
+      return AlbumReleaseGroup.album;
+    }
+    final int? count = trackCount;
+    if (count != null && count > 0) {
+      return count <= 6 ? AlbumReleaseGroup.singleEp : AlbumReleaseGroup.album;
+    }
+    return AlbumReleaseGroup.unknown;
+  }
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,
@@ -161,6 +184,8 @@ class Album {
     'trackCount': trackCount,
     'coverUrl': coverUrl,
     'artists': artists.map((artist) => artist.toJson()).toList(),
+    'releaseType': releaseType,
+    'subType': subType,
   };
 
   factory Album.fromJson(Map<String, dynamic> json) => Album(
@@ -174,5 +199,9 @@ class Album {
     trackCount: json['trackCount'] as int?,
     coverUrl: json['coverUrl'] as String?,
     artists: ArtistRef.list(json['artists']),
+    releaseType: json['releaseType'] as String? ?? '',
+    subType: json['subType'] as String? ?? '',
   );
 }
+
+enum AlbumReleaseGroup { album, singleEp, unknown }

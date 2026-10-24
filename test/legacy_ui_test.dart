@@ -3,11 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:lazer_nextgen/data/catalog.dart';
+import 'package:lazer_nextgen/data/catalog_details.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:lazer_nextgen/state/detail_requests.dart';
 import 'package:lazer_nextgen/widgets/apple_ui.dart';
 
 const Track _track = Track(
@@ -53,6 +55,51 @@ class _Catalog extends Catalog {
       const GatewayLyrics(lrc: '[00:00.00]第一句');
   @override
   Future<List<Track>> playlistTracks(String id) async => <Track>[_track];
+  @override
+  Future<ArtistDetails> artistDetails(
+    ArtistRef seed, {
+    bool force = false,
+  }) async => ArtistDetails(
+    artist: seed,
+    tracks: const <Track>[_track],
+    description: '\u6d4b\u8bd5\u6b4c\u624b\u4ecb\u7ecd',
+    musicCount: 1,
+    albumCount: 2,
+  );
+  @override
+  Future<ArtistAlbumPage> artistAlbumPage(
+    int id, {
+    int offset = 0,
+    bool force = false,
+  }) async => const ArtistAlbumPage(
+    albums: <Album>[
+      Album(
+        id: '77',
+        title: '\u6d4b\u8bd5\u4e13\u8f91',
+        artist: '\u6d4b\u8bd5\u6b4c\u624b',
+        year: '2026',
+        coverSeed: 77,
+        note: '',
+        trackCount: 12,
+        releaseType: '\u4e13\u8f91',
+      ),
+      Album(
+        id: '78',
+        title: '\u6d4b\u8bd5 EP',
+        artist: '\u6d4b\u8bd5\u6b4c\u624b',
+        year: '2025',
+        coverSeed: 78,
+        note: '',
+        trackCount: 3,
+        releaseType: 'EP/Single',
+      ),
+    ],
+    more: false,
+    receivedCount: 2,
+  );
+  @override
+  Future<List<Track>> artistSongs(int id, {bool force = false}) async =>
+      const <Track>[_track];
   @override
   Future<SearchResults> search(String query) async => const SearchResults(
     tracks: <Track>[_track],
@@ -152,6 +199,57 @@ void main() {
     await tester.tap(find.text('设置').last);
     await tester.pumpAndSettle();
     expect(find.text('配色'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('artist links open an Apple-style detail in the content pane', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    addTearDown(() => artistDetailRequest.value = null);
+    final AppState state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    await tester.pumpWidget(_legacyApp(state));
+    await tester.pumpAndSettle();
+
+    artistDetailRequest.value = const ArtistRef(
+      id: 11,
+      name: '\u6d4b\u8bd5\u6b4c\u624b',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('\u6d4b\u8bd5\u6b4c\u624b'), findsWidgets);
+    expect(find.text('\u6b4c\u66f2\u6392\u884c'), findsOneWidget);
+    expect(find.text('\u4e13\u8f91'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('artist-all-albums')));
+    await tester.pumpAndSettle();
+    expect(find.text('\u5168\u90e8\u4e13\u8f91'), findsWidgets);
+    expect(find.text('\u6d4b\u8bd5\u4e13\u8f91'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('\u8fd4\u56de'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).at(1), const Offset(0, -520));
+    await tester.pumpAndSettle();
+    expect(find.text('\u5355\u66f2 / EP'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey<String>('artist-all-singles')));
+    await tester.pumpAndSettle();
+    expect(find.text('\u5168\u90e8\u5355\u66f2 / EP'), findsWidgets);
+    expect(find.text('\u6d4b\u8bd5 EP'), findsOneWidget);
+    expect(
+      find.text('Lazer'),
+      findsWidgets,
+      reason: '\u4fa7\u680f\u5e94\u7ee7\u7eed\u4fdd\u7559',
+    );
+
+    await tester.tap(find.byTooltip('\u8fd4\u56de'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('artist-all-songs')));
+    await tester.pumpAndSettle();
+    expect(find.text('\u5168\u90e8\u6b4c\u66f2'), findsWidgets);
+    expect(find.text('\u307e\u306b\u307e\u306b'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

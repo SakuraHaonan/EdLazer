@@ -42,8 +42,12 @@ class _LegacyShellState extends State<LegacyShell>
     with SingleTickerProviderStateMixin {
   _LegacySection _section = _LegacySection.home;
   Playlist? _playlist;
+
   /// Set when the open detail is an album; the playlist pipeline renders it.
   Album? _album;
+  ArtistRef? _artist;
+  bool _artistSongs = false;
+  AlbumReleaseGroup? _artistReleases;
   bool _comments = false;
   SongCommentsController? _commentsController;
   late final AnimationController _nowPlayingMotion;
@@ -70,6 +74,8 @@ class _LegacyShellState extends State<LegacyShell>
           ),
         );
     albumDetailRequest.addListener(_onAlbumRequest);
+    artistDetailRequest.addListener(_onArtistRequest);
+
   }
 
   void _onNowPlayingStatus(AnimationStatus status) {
@@ -88,6 +94,7 @@ class _LegacyShellState extends State<LegacyShell>
       ..dispose();
     _commentsController?.dispose();
     albumDetailRequest.removeListener(_onAlbumRequest);
+    artistDetailRequest.removeListener(_onArtistRequest);
     super.dispose();
   }
 
@@ -95,6 +102,9 @@ class _LegacyShellState extends State<LegacyShell>
     setState(() {
       _section = section;
       _playlist = null;
+      _artist = null;
+      _artistSongs = false;
+      _artistReleases = null;
       _comments = false;
     });
   }
@@ -103,6 +113,9 @@ class _LegacyShellState extends State<LegacyShell>
     setState(() {
       _playlist = playlist;
       _album = null;
+      _artist = null;
+      _artistSongs = false;
+      _artistReleases = null;
       _comments = false;
     });
   }
@@ -117,6 +130,9 @@ class _LegacyShellState extends State<LegacyShell>
     _closeNowPlaying();
     setState(() {
       _album = album;
+      _artist = null;
+      _artistSongs = false;
+      _artistReleases = null;
       _playlist = Playlist(
         id: album.id,
         name: album.title,
@@ -129,10 +145,37 @@ class _LegacyShellState extends State<LegacyShell>
     });
   }
 
-  void _backToRoot() {
+  void _onArtistRequest() {
+    final ArtistRef? artist = artistDetailRequest.value;
+    if (artist == null) return;
+    artistDetailRequest.value = null;
+    if (!mounted) return;
+    _closeNowPlaying();
     setState(() {
+      _artist = artist;
+      _artistSongs = false;
+      _artistReleases = null;
       _playlist = null;
       _album = null;
+      _comments = false;
+    });
+  }
+
+  void _openArtistSongs() => setState(() => _artistSongs = true);
+
+  void _openArtistReleases(AlbumReleaseGroup group) =>
+      setState(() => _artistReleases = group);
+
+  void _backToRoot() {
+    setState(() {
+      if (_artistSongs || _artistReleases != null) {
+        _artistSongs = false;
+        _artistReleases = null;
+        return;
+      }
+      _playlist = null;
+      _album = null;
+      _artist = null;
       _comments = false;
     });
   }
@@ -389,6 +432,7 @@ class _LegacyShellState extends State<LegacyShell>
                     selected:
                         _section == _LegacySection.search &&
                         _playlist == null &&
+                        _artist == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.search),
                   ),
@@ -399,6 +443,7 @@ class _LegacyShellState extends State<LegacyShell>
                     selected:
                         _section == _LegacySection.home &&
                         _playlist == null &&
+                        _artist == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.home),
                   ),
@@ -409,6 +454,7 @@ class _LegacyShellState extends State<LegacyShell>
                     selected:
                         _section == _LegacySection.library &&
                         _playlist == null &&
+                        _artist == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.library),
                   ),
@@ -419,6 +465,7 @@ class _LegacyShellState extends State<LegacyShell>
                     selected:
                         _section == _LegacySection.likes &&
                         _playlist == null &&
+                        _artist == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.likes),
                   ),
@@ -472,7 +519,7 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _desktopToolbar(AppleSemanticColors apple) {
-    final bool canGoBack = _playlist != null || _comments;
+    final bool canGoBack = _playlist != null || _artist != null || _comments;
     return SizedBox(
       height: 64,
       child: Padding(
@@ -505,7 +552,7 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _mobileToolbar(AppleSemanticColors apple) {
-    final bool canGoBack = _playlist != null || _comments;
+    final bool canGoBack = _playlist != null || _artist != null || _comments;
     return SizedBox(
       height: 50,
       child: Padding(
@@ -558,6 +605,12 @@ class _LegacyShellState extends State<LegacyShell>
   String get _pageTitle {
     if (_comments) return '评论';
     if (_playlist != null) return _playlist!.name;
+    if (_artist != null) {
+      if (_artistSongs) return '全部歌曲';
+      if (_artistReleases == AlbumReleaseGroup.album) return '全部专辑';
+      if (_artistReleases == AlbumReleaseGroup.singleEp) return '全部单曲 / EP';
+      return _artist!.name;
+    }
     return switch (_section) {
       _LegacySection.home => '现在就听',
       _LegacySection.search => '搜索',
@@ -757,15 +810,20 @@ class _LegacyShellState extends State<LegacyShell>
           ),
         );
       },
-      child: KeyedSubtree(
-        key: ValueKey<String>(_contentKey),
-        child: page,
-      ),
+      child: KeyedSubtree(key: ValueKey<String>(_contentKey), child: page),
     );
   }
 
   String get _contentKey {
     if (_comments) return 'comments';
+    if (_artist != null) {
+      final String view = _artistSongs
+          ? 'songs'
+          : _artistReleases == null
+          ? 'overview'
+          : 'releases:${_artistReleases!.name}';
+      return 'artist:${_artist!.id}:$view';
+    }
     final Playlist? playlist = _playlist;
     if (playlist != null) return 'playlist:${playlist.id}';
     return 'section:${_section.name}';
@@ -793,6 +851,27 @@ class _LegacyShellState extends State<LegacyShell>
             ),
           ),
         ],
+      );
+    }
+    final ArtistRef? artist = _artist;
+    if (artist != null) {
+      if (_artistSongs) {
+        return LegacyArtistSongsPage(state: state, artist: artist);
+      }
+      final AlbumReleaseGroup? releaseGroup = _artistReleases;
+      if (releaseGroup != null) {
+        return LegacyArtistReleasesPage(
+          state: state,
+          artist: artist,
+          group: releaseGroup,
+        );
+      }
+      return LegacyArtistPage(
+        state: state,
+        artist: artist,
+        onOpenAllSongs: _openArtistSongs,
+        onOpenAlbums: () => _openArtistReleases(AlbumReleaseGroup.album),
+        onOpenSingles: () => _openArtistReleases(AlbumReleaseGroup.singleEp),
       );
     }
     final Playlist? playlist = _playlist;
@@ -862,11 +941,7 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
               color: _hovering ? apple.tertiaryFill : Colors.transparent,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              widget.icon,
-              size: 20,
-              color: apple.secondaryLabel,
-            ),
+            child: Icon(widget.icon, size: 20, color: apple.secondaryLabel),
           ),
         ),
       ),

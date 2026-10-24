@@ -153,6 +153,24 @@ void main() {
       expect(request.payload['br'], 128000);
     });
 
+    test('maps paged artist songs onto the native artist endpoint', () {
+      final NeteaseRequest request = buildNeteaseRequest(
+        '/artist/songs',
+        const <String, String>{
+          'id': '6452',
+          'order': 'hot',
+          'limit': '100',
+          'offset': '200',
+        },
+      );
+      expect(request.path, '/api/v1/artist/songs');
+      expect(request.encoding, NeteaseEncoding.eapi);
+      expect(request.payload['id'], '6452');
+      expect(request.payload['limit'], '100');
+      expect(request.payload['offset'], '200');
+      expect(request.payload['private_cloud'], 'true');
+    });
+
     test('maps comments and listen-together onto finite service routes', () {
       final comments = buildNeteaseRequest(
         '/comment/music',

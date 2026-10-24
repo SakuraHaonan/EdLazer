@@ -301,6 +301,17 @@ NeteaseRequest buildNeteaseRequest(
         web: true,
         body: <String, Object?>{'id': id()},
       );
+    case '/artist/songs':
+      return request(
+        '/api/v1/artist/songs',
+        body: <String, Object?>{
+          'id': id(),
+          'order': value('order'),
+          ...page(),
+          'private_cloud': 'true',
+          'work_type': 1,
+        },
+      );
     case '/artist/album':
       return request(
         '/api/artist/albums/${id()}',
