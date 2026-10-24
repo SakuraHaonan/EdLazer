@@ -14,6 +14,7 @@ import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/apple_ui.dart';
+import '../widgets/catalog_links.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
 import 'legacy_widgets.dart';
@@ -448,6 +449,7 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
   final ValueNotifier<bool> _showLocate = ValueNotifier<bool>(false);
   bool _refreshScheduled = false;
   List<Track>? _tracks;
+  String? _note;
   String? _error;
   List<double>? _rowTops;
   List<double>? _rowHeights;
@@ -481,12 +483,23 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     setState(() => _error = null);
     try {
       final Album? album = widget.album;
-      final List<Track> tracks = album != null
-          ? await widget.state.catalog.albumTracks(int.parse(album.id))
-          : await widget.state.catalog.playlistTracks(widget.playlist.id);
+      final List<Track> tracks;
+      String? note;
+      if (album != null) {
+        // The list row only carries a stub Album; the full description lives
+        // on the album detail endpoint.
+        final details = await widget.state.catalog.albumDetails(
+          int.parse(album.id),
+        );
+        tracks = details.tracks;
+        note = details.description;
+      } else {
+        tracks = await widget.state.catalog.playlistTracks(widget.playlist.id);
+      }
       if (!mounted) return;
       setState(() {
         _tracks = tracks;
+        _note = note;
         _metricsDirty = true;
       });
       _scheduleLocateRefresh();
@@ -644,7 +657,14 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
                           playlist: widget.playlist,
                           compact: compact,
                           artist: widget.album?.artist,
-                          note: widget.album?.note,
+                          artistWidget: widget.album == null
+                              ? null
+                              : ArtistNameLink(
+                                  state: widget.state,
+                                  artists: widget.album!.artists,
+                                  fallback: widget.album!.artist,
+                                ),
+                          note: _note ?? widget.album?.note,
                           onPlay: tracks == null || tracks.isEmpty
                               ? null
                               : () => widget.state.playQueue(tracks),
@@ -729,6 +749,7 @@ class _PlaylistHeader extends StatelessWidget {
     required this.compact,
     required this.onPlay,
     this.artist,
+    this.artistWidget,
     this.note,
   });
 
@@ -738,6 +759,9 @@ class _PlaylistHeader extends StatelessWidget {
 
   /// Album-only extras. A playlist leaves both null and renders as before.
   final String? artist;
+
+  /// Replaces the plain artist line when the caller can make it a link.
+  final Widget? artistWidget;
   final String? note;
 
   static Future<void> _showNote(BuildContext context, String note) =>
@@ -762,18 +786,37 @@ class _PlaylistHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final double coverSize = compact ? 168 : 190;
     final Widget cover = RepaintBoundary(
       child: LegacyCover(
         url: playlist.coverUrl,
-        size: compact ? 168 : 190,
+        size: coverSize,
         radius: 14,
       ),
     );
+    final Widget? summary = note == null || note!.trim().isEmpty
+        ? null
+        : GestureDetector(
+            onTap: () => _showNote(context, note!),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Text(
+                note!,
+                maxLines: compact ? 3 : null,
+                overflow: compact ? TextOverflow.ellipsis : null,
+                textAlign: compact ? TextAlign.center : TextAlign.start,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: apple.tertiaryLabel,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          );
     final Widget info = Column(
       crossAxisAlignment: compact
           ? CrossAxisAlignment.center
           : CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: <Widget>[
         Text(
           playlist.name,
@@ -786,7 +829,10 @@ class _PlaylistHeader extends StatelessWidget {
             letterSpacing: -.6,
           ),
         ),
-        if (artist != null) ...[
+        if (artistWidget != null) ...[
+          const SizedBox(height: 4),
+          artistWidget!,
+        ] else if (artist != null) ...[
           const SizedBox(height: 4),
           Text(
             artist!,
@@ -812,26 +858,25 @@ class _PlaylistHeader extends StatelessWidget {
             color: apple.secondaryLabel,
           ),
         ),
-        if (note != null && note!.trim().isNotEmpty) ...[
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () => _showNote(context, note!),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Text(
-                note!,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                textAlign: compact ? TextAlign.center : TextAlign.start,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: apple.tertiaryLabel,
-                  height: 1.5,
-                ),
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 16),
+        // Desktop spends the leftover height on the summary, which is what
+        // pins the transport row to the cover's bottom edge. Compact layouts
+        // have no bounded height, so they keep a plain three-line block.
+        if (!compact)
+          Expanded(
+            child: summary == null
+                ? const SizedBox.shrink()
+                : ClipRect(
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: summary,
+                      ),
+                    ),
+                  ),
+          )
+        else if (summary != null)
+          Padding(padding: const EdgeInsets.only(top: 8), child: summary),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -868,7 +913,7 @@ class _PlaylistHeader extends StatelessWidget {
       children: <Widget>[
         cover,
         const SizedBox(width: 24),
-        Expanded(child: info),
+        Expanded(child: SizedBox(height: coverSize, child: info)),
       ],
     );
   }
