@@ -307,12 +307,15 @@ class Catalog {
           gateway.search(query, limit: 20, useCloudSearch: true),
           gateway.searchAlbums(query, limit: 10),
           gateway.searchPlaylists(query, limit: 10),
+          gateway.searchArtists(query, limit: 10),
         ],
       );
       final List<GatewaySong> songs =
           results[0] as List<GatewaySong>? ?? const <GatewaySong>[];
       final List<GatewayAlbum> albumHits =
           results[1] as List<GatewayAlbum>? ?? const <GatewayAlbum>[];
+      final List<GatewayArtist> artistHits =
+          results[3] as List<GatewayArtist>? ?? const <GatewayArtist>[];
       final List<GatewayPlaylist> playlistHits =
           results[2] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[];
       _online = true;
@@ -327,7 +330,19 @@ class Catalog {
         tracks: tracks,
         albums: albumHits.map<Album>(albumFromGateway).toList(),
         playlists: playlistHits.map<Playlist>(playlistFromGateway).toList(),
-        artists: artistsById.values.toList(),
+        artists: <ArtistRef>[
+          for (final GatewayArtist artist in artistHits)
+            ArtistRef(
+              id: artist.id,
+              name: artist.name,
+              coverUrl: artist.coverUrl,
+            ),
+          ...artistsById.values.where(
+            (ArtistRef artist) => !artistHits.any(
+              (GatewayArtist hit) => hit.id == artist.id,
+            ),
+          ),
+        ],
       );
     } catch (_) {
       _online = false;

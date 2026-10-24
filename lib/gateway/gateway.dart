@@ -649,6 +649,32 @@ class NeteaseGateway {
         : const <GatewayAlbum>[];
   }
 
+  Future<List<GatewayArtist>> searchArtists(
+    String keywords, {
+    int limit = 10,
+  }) async {
+    if (keywords.trim().isEmpty) {
+      throw ArgumentError('keywords cannot be blank.');
+    }
+    final Map<String, dynamic> body = await _transport
+        .request('/search', <String, String>{
+          'keywords': keywords,
+          'type': GatewaySearchType.artist.apiValue.toString(),
+          'limit': limit.toString(),
+        });
+    final dynamic result = body['result'];
+    final Map<String, dynamic> resultMap = result is Map<String, dynamic>
+        ? result
+        : const <String, dynamic>{};
+    final dynamic artists = resultMap['artists'];
+    return artists is List
+        ? artists
+              .whereType<Map<String, dynamic>>()
+              .map<GatewayArtist>(GatewayArtist.fromJson)
+              .where((GatewayArtist artist) => artist.id > 0)
+              .toList()
+        : const <GatewayArtist>[];
+  }
   Future<List<String>> hotSearches() async {
     final Map<String, dynamic> body = await _transport.request(
       '/search/hot/detail',
