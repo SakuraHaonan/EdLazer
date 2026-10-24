@@ -1,4 +1,4 @@
-﻿import 'dart:ui' as ui;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -433,6 +433,14 @@ class AppleSearchField extends StatelessWidget {
         onChanged: onChanged,
         hintText: hintText,
         autoFocus: autofocus,
+        // A search field, not a button: no elevation, no shadow and no hover
+        // wash. Users who want it will click it.
+        elevation: const WidgetStatePropertyAll<double>(0),
+        shadowColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+        surfaceTintColor: const WidgetStatePropertyAll<Color>(
+          Colors.transparent,
+        ),
+        overlayColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
         textInputAction: textInputAction,
         leading: const Icon(Icons.search),
         // A rounded rectangle rather than Material's default stadium: the bar

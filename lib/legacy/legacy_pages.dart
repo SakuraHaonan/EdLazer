@@ -17,6 +17,7 @@ import '../widgets/accessible_controls.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
+import '../state/detail_requests.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
 import 'legacy_widgets.dart';
@@ -1695,6 +1696,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
   final TextEditingController _search = TextEditingController();
   Timer? _debounce;
   SearchResults? _results;
+  _SearchTab _tab = _SearchTab.songs;
   String _query = '';
   bool _loading = false;
   String? _error;
@@ -1813,35 +1815,152 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
         icon: Icons.search_rounded,
       );
     }
-    return ListView(
-      padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (results.tracks.isNotEmpty) ...<Widget>[
-          LegacySectionHeader(
-            title: '单曲',
-            subtitle: '${results.tracks.length} 首',
+        Padding(
+          padding: EdgeInsets.fromLTRB(inset, 0, inset, 10),
+          child: Row(
+            children: <Widget>[
+              _SearchTabButton(
+                label: '歌曲',
+                active: _tab == _SearchTab.songs,
+                onTap: () => setState(() => _tab = _SearchTab.songs),
+              ),
+              const SizedBox(width: 8),
+              _SearchTabButton(
+                label: '专辑',
+                active: _tab == _SearchTab.albums,
+                onTap: () => setState(() => _tab = _SearchTab.albums),
+              ),
+              const SizedBox(width: 8),
+              _SearchTabButton(
+                label: '歌手',
+                active: _tab == _SearchTab.artists,
+                onTap: () => setState(() => _tab = _SearchTab.artists),
+              ),
+              const SizedBox(width: 8),
+              _SearchTabButton(
+                label: '歌单',
+                active: _tab == _SearchTab.playlists,
+                onTap: () => setState(() => _tab = _SearchTab.playlists),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          for (int i = 0; i < results.tracks.length; i++)
-            LegacyTrackRow(
-              track: results.tracks[i],
-              index: i,
-              current: widget.state.current?.id == results.tracks[i].id,
-              playing: widget.state.playing,
-              onTap: () =>
-                  widget.state.playQueue(results.tracks, startIndex: i),
+        ),
+        Expanded(
+          child: switch (_tab) {
+            _SearchTab.songs => ListView(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              children: <Widget>[
+                for (int i = 0; i < results.tracks.length; i++)
+                  LegacyTrackRow(
+                    track: results.tracks[i],
+                    index: i,
+                    current: widget.state.current?.id == results.tracks[i].id,
+                    playing: widget.state.playing,
+                    onTap: () =>
+                        widget.state.playQueue(results.tracks, startIndex: i),
+                  ),
+              ],
             ),
-          const SizedBox(height: 28),
-        ],
-        if (results.playlists.isNotEmpty) ...<Widget>[
-          const LegacySectionHeader(title: '歌单'),
-          const SizedBox(height: 14),
-          LegacyPlaylistGrid(
-            playlists: results.playlists,
-            onOpen: widget.onOpenPlaylist,
-          ),
-        ],
+            _SearchTab.albums => ListView(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              children: <Widget>[
+                for (final Album album in results.albums)
+                  AppleListTile(
+                    title: album.title,
+                    subtitle: album.artist,
+                    minHeight: 56,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    leading: LegacyCover(
+                      url: album.coverUrl,
+                      size: 44,
+                      radius: 6,
+                    ),
+                    onTap: () =>
+                        unawaited(openAlbumDetails(context, widget.state, album)),
+                  ),
+              ],
+            ),
+            _SearchTab.artists => ListView(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              children: <Widget>[
+                for (final ArtistRef artist in results.artists)
+                  AppleListTile(
+                    title: artist.name,
+                    subtitle: '歌手',
+                    minHeight: 56,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    leading: ClipOval(
+                      child: LegacyCover(
+                        url: artist.coverUrl,
+                        size: 44,
+                        radius: 22,
+                      ),
+                    ),
+                    onTap: () => artistDetailRequest.value = artist,
+                  ),
+              ],
+            ),
+            _SearchTab.playlists => ListView(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              children: <Widget>[
+                LegacyPlaylistGrid(
+                  playlists: results.playlists,
+                  onOpen: widget.onOpenPlaylist,
+                ),
+              ],
+            ),
+          },
+        ),
       ],
+    );
+  }
+}
+
+/// Tabs across the top of the search results.
+enum _SearchTab { songs, albums, artists, playlists }
+
+class _SearchTabButton extends StatelessWidget {
+  const _SearchTabButton({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return Semantics(
+      button: true,
+      selected: active,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: active ? apple.label.withValues(alpha: .1) : null,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: active ? apple.label : apple.secondaryLabel,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

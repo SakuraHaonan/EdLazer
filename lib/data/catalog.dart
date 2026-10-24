@@ -40,15 +40,21 @@ class SearchResults {
     this.tracks = const <Track>[],
     this.albums = const <Album>[],
     this.playlists = const <Playlist>[],
+    this.artists = const <ArtistRef>[],
   });
 
   final List<Track> tracks;
   final List<Album> albums;
   final List<Playlist> playlists;
 
+  /// Derived from the song hits: a query that matches songs also surfaces
+  /// their artists, which is what the artists tab lists.
+  final List<ArtistRef> artists;
+
   static const SearchResults empty = SearchResults();
 
-  int get hits => tracks.length + albums.length + playlists.length;
+  int get hits =>
+      tracks.length + albums.length + playlists.length + artists.length;
 }
 
 /// A signed-in user's own collections, split the way the profile page shows
@@ -310,10 +316,18 @@ class Catalog {
       final List<GatewayPlaylist> playlistHits =
           results[2] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[];
       _online = true;
+      final List<Track> tracks = songs.map<Track>(trackFromSong).toList();
+      final Map<int, ArtistRef> artistsById = <int, ArtistRef>{};
+      for (final Track track in tracks) {
+        for (final ArtistRef artist in track.artists) {
+          if (artist.id > 0) artistsById[artist.id] = artist;
+        }
+      }
       return SearchResults(
-        tracks: songs.map<Track>(trackFromSong).toList(),
+        tracks: tracks,
         albums: albumHits.map<Album>(albumFromGateway).toList(),
         playlists: playlistHits.map<Playlist>(playlistFromGateway).toList(),
+        artists: artistsById.values.toList(),
       );
     } catch (_) {
       _online = false;

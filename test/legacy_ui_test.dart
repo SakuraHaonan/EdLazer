@@ -421,7 +421,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'まにまに');
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
-    expect(find.text('单曲'), findsOneWidget);
+    expect(find.text('歌曲'), findsOneWidget);
     expect(find.text('歌单'), findsOneWidget);
     expect(find.text('まにまに'), findsWidgets);
     expect(tester.takeException(), isNull);
