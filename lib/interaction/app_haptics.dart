@@ -26,26 +26,27 @@ class AppHaptics {
       return;
     }
     _last = now;
+    final Map<String, Object> impact = <String, Object>{
+      'intensity': (intensity * (detent && !boundary ? .55 : 1)).clamp(0.0, 1.0),
+      'kind': boundary
+          ? 'boundary'
+          : detent
+          ? 'detent'
+          : 'tap',
+    };
     try {
-      if (platform == TargetPlatform.iOS) {
-        await channel.invokeMethod<void>('impact', {
-          'intensity': (intensity * (detent && !boundary ? .55 : 1)).clamp(
-            0.0,
-            1.0,
-          ),
-          'kind': boundary
-              ? 'boundary'
-              : detent
-              ? 'detent'
-              : 'tap',
-        });
-      } else {
-        await HapticFeedback.selectionClick();
-      }
+      // Both mobile hosts implement this channel: iOS through impact
+      // generators, Android through VibrationEffect. Flutter's own
+      // HapticFeedback maps a tap to CLOCK_TICK there, which many devices do
+      // not implement and which cannot follow the intensity slider.
+      await channel.invokeMethod<void>('impact', impact);
     } on MissingPluginException {
-      // Also supports hosts where the native haptics channel is unavailable.
+      // Hosts without the native channel (tests, desktop tooling) fall back
+      // to the framework's view haptics.
       try {
-        await HapticFeedback.lightImpact();
+        await (platform == TargetPlatform.iOS
+            ? HapticFeedback.lightImpact()
+            : HapticFeedback.selectionClick());
       } on MissingPluginException {
         // Haptics are optional on hosts without a platform implementation.
       } on PlatformException {

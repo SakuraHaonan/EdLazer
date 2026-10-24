@@ -17,7 +17,6 @@ import '../widgets/accessible_controls.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
-import '../widgets/motion_artwork.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
 import 'legacy_widgets.dart';
@@ -1552,18 +1551,7 @@ class _PlaylistHeader extends StatelessWidget {
       size: coverSize,
       radius: 14,
     );
-    final Widget cover = RepaintBoundary(
-      // Albums try Apple's motion artwork; playlists keep the still cover.
-      child: artist == null
-          ? stillCover
-          : MotionArtwork(
-              size: coverSize,
-              radius: 14,
-              artist: artist,
-              album: playlist.name,
-              child: stillCover,
-            ),
-    );
+    final Widget cover = RepaintBoundary(child: stillCover);
     final Widget? summary = note == null || note!.trim().isEmpty
         ? null
         : GestureDetector(
@@ -2103,7 +2091,8 @@ class LegacySettingsPage extends StatelessWidget {
                     onChanged: (bool value) =>
                         unawaited(state.setHapticsEnabled(value)),
                   ),
-                  if (defaultTargetPlatform == TargetPlatform.iOS)
+                  if (defaultTargetPlatform == TargetPlatform.iOS ||
+                      defaultTargetPlatform == TargetPlatform.android)
                     _LegacySliderRow(
                       label: '震动强度',
                       valueText: '${(state.hapticIntensity * 100).round()}%',

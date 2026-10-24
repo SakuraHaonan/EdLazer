@@ -191,6 +191,7 @@
   "暂无版权": "Unavailable",
   "最小化": "Minimize",
   "最大化": "Maximize",
+  "全屏": "Full screen",
   "还原窗口": "Restore window",
   "关闭窗口": "Close window",
   "网络请求失败（HTTP {code}）。": "Network request failed (HTTP {code}).",

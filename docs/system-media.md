@@ -11,6 +11,12 @@ The app has one queue and one audio engine. `LazerMediaHandler` adapts the exist
 | Linux | `audio_service_mpris`, session D-Bus / MPRIS |
 | Windows | App-owned C++/WinRT SMTC bridge, with timeline and seek support |
 
+Android resolves the media notification's small icon and audio_service's transport
+action icons by resource name at runtime, so `android/app/src/main/res/raw/keep.xml`
+pins them against the release resource shrinker. A stripped small icon makes
+`startForeground` post an invalid notification, which Android 12+ rejects by
+killing the process, and stripped action icons leave the notification buttons blank.
+
 Playback position is sampled every **100 ms**. The media handler also publishes
 every **100 ms**, and immediately after a structural change. Screens consume the
 position notifier without rebuilding the app or the navigation tree.

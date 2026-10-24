@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  audio_service resolves the media notification's small icon and the transport
+  action icons by name at runtime (`androidNotificationIcon:
+  'drawable/ic_stat_music'`, `drawable/audio_service_*`), so neither R8 nor the
+  resource shrinker can see the references and would strip them from release
+  builds. Without a small icon, `startForeground` posts an invalid notification
+  and Android 12+ kills the process with
+  RemoteServiceException$BadNotificationForStartForeground; without the action
+  icons the notification buttons render blank.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/*" />

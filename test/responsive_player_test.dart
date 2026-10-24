@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -10,10 +11,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
+import 'package:lazer_nextgen/interaction/app_haptics.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/widgets/interaction_feedback.dart';
-import 'package:lazer_nextgen/widgets/window_frame.dart';
+import 'package:lazer_nextgen/widgets/window_title_area.dart';
 
 const _track = Track(
   id: '1939575649',
@@ -106,7 +108,10 @@ class _AuthGateway extends NeteaseGateway {
   @override
   Future<String> createQrKey() async => 'fixture-key';
   @override
-  Future<GatewayQrCheck> checkQrCode(String key, {String secureCaptcha = ''}) async {
+  Future<GatewayQrCheck> checkQrCode(
+    String key, {
+    String secureCaptcha = '',
+  }) async {
     if (!qrCompletes) return const GatewayQrCheck(code: 801);
     sessionCookie = 'MUSIC_U=fixture';
     return const GatewayQrCheck(code: 803, cookie: 'MUSIC_U=fixture');
@@ -139,7 +144,8 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets(
-    'title bar has an explicit text style outside a Material scaffold',
+    'window title area owns the title and the caption buttons outside a '
+    'Material scaffold',
     (tester) async {
       final key = GlobalKey();
       await tester.pumpWidget(
@@ -149,7 +155,7 @@ void main() {
             theme: buildLegacyTheme(),
             builder: (context, child) => Column(
               children: [
-                const DesktopTitleBar(),
+                const WindowTitleArea(),
                 Expanded(child: child!),
               ],
             ),
@@ -165,9 +171,42 @@ void main() {
         ),
       );
       expect(rich.text.style?.decoration, TextDecoration.none);
+      expect(rich.text.style?.fontWeight, FontWeight.w400);
       expect(
         rich.text.style?.color,
         buildLegacyTheme().colorScheme.onSurfaceVariant,
+      );
+      // A fixed strip of chrome above the pages, holding the title and all
+      // three caption buttons on one row, flush with the trailing edge.
+      final Rect area = tester.getRect(find.byType(WindowTitleArea));
+      expect(area.height, kWindowTitleAreaHeight);
+      for (final String id in <String>[
+        'window-title-minimize',
+        'window-title-fullscreen',
+        'window-title-close',
+      ]) {
+        final Finder button = find.byKey(ValueKey<String>(id));
+        expect(button, findsOneWidget);
+        expect(
+          tester.getSize(button),
+          const Size(kWindowCaptionButtonWidth, kWindowTitleAreaHeight),
+        );
+      }
+      final Finder close = find.byKey(
+        const ValueKey<String>('window-title-close'),
+      );
+      expect(tester.getTopRight(close).dx, area.right);
+      // The cap keeps a screen-reader name even though the bar sits above the
+      // Navigator, outside the route's semantics tree.
+      expect(
+        find.descendant(
+          of: close,
+          matching: find.byWidgetPredicate(
+            (Widget widget) =>
+                widget is Semantics && widget.properties.label == '关闭窗口',
+          ),
+        ),
+        findsOneWidget,
       );
       expect(tester.takeException(), isNull);
       await _capture(tester, key, 'ui_title_latest');
@@ -221,15 +260,15 @@ void main() {
     addTearDown(state.dispose);
     int pulses = 0;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
+      AppHaptics.channel,
       (call) async {
-        if (call.method == 'HapticFeedback.vibrate') pulses++;
+        if (call.method == 'impact') pulses++;
         return null;
       },
     );
     addTearDown(
       () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
+        AppHaptics.channel,
         null,
       ),
     );
@@ -249,9 +288,11 @@ void main() {
       ),
     );
     await tester.tap(find.text('触摸反馈'));
+    await tester.pump();
     expect(pulses, 1);
     await state.setHapticsEnabled(false);
     await tester.tap(find.text('触摸反馈'));
+    await tester.pump();
     expect(pulses, 1);
     expect(
       (await SharedPreferences.getInstance()).getBool('lazer_haptics'),
@@ -271,5 +312,64 @@ void main() {
     expect(prefs.getBool('lazer_lyric_blur'), false);
     expect(prefs.getDouble('lazer_scroll_retention'), .98);
     expect(prefs.getDouble('lazer_lyric_resume_seconds'), 3);
+  });
+
+  testWidgets('an iOS control pulses the native impact channel', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        AppHaptics.channel,
+        (call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          AppHaptics.channel,
+          null,
+        ),
+      );
+      DateTime clock = DateTime(2026);
+      final haptics = AppHaptics(now: () => clock);
+      await haptics.pulse(enabled: true, intensity: .6);
+      clock = clock.add(const Duration(milliseconds: 200));
+      await haptics.pulse(enabled: true, intensity: .6, detent: true);
+      clock = clock.add(const Duration(milliseconds: 200));
+      await haptics.pulse(enabled: true, intensity: .6, boundary: true);
+
+      expect(calls.map((MethodCall call) => call.method), <String>[
+        'impact',
+        'impact',
+        'impact',
+      ]);
+      expect(
+        calls.map(
+          (MethodCall call) => (call.arguments as Map<Object?, Object?>)['kind'],
+        ),
+        <String>['tap', 'detent', 'boundary'],
+      );
+      // Detents are softened so a drag cannot drown out the tap feedback.
+      expect(
+        (calls.first.arguments as Map<Object?, Object?>)['intensity'],
+        .6,
+      );
+      expect(
+        (calls[1].arguments as Map<Object?, Object?>)['intensity'] as double,
+        closeTo(.33, .0001),
+      );
+      expect(
+        (calls.last.arguments as Map<Object?, Object?>)['intensity'],
+        .6,
+      );
+
+      // The off switch and a zero strength never reach the platform.
+      await haptics.pulse(enabled: false, intensity: .6);
+      await haptics.pulse(enabled: true, intensity: 0);
+      expect(calls, hasLength(3));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }
