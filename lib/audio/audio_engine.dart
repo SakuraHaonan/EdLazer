@@ -12,6 +12,38 @@ abstract interface class BufferedAudioEngine {
   Duration get bufferedPosition;
 }
 
+/// Optional engine capability: a queue the platform keeps decoding across.
+///
+/// [AudioEngine.setUrl] replaces the source, which tears the decoder down and
+/// rebuilds the stream: between two tracks that is an audible gap. An engine
+/// that can hold the following source in the same platform queue crosses the
+/// boundary while the decoder is still running, so album tracks run into each
+/// other the way the master does.
+///
+/// The capability is separate from [AudioEngine] on purpose: engines and test
+/// doubles that only implement transport keep working, and [AppState] falls
+/// back to the completion-driven path when the engine lacks it.
+abstract interface class QueueAudioEngine {
+  /// Replaces the loaded queue with [urls] and positions it on [startIndex].
+  ///
+  /// Returns an identifier for the queue that was installed; [appendToQueue]
+  /// takes it back so an append racing a reload cannot land in the new queue.
+  Future<int> setQueue(List<String> urls, {int startIndex = 0});
+
+  /// Appends [url] to the queue installed under [queueId].
+  ///
+  /// Returns false when that queue is no longer the active one, so the caller
+  /// knows the append did not happen and must not expect the hand-off.
+  Future<bool> appendToQueue(int queueId, String url);
+
+  /// Moves to the next item of the loaded queue without reloading it.
+  Future<void> playQueuedNext();
+
+  /// Fires when the platform crosses into the next item on its own — the
+  /// gapless hand-off. Seeks, loads and appends are not reported.
+  Stream<int> get indexStream;
+}
+
 /// Playback surface used for stream URLs returned by the gateway.
 abstract class AudioEngine {
   /// Whether a source is currently loaded.
@@ -34,7 +66,7 @@ abstract class AudioEngine {
 }
 
 /// just_audio-backed engine used by the real app.
-class JustAudioEngine implements AudioEngine, BufferedAudioEngine {
+class JustAudioEngine implements AudioEngine, BufferedAudioEngine, QueueAudioEngine {
   JustAudioEngine({AudioPlayer? player, this.activateSession})
     : _player =
           player ??
@@ -57,15 +89,51 @@ class JustAudioEngine implements AudioEngine, BufferedAudioEngine {
 
   final AudioPlayer _player;
   final StreamController<void> _completed = StreamController<void>.broadcast();
+  final StreamController<int> _advanced = StreamController<int>.broadcast();
   late final StreamSubscription<ProcessingState> _completionSubscription;
+
+  /// Index events are only needed once a queue is loaded; subscribing lazily
+  /// keeps the plain [setUrl] path (and players that only implement it) as it
+  /// was.
+  StreamSubscription<int?>? _indexSubscription;
   bool _hadSource = false;
   bool _completionSent = false;
   int _generation = 0;
   int _playGeneration = 0;
+
+  /// Platform queue and the identifier the app takes back when appending.
+  ConcatenatingAudioSource? _queue;
+  int _queueId = 0;
+
+  /// Index the engine itself asked the platform for, so a platform-side index
+  /// change can be told apart from our own seeks and loads.
+  int? _commandedIndex;
+
+  /// Source mutations are serialized: a prefetch append racing a track change
+  /// must never append to a queue that was already replaced.
+  Future<void> _operations = Future<void>.value();
+
   void _emitCompletion() {
     if (!_hadSource || _completionSent || _completed.isClosed) return;
     _completionSent = true;
     _completed.add(null);
+  }
+
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final Future<T> result = _operations.then((_) => operation());
+    _operations = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
+  void _onPlatformIndex(int? index) {
+    if (index == null || !_hadSource || _advanced.isClosed) return;
+    if (index == _commandedIndex) return;
+    // The platform moved on without being asked: the gapless hand-off.
+    _commandedIndex = index;
+    _advanced.add(index);
   }
 
   @override
@@ -84,10 +152,15 @@ class JustAudioEngine implements AudioEngine, BufferedAudioEngine {
   Stream<void> get completed => _completed.stream;
 
   @override
+  Stream<int> get indexStream => _advanced.stream;
+
+  @override
   Future<void> setUrl(String url) async {
     final generation = ++_generation;
     _hadSource = false;
     _completionSent = false;
+    _queue = null;
+    _commandedIndex = null;
     final uri = Uri.parse(url);
     if (uri.scheme == 'file') {
       await _player.setFilePath(uri.toFilePath());
@@ -95,8 +168,61 @@ class JustAudioEngine implements AudioEngine, BufferedAudioEngine {
       await _player.setUrl(url);
     }
     if (generation != _generation) return;
+    _commandedIndex = 0;
     _hadSource = true;
     if (_player.processingState == ProcessingState.completed) _emitCompletion();
+  }
+
+  @override
+  Future<int> setQueue(List<String> urls, {int startIndex = 0}) async {
+    final generation = ++_generation;
+    _hadSource = false;
+    _completionSent = false;
+    _commandedIndex = null;
+    final int queueId = ++_queueId;
+    _queue = null;
+    return _serialize(() async {
+      _indexSubscription ??= _player.currentIndexStream.listen(
+        _onPlatformIndex,
+      );
+      final ConcatenatingAudioSource source = ConcatenatingAudioSource(
+        useLazyPreparation: false,
+        children: <AudioSource>[
+          for (final String url in urls) AudioSource.uri(Uri.parse(url)),
+        ],
+      );
+      await _player.setAudioSource(source, initialIndex: startIndex);
+      if (generation != _generation) return queueId;
+      _queue = source;
+      _commandedIndex = startIndex;
+      _hadSource = true;
+      if (_player.processingState == ProcessingState.completed) {
+        _emitCompletion();
+      }
+      return queueId;
+    });
+  }
+
+  @override
+  Future<bool> appendToQueue(int queueId, String url) {
+    return _serialize(() async {
+      final ConcatenatingAudioSource? queue = _queue;
+      if (queue == null || queueId != _queueId) return false;
+      await queue.add(AudioSource.uri(Uri.parse(url)));
+      return queueId == _queueId;
+    });
+  }
+
+  @override
+  Future<void> playQueuedNext() {
+    return _serialize(() async {
+      final ConcatenatingAudioSource? queue = _queue;
+      final int? index = _player.currentIndex;
+      if (queue == null || index == null) return;
+      if (index + 1 >= queue.children.length) return;
+      _commandedIndex = index + 1;
+      await _player.seek(Duration.zero, index: index + 1);
+    });
   }
 
   @override
@@ -122,7 +248,10 @@ class JustAudioEngine implements AudioEngine, BufferedAudioEngine {
   }
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) {
+    _commandedIndex = _player.currentIndex;
+    return _player.seek(position);
+  }
 
   @override
   Future<void> setVolume(double volume) =>
@@ -142,7 +271,9 @@ class JustAudioEngine implements AudioEngine, BufferedAudioEngine {
     ++_playGeneration;
     _hadSource = false;
     _completionSubscription.cancel();
+    _indexSubscription?.cancel();
     _completed.close();
+    _advanced.close();
     _player.dispose();
   }
 }

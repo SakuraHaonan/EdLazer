@@ -16,6 +16,7 @@ import 'diagnostics/frame_stats.dart';
 import 'legacy/legacy_shell.dart';
 import 'theme/apple_design.dart';
 import 'state/app_state.dart';
+import 'state/artwork_prefs.dart';
 import 'state/ui_preferences.dart';
 import 'widgets/window_frame.dart';
 import 'widgets/interaction_feedback.dart';
@@ -65,11 +66,19 @@ Future<void> main() async {
         );
       });
       JustAudioMediaKit.ensureInitialized();
+      // Queue playback hands the next track to libmpv while the current one is
+      // still playing, but mpv only opens that entry early with
+      // `--prefetch-playlist`. Without it a streamed boundary waits for the
+      // CDN round trip (measured: 171 ms of buffering at the switch with a
+      // 150 ms server, versus 1 ms with the prefetch on) — an audible hole.
+      JustAudioMediaKit.prefetchPlaylist = true;
       // Desktop replaces the system title bar with the app's own parchment
       // frame; must run before the first frame, which is also when the
       // runner decides to show the window.
       await initWindowFrame();
       final prefs = await SharedPreferences.getInstance();
+      motionArtworkEnabled.value =
+          prefs.getBool(kMotionArtworkPrefKey) ?? true;
       final audio = JustAudioEngine();
       final state = AppState(
         audioEngine: audio,

@@ -53,10 +53,37 @@ Future<void> showSongComments(
         ),
       ),
       Expanded(
-        child: SongCommentsView(
-          state: state,
-          track: track,
-          controller: controller,
+        child: Stack(
+          children: <Widget>[
+            Positioned.fill(
+              child: SongCommentsView(
+                state: state,
+                track: track,
+                controller: controller,
+              ),
+            ),
+            // Fade the wall out instead of cutting it off at the panel edge.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 56,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: <Color>[
+                        sheetContext.colors.ivoryLight,
+                        sheetContext.colors.ivoryLight.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ],
