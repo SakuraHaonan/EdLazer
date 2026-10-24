@@ -322,18 +322,49 @@ class _SongCommentsViewState extends State<SongCommentsView> {
     );
   }
 
+  /// Comments flow as a masonry wall: variable-height cards spread across as
+  /// many columns as the pane can hold, instead of one row per comment.
   Widget _rows(List<SongComment> comments) => SliverPadding(
-    padding: const EdgeInsets.symmetric(horizontal: 20),
-    sliver: SliverList.builder(
-      itemCount: comments.length,
-      itemBuilder: (BuildContext context, int index) => RepaintBoundary(
-        key: ValueKey<String>('comment-${comments[index].id}'),
-        child: _CommentRow(
-          comment: comments[index],
-          pending: _comments.isLiking(comments[index].id),
-          signedIn: widget.state.signedIn,
-          onLike: () => unawaited(_like(comments[index].id)),
-        ),
+    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+    sliver: SliverToBoxAdapter(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints box) {
+          final int columns = (box.maxWidth / 320).floor().clamp(1, 4);
+          final List<List<int>> buckets = List<List<int>>.generate(
+            columns,
+            (_) => <int>[],
+          );
+          for (int i = 0; i < comments.length; i++) {
+            buckets[i % columns].add(i);
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (int column = 0; column < columns; column++) ...<Widget>[
+                if (column > 0) const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    children: <Widget>[
+                      for (final int index in buckets[column])
+                        RepaintBoundary(
+                          key: ValueKey<String>(
+                            'comment-${comments[index].id}',
+                          ),
+                          child: _CommentRow(
+                            comment: comments[index],
+                            pending: _comments.isLiking(comments[index].id),
+                            signedIn: widget.state.signedIn,
+                            onLike: () =>
+                                unawaited(_like(comments[index].id)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     ),
   );
@@ -397,8 +428,13 @@ class _CommentRow extends StatelessWidget {
         size: 20,
       ),
     );
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: .55),
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
