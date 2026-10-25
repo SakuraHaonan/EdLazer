@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
 
 import '../cache/disk_cache.dart';
 import '../cache/media_cache.dart';
 import '../gateway/gateway.dart';
+import 'billboard.dart';
+import 'biliboard.dart';
 import 'models.dart';
 import 'catalog_details.dart';
 
@@ -18,6 +21,7 @@ class HomeFeed {
     required this.quick,
     required this.playlists,
     required this.albums,
+    this.editorialPlaylists = const <Playlist>[],
   });
 
   final Album? featured;
@@ -26,13 +30,15 @@ class HomeFeed {
   final List<Track> quick;
   final List<Playlist> playlists;
   final List<Album> albums;
+  final List<Playlist> editorialPlaylists;
 
   bool get isEmpty =>
       recommended.isEmpty &&
       featured == null &&
       quick.isEmpty &&
       playlists.isEmpty &&
-      albums.isEmpty;
+      albums.isEmpty &&
+      editorialPlaylists.isEmpty;
 }
 
 class SearchResults {
@@ -77,13 +83,21 @@ class UserCollections {
 
 /// Gateway-backed catalogue. Failed requests never create fabricated music.
 class Catalog {
-  Catalog({NeteaseGateway? gateway, DiskCache? cache})
-    : gateway = gateway ?? NeteaseGateway(),
-      cache = cache ?? DiskCache.shared,
-      audioCache = AudioCache(disk: cache);
+  Catalog({
+    NeteaseGateway? gateway,
+    DiskCache? cache,
+    BiliboardClient? charts,
+    BillboardClient? billboard,
+  }) : gateway = gateway ?? NeteaseGateway(),
+       cache = cache ?? DiskCache.shared,
+       charts = charts ?? BiliboardClient(),
+       billboard = billboard ?? BillboardClient(),
+       audioCache = AudioCache(disk: cache);
 
   final NeteaseGateway gateway;
   final DiskCache cache;
+  final BiliboardClient charts;
+  final BillboardClient billboard;
   final AudioCache audioCache;
   final _requests = <String, Future<Object>>{};
 
@@ -195,30 +209,47 @@ class Catalog {
       }
     }
 
+    final signedIn = userId != null && userId > 0;
     final results = await Future.wait<Object?>(<Future<Object?>>[
       optional(gateway.topPlaylists(limit: 12)),
-      if (userId != null && userId > 0)
-        optional(gateway.userPlaylists(userId, limit: 30)),
-      if (userId != null && userId > 0)
-        optional(gateway.dailyRecommendedSongs()),
-      if (userId != null && userId > 0)
-        optional(gateway.dailyRecommendedPlaylists()),
+      optional(
+        signedIn
+            ? gateway.userPlaylists(userId, limit: 30)
+            : Future<List<GatewayPlaylist>>.value(const <GatewayPlaylist>[]),
+      ),
+      optional(
+        signedIn
+            ? gateway.dailyRecommendedSongs()
+            : Future<List<GatewaySong>>.value(const <GatewaySong>[]),
+      ),
+      optional(
+        signedIn
+            ? gateway.dailyRecommendedPlaylists()
+            : Future<List<GatewayPlaylist>>.value(const <GatewayPlaylist>[]),
+      ),
       optional(gateway.personalizedPlaylists()),
+      optional(
+        signedIn
+            ? gateway.personalizedNewSongs(limit: 24)
+            : Future<List<GatewaySong>>.value(const <GatewaySong>[]),
+      ),
+      // NetEase's main editorial account. Creator identity, rather than the
+      // recommendation endpoint, keeps this shelf editorially sourced.
+      optional(gateway.userPlaylists(1463586082, limit: 24)),
     ]);
     final top =
         results[0] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[];
-    final signedIn = userId != null && userId > 0;
-    final userPlaylists = signedIn
-        ? results[1] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[]
-        : const <GatewayPlaylist>[];
-    final dailySongs = signedIn
-        ? results[2] as List<GatewaySong>? ?? const <GatewaySong>[]
-        : const <GatewaySong>[];
-    final dailyPlaylists = signedIn
-        ? results[3] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[]
-        : const <GatewayPlaylist>[];
+    final userPlaylists =
+        results[1] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[];
+    final dailySongs =
+        results[2] as List<GatewaySong>? ?? const <GatewaySong>[];
+    final dailyPlaylists =
+        results[3] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[];
     final personalized =
-        results[signedIn ? 4 : 1] as List<GatewayPlaylist>? ?? const [];
+        results[4] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[];
+    final newSongs = results[5] as List<GatewaySong>? ?? const <GatewaySong>[];
+    final editorial =
+        results[6] as List<GatewayPlaylist>? ?? const <GatewayPlaylist>[];
     final recommended = <int, GatewayPlaylist>{};
     for (final playlist in [...dailyPlaylists, ...personalized]) {
       recommended.putIfAbsent(playlist.id, () => playlist);
@@ -247,7 +278,7 @@ class Catalog {
     }
 
     final albumSongs = <int, GatewaySong>{};
-    for (final song in dailySongs) {
+    for (final song in newSongs) {
       if (song.albumId > 0) albumSongs.putIfAbsent(song.albumId, () => song);
     }
     Album? featured;
@@ -282,7 +313,12 @@ class Catalog {
           .take(12)
           .map(playlistFromGateway)
           .toList(),
-      albums: albumSongs.values.take(8).map(albumFromSong).toList(),
+      albums: albumSongs.values.take(12).map(albumFromSong).toList(),
+      editorialPlaylists: editorial
+          .where((playlist) => playlist.specialType != 5)
+          .take(12)
+          .map(playlistFromGateway)
+          .toList(),
     );
     _online = firstFailure == null || !feed.isEmpty;
     if (feed.isEmpty && firstFailure != null) {
@@ -338,9 +374,8 @@ class Catalog {
               coverUrl: artist.coverUrl,
             ),
           ...artistsById.values.where(
-            (ArtistRef artist) => !artistHits.any(
-              (GatewayArtist hit) => hit.id == artist.id,
-            ),
+            (ArtistRef artist) =>
+                !artistHits.any((GatewayArtist hit) => hit.id == artist.id),
           ),
         ],
       );
@@ -350,9 +385,254 @@ class Catalog {
     }
   }
 
+  Future<List<Track>> personalFmTracks() async =>
+      (await gateway.personalFm()).map(trackFromSong).toList();
+
+  /// External rankings load independently from the main discovery feed. A
+  /// slow chart host must never hold the entire home page hostage.
+  Future<List<MusicChart>> discoveryCharts() => _cached(
+    'external-charts-v3',
+    const Duration(hours: 2),
+    (json) => (json['charts'] as List? ?? const <Object>[])
+        .whereType<Map<String, dynamic>>()
+        .map(MusicChart.fromJson)
+        .toList(),
+    (value) => <String, Object?>{
+      'charts': value.map((chart) => chart.toJson()).toList(),
+    },
+    () async {
+      final loaded = await Future.wait<Object?>(<Future<Object?>>[
+        billboard.latestChart().catchError((_) => null),
+        charts.latestCharts().catchError((_) => const <MusicChart>[]),
+      ]);
+      return <MusicChart>[
+        if (loaded.first case final MusicChart chart) chart,
+        ...(loaded.last as List<MusicChart>),
+      ];
+    },
+  );
+
+  /// NetEase mirrors a handful of established charts and, unlike a scraped
+  /// ranking, gives us immediately playable song ids. These are current-only:
+  /// the API does not expose a trustworthy issue archive.
+  Future<List<MusicChart>> neteaseMirrorCharts() => _cached(
+    'netease-mirror-charts-v2',
+    const Duration(minutes: 30),
+    (json) => (json['charts'] as List? ?? const <Object>[])
+        .whereType<Map<String, dynamic>>()
+        .map(MusicChart.fromJson)
+        .toList(),
+    (value) => <String, Object?>{
+      'charts': value.map((chart) => chart.toJson()).toList(),
+    },
+    () async {
+      final playlists = await gateway.chartPlaylists();
+      final selected = playlists
+          .where((playlist) {
+            final name = playlist.name.toLowerCase();
+            return name.contains('uk排行榜') ||
+                name.contains('beatport') ||
+                name.contains('oricon') ||
+                name.contains('nrj');
+          })
+          .take(5);
+      final loaded = await Future.wait<MusicChart?>([
+        for (final playlist in selected)
+          _neteaseChart(playlist).catchError((_) => null),
+      ]);
+      return loaded.whereType<MusicChart>().toList();
+    },
+  );
+
+  Future<MusicChart?> _neteaseChart(GatewayPlaylist playlist) async {
+    // Keep the complete source ranking. Several mirrored charts are Top 100
+    // lists; the old 20-song cap made every board look artificially identical.
+    final body = await gateway.playlistTracks(playlist.id);
+    final rawSongs = body['songs'];
+    if (rawSongs is! List) return null;
+    final songs = rawSongs
+        .whereType<Map<String, dynamic>>()
+        .map((item) {
+          final nested = item['song'] ?? item['data'];
+          return GatewaySong.fromJson(
+            nested is Map<String, dynamic> ? nested : item,
+          );
+        })
+        .where((song) => song.id > 0 && song.title.isNotEmpty)
+        .toList();
+    if (songs.isEmpty) return null;
+    return MusicChart(
+      id: 'netease:${playlist.id}',
+      title: playlist.name,
+      source: '网易云镜像',
+      issueLabel: '当前榜',
+      entries: <ChartEntry>[
+        for (var index = 0; index < songs.length; index++)
+          ChartEntry(
+            rank: index + 1,
+            title: songs[index].title,
+            artist: songs[index].artistLine,
+            coverUrl: songs[index].coverUrl,
+            track: trackFromSong(songs[index]),
+          ),
+      ],
+      accent: 0xFFE94B64,
+      providerKey: 'netease:${playlist.id}',
+      logoUrl: playlist.coverUrl,
+    );
+  }
+
+  Future<MusicChart> chartIssue(MusicChart chart, ChartIssue issue) => _cached(
+    'chart-issue-v2:${chart.providerKey}:${issue.id}',
+    const Duration(hours: 6),
+    MusicChart.fromJson,
+    (value) => value.toJson(),
+    () => charts.chartForIssue(chart, issue),
+  );
+
+  Future<List<Track>> heartModeTracks(Playlist liked) async {
+    final int playlistId = int.tryParse(liked.id) ?? 0;
+    if (playlistId <= 0) return const <Track>[];
+    final List<Track> likedTracks = await playlistTracks(liked.id);
+    if (likedTracks.isEmpty) return const <Track>[];
+    final int songId = int.tryParse(likedTracks.first.id) ?? 0;
+    if (songId <= 0) return likedTracks;
+    final generated = await gateway.intelligenceList(
+      songId: songId,
+      playlistId: playlistId,
+      count: 30,
+    );
+    return generated.isEmpty
+        ? likedTracks
+        : generated.map(trackFromSong).toList();
+  }
+
+  Future<List<Track>> artistStationTracks(ArtistRef seed) async {
+    if (seed.id <= 0) return const <Track>[];
+    final similar = await gateway.similarArtists(seed.id);
+    final artistIds = <int>[
+      seed.id,
+      ...similar.take(4).map((artist) => artist.id),
+    ];
+    final groups = await Future.wait<List<GatewaySong>>(
+      artistIds.map(
+        (id) =>
+            gateway.artistTopSongs(id).catchError((_) => const <GatewaySong>[]),
+      ),
+    );
+    final List<Track> station = <Track>[];
+    final Set<int> seen = <int>{};
+    for (var row = 0; row < 8; row++) {
+      for (final songs in groups) {
+        if (row >= songs.length) continue;
+        final song = songs[row];
+        if (seen.add(song.id)) station.add(trackFromSong(song));
+      }
+    }
+    return station;
+  }
+
+  Future<MusicChart> matchChart(MusicChart chart) => _cached(
+    'chart-match-v2:${chart.id}',
+    const Duration(hours: 6),
+    MusicChart.fromJson,
+    (value) => value.toJson(),
+    () async {
+      final List<ChartEntry> entries = <ChartEntry>[];
+      final int matchCount = math.min(20, chart.entries.length);
+      for (var start = 0; start < matchCount; start += 4) {
+        final int end = math.min(start + 4, matchCount);
+        entries.addAll(
+          await Future.wait(
+            chart.entries.sublist(start, end).map(_matchChartEntry),
+          ),
+        );
+      }
+      entries.addAll(chart.entries.skip(matchCount));
+      return MusicChart(
+        id: chart.id,
+        title: chart.title,
+        source: chart.source,
+        issueLabel: chart.issueLabel,
+        entries: entries,
+        accent: chart.accent,
+        providerKey: chart.providerKey,
+        logoUrl: chart.logoUrl,
+        issues: chart.issues,
+        selectedIssueId: chart.selectedIssueId,
+      );
+    },
+  );
+
+  Future<ChartEntry> _matchChartEntry(ChartEntry entry) async {
+    Track? match;
+    try {
+      final String sourceArtist = _normaliseMusicText(entry.artist);
+      final String sourceTitle = _normaliseMusicText(entry.title);
+      final String query = <String>[
+        entry.title,
+        entry.artist,
+      ].where((part) => part.trim().isNotEmpty).join(' ');
+      final candidates = await gateway
+          .search(query, limit: 8, useCloudSearch: true)
+          .timeout(const Duration(seconds: 5));
+      double bestScore = 0;
+      for (final candidate in candidates) {
+        final double score = _chartMatchScore(entry, candidate);
+        if (score > bestScore) {
+          bestScore = score;
+          match = trackFromSong(candidate);
+        }
+      }
+      // Some trusted chart archives only retain the canonical song title.
+      // In that case an exact title match is still useful and is the only
+      // route to a playable result; partial-title matches remain rejected.
+      final requiredScore = sourceArtist.isEmpty ? .65 : .78;
+      if (bestScore < requiredScore ||
+          (sourceArtist.isEmpty && sourceTitle.runes.length < 4)) {
+        match = null;
+      }
+    } catch (_) {
+      match = null;
+    }
+    return entry.copyWith(track: match);
+  }
+
+  static double _chartMatchScore(ChartEntry entry, GatewaySong song) {
+    final String title = _normaliseMusicText(entry.title);
+    final String translated = _normaliseMusicText(entry.translatedTitle ?? '');
+    final String candidateTitle = _normaliseMusicText(song.title);
+    double score = 0;
+    if (title.isNotEmpty && candidateTitle == title) {
+      score += .65;
+    } else if (translated.isNotEmpty && candidateTitle == translated) {
+      score += .6;
+    } else if (title.length >= 3 &&
+        (candidateTitle.contains(title) || title.contains(candidateTitle))) {
+      score += .45;
+    }
+    final String sourceArtist = _normaliseMusicText(entry.artist);
+    final String candidateArtist = _normaliseMusicText(song.artistLine);
+    if (sourceArtist.isNotEmpty && candidateArtist.isNotEmpty) {
+      if (sourceArtist == candidateArtist) {
+        score += .35;
+      } else {
+        final sourceParts = sourceArtist.split(' ').where((p) => p.length > 1);
+        if (sourceParts.any(candidateArtist.contains)) score += .22;
+      }
+    }
+    return score;
+  }
+
+  static String _normaliseMusicText(String value) => value
+      .toLowerCase()
+      .replaceAll(RegExp(r'\b(feat|ft|with)\.?\b.*$'), '')
+      .replaceAll(RegExp(r'[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+'), ' ')
+      .trim();
+
   /// Reuses recent snapshots; expired snapshots remain available offline.
   Future<List<Track>> playlistTracks(String playlistId) => _cached(
-    'playlist:$_scope:$playlistId',
+    'playlist-v2:$_scope:$playlistId',
     const Duration(minutes: 10),
     (json) => _decodeTracks(json['tracks']),
     (tracks) => {'tracks': tracks.map((track) => track.toJson()).toList()},
@@ -368,21 +648,54 @@ class Catalog {
       final dynamic rawPlaylist = body['playlist'];
       if (rawPlaylist is! Map<String, dynamic>) throw StateError('歌单数据不可用。');
       final GatewayPlaylist playlist = GatewayPlaylist.fromJson(rawPlaylist);
-      final Map<int, GatewaySong> byId = <int, GatewaySong>{};
-      for (int offset = 0; offset < playlist.trackIds.length; offset += 500) {
-        final int end = (offset + 500).clamp(0, playlist.trackIds.length);
-        final songs = await gateway.songDetails(
-          playlist.trackIds.sublist(offset, end),
+      final List<GatewaySong> ordered = <GatewaySong>[];
+      if (playlist.trackIds.isNotEmpty) {
+        for (int offset = 0; offset < playlist.trackIds.length; offset += 500) {
+          final int end = math.min(offset + 500, playlist.trackIds.length);
+          ordered.addAll(
+            await gateway.songDetails(playlist.trackIds.sublist(offset, end)),
+          );
+        }
+      }
+      if (playlist.trackIds.isEmpty ||
+          ordered.any((song) => song.title.isEmpty || song.artists.isEmpty)) {
+        // Some editorial/recommendation playlists omit trackIds from detail.
+        // The dedicated paged route also repairs incomplete song/detail rows.
+        final int expected = math.max(
+          1,
+          math.max(playlist.trackCount, playlist.trackIds.length),
         );
-        for (final song in songs) {
-          byId[song.id] = song;
+        final List<GatewaySong> complete = <GatewaySong>[];
+        for (int offset = 0; offset < expected; offset += 500) {
+          final page = await gateway.playlistTracks(
+            id,
+            limit: 500,
+            offset: offset,
+          );
+          final rawSongs = page['songs'];
+          final songs = rawSongs is List
+              ? rawSongs
+                    .whereType<Map<String, dynamic>>()
+                    .map((item) {
+                      final nested = item['song'] ?? item['data'];
+                      return GatewaySong.fromJson(
+                        nested is Map<String, dynamic> ? nested : item,
+                      );
+                    })
+                    .where((song) => song.id > 0)
+                    .toList()
+              : const <GatewaySong>[];
+          complete.addAll(songs);
+          if (songs.length < 500) break;
+        }
+        if (complete.isNotEmpty) {
+          ordered
+            ..clear()
+            ..addAll(complete);
         }
       }
       _online = true;
-      return <Track>[
-        for (final songId in playlist.trackIds)
-          if (byId[songId] != null) trackFromSong(byId[songId]!),
-      ];
+      return ordered.map(trackFromSong).toList();
     } catch (_) {
       _online = false;
       rethrow;
@@ -660,12 +973,13 @@ class Catalog {
 
   // -- mapping --------------------------------------------------------------
 
-  static List<Track> _decodeTracks(dynamic raw) => (raw as List)
+  static List<Track> _decodeTracks(dynamic raw) => (raw as List? ?? const [])
       .map((item) => Track.fromJson(item as Map<String, dynamic>))
       .toList();
-  static List<Playlist> _decodePlaylists(dynamic raw) => (raw as List)
-      .map((item) => Playlist.fromJson(item as Map<String, dynamic>))
-      .toList();
+  static List<Playlist> _decodePlaylists(dynamic raw) =>
+      (raw as List? ?? const [])
+          .map((item) => Playlist.fromJson(item as Map<String, dynamic>))
+          .toList();
   static UserCollections _decodeCollections(Map<String, dynamic> json) =>
       UserCollections(
         liked: json['liked'] == null
@@ -687,9 +1001,10 @@ class Catalog {
     featuredTracks: _decodeTracks(json['featuredTracks']),
     quick: _decodeTracks(json['quick']),
     playlists: _decodePlaylists(json['playlists']),
-    albums: (json['albums'] as List)
+    albums: (json['albums'] as List? ?? const [])
         .map((a) => Album.fromJson(a as Map<String, dynamic>))
         .toList(),
+    editorialPlaylists: _decodePlaylists(json['editorialPlaylists']),
   );
   static Map<String, dynamic> _encodeHome(HomeFeed value) => {
     'featured': value.featured?.toJson(),
@@ -698,6 +1013,9 @@ class Catalog {
     'quick': value.quick.map((t) => t.toJson()).toList(),
     'playlists': value.playlists.map((p) => p.toJson()).toList(),
     'albums': value.albums.map((a) => a.toJson()).toList(),
+    'editorialPlaylists': value.editorialPlaylists
+        .map((p) => p.toJson())
+        .toList(),
   };
 
   static int _seedFrom(int id) => id.hashCode & 0x7fffffff;

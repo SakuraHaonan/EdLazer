@@ -83,6 +83,7 @@ flutter:
     - LICENSE
     - assets/l10n/
     - assets/app_icon.png
+    - assets/chart_logos/
     - licenses/lyric_animation/AGPL-3.0.txt
 
   fonts:

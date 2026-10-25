@@ -46,6 +46,7 @@ class _LegacyShellState extends State<LegacyShell>
   /// Set when the open detail is an album; the playlist pipeline renders it.
   Album? _album;
   ArtistRef? _artist;
+  MusicChart? _chart;
   bool _artistSongs = false;
   AlbumReleaseGroup? _artistReleases;
   bool _comments = false;
@@ -75,7 +76,6 @@ class _LegacyShellState extends State<LegacyShell>
         );
     albumDetailRequest.addListener(_onAlbumRequest);
     artistDetailRequest.addListener(_onArtistRequest);
-
   }
 
   void _onNowPlayingStatus(AnimationStatus status) {
@@ -103,6 +103,7 @@ class _LegacyShellState extends State<LegacyShell>
       _section = section;
       _playlist = null;
       _artist = null;
+      _chart = null;
       _artistSongs = false;
       _artistReleases = null;
       _comments = false;
@@ -114,6 +115,7 @@ class _LegacyShellState extends State<LegacyShell>
       _playlist = playlist;
       _album = null;
       _artist = null;
+      _chart = null;
       _artistSongs = false;
       _artistReleases = null;
       _comments = false;
@@ -131,6 +133,7 @@ class _LegacyShellState extends State<LegacyShell>
     setState(() {
       _album = album;
       _artist = null;
+      _chart = null;
       _artistSongs = false;
       _artistReleases = null;
       _playlist = Playlist(
@@ -153,6 +156,7 @@ class _LegacyShellState extends State<LegacyShell>
     _closeNowPlaying();
     setState(() {
       _artist = artist;
+      _chart = null;
       _artistSongs = false;
       _artistReleases = null;
       _playlist = null;
@@ -162,6 +166,16 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   void _openArtistSongs() => setState(() => _artistSongs = true);
+
+  void _openChart(MusicChart chart) => setState(() {
+    _chart = chart;
+    _playlist = null;
+    _album = null;
+    _artist = null;
+    _artistSongs = false;
+    _artistReleases = null;
+    _comments = false;
+  });
 
   void _openArtistReleases(AlbumReleaseGroup group) =>
       setState(() => _artistReleases = group);
@@ -176,6 +190,7 @@ class _LegacyShellState extends State<LegacyShell>
       _playlist = null;
       _album = null;
       _artist = null;
+      _chart = null;
       _comments = false;
     });
   }
@@ -433,6 +448,7 @@ class _LegacyShellState extends State<LegacyShell>
                         _section == _LegacySection.search &&
                         _playlist == null &&
                         _artist == null &&
+                        _chart == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.search),
                   ),
@@ -444,6 +460,7 @@ class _LegacyShellState extends State<LegacyShell>
                         _section == _LegacySection.home &&
                         _playlist == null &&
                         _artist == null &&
+                        _chart == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.home),
                   ),
@@ -455,6 +472,7 @@ class _LegacyShellState extends State<LegacyShell>
                         _section == _LegacySection.library &&
                         _playlist == null &&
                         _artist == null &&
+                        _chart == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.library),
                   ),
@@ -466,22 +484,40 @@ class _LegacyShellState extends State<LegacyShell>
                         _section == _LegacySection.likes &&
                         _playlist == null &&
                         _artist == null &&
+                        _chart == null &&
                         !_comments,
                     onTap: () => _select(_LegacySection.likes),
                   ),
                   const SizedBox(height: 22),
-                  Row(
-                    children: <Widget>[
-                      _sidebarLabel(apple, '资料库'),
-                      if (state.signedIn)
-                        _SidebarIconButton(
-                          tooltip: '同步歌单',
-                          icon: Icons.sync_rounded,
-                          onPressed: () =>
-                              unawaited(state.refreshCollections(force: true)),
-                        ),
-                      const Spacer(),
-                    ],
+                  SizedBox(
+                    height: 33,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 9),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: <Widget>[
+                          Text(
+                            '资料库',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: apple.secondaryLabel,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          if (state.signedIn) ...<Widget>[
+                            const SizedBox(width: 9),
+                            Transform.translate(
+                              offset: const Offset(0, 1),
+                              child: _LibraryRefreshButton(
+                                onRefresh: () =>
+                                    state.refreshCollections(force: true),
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 5),
                   _railPlaylists(apple),
@@ -519,7 +555,8 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _desktopToolbar(AppleSemanticColors apple) {
-    final bool canGoBack = _playlist != null || _artist != null || _comments;
+    final bool canGoBack =
+        _playlist != null || _artist != null || _chart != null || _comments;
     return SizedBox(
       height: 64,
       child: Padding(
@@ -552,7 +589,8 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _mobileToolbar(AppleSemanticColors apple) {
-    final bool canGoBack = _playlist != null || _artist != null || _comments;
+    final bool canGoBack =
+        _playlist != null || _artist != null || _chart != null || _comments;
     return SizedBox(
       height: 50,
       child: Padding(
@@ -570,7 +608,7 @@ class _LegacyShellState extends State<LegacyShell>
               const SizedBox(width: 8),
             Expanded(
               child: Text(
-                canGoBack ? _pageTitle : 'Lazer',
+                _pageTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -604,6 +642,7 @@ class _LegacyShellState extends State<LegacyShell>
 
   String get _pageTitle {
     if (_comments) return '评论';
+    if (_chart != null) return _chart!.title;
     if (_playlist != null) return _playlist!.name;
     if (_artist != null) {
       if (_artistSongs) return '全部歌曲';
@@ -612,7 +651,7 @@ class _LegacyShellState extends State<LegacyShell>
       return _artist!.name;
     }
     return switch (_section) {
-      _LegacySection.home => '现在就听',
+      _LegacySection.home => '发现',
       _LegacySection.search => '搜索',
       _LegacySection.library => '资料库',
       _LegacySection.likes => '我喜欢的音乐',
@@ -816,6 +855,7 @@ class _LegacyShellState extends State<LegacyShell>
 
   String get _contentKey {
     if (_comments) return 'comments';
+    if (_chart != null) return 'chart:${_chart!.id}';
     if (_artist != null) {
       final String view = _artistSongs
           ? 'songs'
@@ -853,6 +893,10 @@ class _LegacyShellState extends State<LegacyShell>
         ],
       );
     }
+    final MusicChart? chart = _chart;
+    if (chart != null) {
+      return LegacyChartPage(state: state, chart: chart);
+    }
     final ArtistRef? artist = _artist;
     if (artist != null) {
       if (_artistSongs) {
@@ -886,6 +930,7 @@ class _LegacyShellState extends State<LegacyShell>
       _LegacySection.home => LegacyHomePage(
         state: state,
         onOpenPlaylist: _openPlaylist,
+        onOpenChart: _openChart,
         onPlayTrack: (List<Track> tracks, int index) =>
             state.playQueue(tracks, startIndex: index),
       ),
@@ -949,34 +994,59 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
   }
 }
 
-class _SidebarIconButton extends StatelessWidget {
-  const _SidebarIconButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
+class _LibraryRefreshButton extends StatefulWidget {
+  const _LibraryRefreshButton({required this.onRefresh});
+  final Future<void> Function() onRefresh;
 
   @override
-  Widget build(BuildContext context) {
-    final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onPressed,
-      iconSize: 15,
-      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-      padding: EdgeInsets.zero,
-      style: IconButton.styleFrom(
-        // A quiet gray glyph next to the section label, no chip behind it.
-        foregroundColor: apple.secondaryLabel,
-        hoverColor: apple.fill,
-      ),
-      icon: Icon(icon),
-    );
+  State<_LibraryRefreshButton> createState() => _LibraryRefreshButtonState();
+}
+
+class _LibraryRefreshButtonState extends State<_LibraryRefreshButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 520),
+  );
+  bool _refreshing = false;
+
+  @override
+  void dispose() {
+    _rotation.dispose();
+    super.dispose();
   }
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
+    _rotation.forward(from: 0);
+    try {
+      await widget.onRefresh();
+    } finally {
+      if (mounted) _refreshing = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '同步歌单',
+    button: true,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => unawaited(_refresh()),
+      child: SizedBox.square(
+        dimension: 16,
+        child: RotationTransition(
+          turns: CurvedAnimation(parent: _rotation, curve: Curves.easeOutCubic),
+          child: Icon(
+            Icons.sync_rounded,
+            size: 12,
+            color: AppleSemanticColors.of(context).secondaryLabel,
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _Avatar extends StatelessWidget {

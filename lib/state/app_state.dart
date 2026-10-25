@@ -111,6 +111,7 @@ class AppState extends ChangeNotifier {
     Catalog? catalog,
     this.audioEngine,
     this._independentPlayback = false,
+    this.enableExternalCharts = false,
   }) : catalog = catalog ?? Catalog() {
     _completionSubscription = audioEngine?.completed.listen(
       (_) => _onEngineCompleted(),
@@ -121,6 +122,7 @@ class AppState extends ChangeNotifier {
   }
 
   bool _independentPlayback;
+  final bool enableExternalCharts;
   bool get independentPlayback => _independentPlayback;
 
   Future<void> setIndependentPlayback(bool value) async {
@@ -133,6 +135,8 @@ class AppState extends ChangeNotifier {
 
   static const String _sessionKey = 'lazer_gateway_cookie';
   static const String _queueKey = 'lazer_playback_queue_v1';
+  static const String _recentTracksKey = 'lazer_recent_tracks_v1';
+  static const int _recentTracksLimit = 60;
 
   final Catalog catalog;
   StreamSubscription<void>? _completionSubscription;
@@ -445,6 +449,9 @@ class AppState extends ChangeNotifier {
   /// Live home feed once [bootstrap] loaded it.
   HomeFeed? get home => catalog.home;
   String? get homeError => catalog.homeError;
+  List<MusicChart> discoveryCharts = const <MusicChart>[];
+  bool discoveryChartsLoading = false;
+  String? discoveryChartsError;
   String? playbackError;
   UserCollections collections = UserCollections.empty;
   bool collectionsLoading = false;
@@ -579,6 +586,7 @@ class AppState extends ChangeNotifier {
     // Apply interaction preferences before session and catalogue requests.
     notifyListeners();
     await audioEngine?.setVolume(_volume);
+    await _restoreRecentTracks();
     await _restoreQueue();
     unawaited(_loadCurrentArtwork());
     unawaited(ensureCurrentLyrics());
@@ -593,6 +601,73 @@ class AppState extends ChangeNotifier {
     unawaited(refreshCollections());
     await catalog.loadHome(userId: _user.userId);
     notifyListeners();
+    if (enableExternalCharts) {
+      unawaited(refreshDiscoveryCharts(force: force));
+    }
+  }
+
+  Future<void> refreshDiscoveryCharts({bool force = false}) async {
+    if (discoveryChartsLoading) return;
+    discoveryChartsLoading = true;
+    discoveryChartsError = null;
+    notifyListeners();
+    try {
+      if (force) {
+        await Future.wait(<Future<void>>[
+          catalog.cache.expireJson('external-charts-v3'),
+          catalog.cache.expireJson('netease-mirror-charts-v2'),
+        ]);
+      }
+      final externalFuture = catalog.discoveryCharts().catchError(
+        (_) => const <MusicChart>[],
+      );
+      try {
+        final netease = await catalog.neteaseMirrorCharts();
+        if (netease.isNotEmpty) {
+          discoveryCharts = _sortDiscoveryCharts(netease);
+          notifyListeners();
+        }
+      } catch (_) {
+        // External charts below can still populate the section.
+      }
+      final external = await externalFuture;
+      if (external.isNotEmpty) {
+        final ids = discoveryCharts.map((chart) => chart.id).toSet();
+        discoveryCharts = _sortDiscoveryCharts(<MusicChart>[
+          ...discoveryCharts,
+          ...external.where((chart) => ids.add(chart.id)),
+        ]);
+      }
+      if (discoveryCharts.isEmpty) discoveryChartsError = '暂无榜单数据';
+    } catch (_) {
+      if (discoveryCharts.isEmpty) {
+        discoveryChartsError = '榜单暂时连接不上';
+      }
+    } finally {
+      discoveryChartsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  List<MusicChart> _sortDiscoveryCharts(Iterable<MusicChart> charts) {
+    final result = charts.toList();
+    int priority(MusicChart chart) {
+      final title = chart.title.toLowerCase();
+      if (title.contains('billboard')) return 0;
+      final provider = chart.providerKey ?? '';
+      if (provider == 'biliboard:1') return 1;
+      if (provider == 'biliboard:2') return 2;
+      if (provider == 'biliboard:3') return 3;
+      if (provider.startsWith('biliboard:')) return 4;
+      return 5;
+    }
+
+    result.sort((left, right) {
+      final byPriority = priority(left).compareTo(priority(right));
+      if (byPriority != 0) return byPriority;
+      return left.title.compareTo(right.title);
+    });
+    return result;
   }
 
   Future<void> _restoreSession() async {
@@ -796,6 +871,9 @@ class AppState extends ChangeNotifier {
     collectionsLoading = false;
     collectionsError = null;
     pause();
+    _stationLoader = null;
+    _stationLoading = false;
+    _stationSeen.clear();
     _queue = <Track>[];
     _queueIndex = 0;
     _position = Duration.zero;
@@ -875,6 +953,7 @@ class AppState extends ChangeNotifier {
 
   Timer? _ticker;
   List<Track> _queue = <Track>[];
+  List<Track> _recentTracks = <Track>[];
   int _queueIndex = 0;
   Duration _position = Duration.zero;
   bool _playing = false;
@@ -893,7 +972,12 @@ class AppState extends ChangeNotifier {
   /// Identifier of the engine queue the appends belong to.
   int? _queueId;
 
+  Future<List<Track>> Function()? _stationLoader;
+  bool _stationLoading = false;
+  final Set<String> _stationSeen = <String>{};
+
   List<Track> get queue => List<Track>.unmodifiable(_queue);
+  List<Track> get recentTracks => List<Track>.unmodifiable(_recentTracks);
   Track? get current =>
       _queue.isEmpty ? null : _queue[_queueIndex.clamp(0, _queue.length - 1)];
   Duration get position => _position;
@@ -936,6 +1020,32 @@ class AppState extends ChangeNotifier {
   }
 
   void playQueue(List<Track> tracks, {int startIndex = 0}) {
+    _stationLoader = null;
+    _stationLoading = false;
+    _stationSeen.clear();
+    _replaceQueue(tracks, startIndex: startIndex);
+  }
+
+  /// Starts a radio queue which keeps asking [loadMore] for fresh songs as the
+  /// listener approaches its tail. The first batch is supplied by the caller
+  /// so tapping a station still gives immediate feedback.
+  void playStationQueue(
+    List<Track> tracks, {
+    required Future<List<Track>> Function() loadMore,
+  }) {
+    if (tracks.isEmpty) return;
+    _stationLoader = loadMore;
+    _stationLoading = false;
+    _stationSeen
+      ..clear()
+      ..addAll(tracks.map((track) => track.id));
+    _shuffle = false;
+    _repeat = LoopMode.off;
+    _replaceQueue(tracks);
+    unawaited(_ensureStationBuffer());
+  }
+
+  void _replaceQueue(List<Track> tracks, {int startIndex = 0}) {
     if (tracks.isEmpty) return;
     trackChangeDirection = 1;
     _queue = List<Track>.of(tracks);
@@ -1004,6 +1114,10 @@ class AppState extends ChangeNotifier {
 
   void next() {
     if (_queue.isEmpty) return;
+    if (_stationLoader != null && _queueIndex >= _queue.length - 1) {
+      unawaited(_advanceStationFromTail());
+      return;
+    }
     final int target = _manualNextIndex();
     // When the following track is already in the engine's queue, jumping to it
     // keeps the decoder running instead of reloading (an audible gap).
@@ -1047,6 +1161,64 @@ class AppState extends ChangeNotifier {
       _ensureTicker();
     }
     notifyListeners();
+    unawaited(_ensureStationBuffer());
+  }
+
+  Future<void> _advanceStationFromTail() async {
+    final int before = _queue.length;
+    await _waitForStationLoad();
+    if (_queue.length <= before) await _ensureStationBuffer(force: true);
+    if (!_playing || _queue.length <= before) return;
+    _moveTo(before, direction: 1);
+  }
+
+  Future<void> _waitForStationLoad() async {
+    // A user can hit Next while the proactive tail request is still in flight.
+    // Join that work instead of treating "already loading" as an empty radio.
+    for (var tick = 0; _stationLoading && tick < 400; tick++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
+  Future<bool> _ensureStationBuffer({bool force = false}) async {
+    final loader = _stationLoader;
+    if (loader == null || _stationLoading) return false;
+    if (!force && _queue.length - _queueIndex >= 6) return false;
+    _stationLoading = true;
+    try {
+      List<Track> lastLoaded = const <Track>[];
+      // Some recommendation endpoints can repeat a tiny batch. Give them a
+      // second chance before deciding there is temporarily nothing new.
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final loaded = await loader();
+        lastLoaded = loaded;
+        if (_stationLoader != loader) return false;
+        final fresh = loaded.where((track) => _stationSeen.add(track.id));
+        final additions = fresh.take(30).toList();
+        if (additions.isEmpty) continue;
+        _queue.addAll(additions);
+        unawaited(_saveQueue());
+        notifyListeners();
+        return true;
+      }
+      // A finite recommendation surface must not turn a radio into a three-
+      // song loop or a stopped queue. Once every fresh result has been heard,
+      // reshuffle the returned pool and keep the station flowing.
+      final fallback =
+          lastLoaded.where((track) => track.id != current?.id).toList()
+            ..shuffle();
+      if (fallback.isNotEmpty && _stationLoader == loader) {
+        _queue.addAll(fallback.take(20));
+        unawaited(_saveQueue());
+        notifyListeners();
+        return true;
+      }
+    } catch (_) {
+      // The current radio buffer remains playable; another tail event retries.
+    } finally {
+      _stationLoading = false;
+    }
+    return false;
   }
 
   /// Index a manual "next" moves to: never a no-op, and repeat-one still walks
@@ -1177,6 +1349,8 @@ class AppState extends ChangeNotifier {
     if (generation != _generation) return;
     _queueId = queueId;
     _realActive = true;
+    unawaited(_recordCurrentLocally());
+    unawaited(_ensureStationBuffer());
     if (_playing) unawaited(_resumeAudio());
     unawaited(_prefetchNext());
     notifyListeners();
@@ -1245,6 +1419,8 @@ class AppState extends ChangeNotifier {
     unawaited(_saveQueue());
     unawaited(_loadLyrics());
     unawaited(_loadCurrentArtwork());
+    unawaited(_recordCurrentLocally());
+    unawaited(_ensureStationBuffer());
     _ensureTicker();
     _tickNotifier.pulse();
     notifyListeners();
@@ -1296,6 +1472,8 @@ class AppState extends ChangeNotifier {
       }).toList();
       if (changed) {
         unawaited(_saveQueue());
+        final Track? hydrated = current;
+        if (hydrated != null) unawaited(_replaceRecentMetadata(hydrated));
         notifyListeners();
       }
     } catch (_) {
@@ -1344,6 +1522,56 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       // Corrupt or inaccessible local state leaves an empty queue.
     }
+  }
+
+  Future<void> _restoreRecentTracks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_recentTracksKey);
+      if (raw == null) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      _recentTracks = decoded
+          .whereType<Map<String, dynamic>>()
+          .map(Track.fromJson)
+          .where((track) => track.id.isNotEmpty)
+          .take(_recentTracksLimit)
+          .toList();
+      notifyListeners();
+    } catch (_) {
+      _recentTracks = <Track>[];
+    }
+  }
+
+  Future<void> _recordCurrentLocally() async {
+    final Track? track = current;
+    if (track == null || track.id.isEmpty) return;
+    _recentTracks = <Track>[
+      track,
+      ..._recentTracks.where((entry) => entry.id != track.id),
+    ].take(_recentTracksLimit).toList();
+    notifyListeners();
+    await _saveRecentTracks();
+  }
+
+  Future<void> _replaceRecentMetadata(Track track) async {
+    bool changed = false;
+    _recentTracks = _recentTracks.map((entry) {
+      if (entry.id != track.id) return entry;
+      changed = true;
+      return track;
+    }).toList();
+    if (changed) await _saveRecentTracks();
+  }
+
+  Future<void> _saveRecentTracks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _recentTracksKey,
+        jsonEncode(_recentTracks.map((track) => track.toJson()).toList()),
+      );
+    } catch (_) {}
   }
 
   Future<void> _saveQueue() async {
@@ -1500,12 +1728,31 @@ class AppState extends ChangeNotifier {
       _moveTo(next, direction: 1);
       return;
     }
+    if (_stationLoader != null) {
+      unawaited(_continueStationAfterEnd());
+      return;
+    }
     _position = current?.duration ?? Duration.zero;
     _playing = false;
     _realActive = false;
     _ticker?.cancel();
     engine.stop();
     notifyListeners();
+  }
+
+  Future<void> _continueStationAfterEnd() async {
+    final int before = _queue.length;
+    await _waitForStationLoad();
+    final bool added =
+        _queue.length > before || await _ensureStationBuffer(force: true);
+    if (!_playing || !added || _queue.length <= before) {
+      _playing = false;
+      _ticker?.cancel();
+      await audioEngine?.stop();
+      notifyListeners();
+      return;
+    }
+    _moveTo(before, direction: 1);
   }
 
   void _ensureTicker() {

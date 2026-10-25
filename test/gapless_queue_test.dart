@@ -160,13 +160,13 @@ class _Catalog extends Catalog {
 }
 
 Track _track(String id) => Track(
-  id: id,
-  title: 'Track $id',
-  artist: 'Artist',
-  album: 'Album',
-  duration: const Duration(minutes: 3),
-  coverSeed: 1,
-);
+      id: id,
+      title: 'Track $id',
+      artist: 'Artist',
+      album: 'Album',
+      duration: const Duration(minutes: 3),
+      coverSeed: 1,
+    );
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -208,6 +208,43 @@ void main() {
     expect(engine.jumps, 1);
     expect(engine.loads, <String>['url-1']);
 
+    state.dispose();
+  });
+
+  testWidgets('successful playback is recorded in the local recent list', (
+    tester,
+  ) async {
+    final engine = _QueueEngine();
+    final state = AppState(catalog: _Catalog(), audioEngine: engine);
+
+    state.playQueue(<Track>[_track('1'), _track('2')]);
+    await tester.pump();
+
+    expect(state.recentTracks.map((track) => track.id), <String>['1']);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('lazer_recent_tracks_v1'), contains('Track 1'));
+    state.dispose();
+  });
+
+  testWidgets('a station appends another recommendation batch near its tail', (
+    tester,
+  ) async {
+    final engine = _QueueEngine();
+    final state = AppState(catalog: _Catalog(), audioEngine: engine);
+    var loads = 0;
+
+    state.playStationQueue(
+      <Track>[_track('1'), _track('2'), _track('3')],
+      loadMore: () async {
+        loads++;
+        return <Track>[_track('4'), _track('5'), _track('6')];
+      },
+    );
+    await tester.pump();
+
+    expect(loads, 1);
+    expect(state.queue.map((track) => track.id),
+        <String>['1', '2', '3', '4', '5', '6']);
     state.dispose();
   });
 

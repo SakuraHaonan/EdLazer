@@ -77,11 +77,11 @@ Future<void> main() async {
       // runner decides to show the window.
       await initWindowFrame();
       final prefs = await SharedPreferences.getInstance();
-      motionArtworkEnabled.value =
-          prefs.getBool(kMotionArtworkPrefKey) ?? true;
+      motionArtworkEnabled.value = prefs.getBool(kMotionArtworkPrefKey) ?? true;
       final audio = JustAudioEngine();
       final state = AppState(
         audioEngine: audio,
+        enableExternalCharts: true,
         independentPlayback:
             prefs.getBool('lazer_independent_playback') ?? false,
       );

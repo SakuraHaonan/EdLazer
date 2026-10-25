@@ -187,14 +187,17 @@ class NeteaseTransport {
         result = await _executePublicPost(route, alias);
       } else if (const <String>{
         '/top/playlist',
+        '/toplist/detail',
         '/song/url/v1',
         '/login/status',
         '/user/playlist',
         '/recommend/songs',
         '/recommend/resource',
+        '/personalized/newsong',
         '/personal_fm',
         '/album',
         '/artist/top/song',
+        '/simi/artist',
         '/user/detail',
       }.contains(alias)) {
         result = await _executePublicGet(route, alias);
@@ -318,8 +321,7 @@ class NeteaseTransport {
     }
     // The QR confirmation can hand the CSRF value back under either name;
     // api-enhanced accepts both and so do the upstream weapi endpoints.
-    final String csrf =
-        cookies['__csrf'] ?? cookies['__csrf_token'] ?? '';
+    final String csrf = cookies['__csrf'] ?? cookies['__csrf_token'] ?? '';
     final bool plain = route.encoding == NeteaseEncoding.api;
     final bool web = route.encoding == NeteaseEncoding.weapi;
     final Map<String, Object?> payload = <String, Object?>{

@@ -124,6 +124,165 @@ class Playlist {
   );
 }
 
+/// One published chart issue from an external editorial source.
+///
+/// Chart entries deliberately remain independent from [Track]: an external
+/// ranking can still be presented when NetEase does not carry a safe match.
+class MusicChart {
+  const MusicChart({
+    required this.id,
+    required this.title,
+    required this.source,
+    required this.issueLabel,
+    required this.entries,
+    this.accent = 0xFF356EFF,
+    this.providerKey,
+    this.logoUrl,
+    this.issues = const <ChartIssue>[],
+    this.selectedIssueId,
+  });
+
+  final String id;
+  final String title;
+  final String source;
+  final String issueLabel;
+  final List<ChartEntry> entries;
+  final int accent;
+  final String? providerKey;
+  final String? logoUrl;
+  final List<ChartIssue> issues;
+  final int? selectedIssueId;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'id': id,
+    'title': title,
+    'source': source,
+    'issueLabel': issueLabel,
+    'entries': entries.map((entry) => entry.toJson()).toList(),
+    'accent': accent,
+    'providerKey': providerKey,
+    'logoUrl': logoUrl,
+    'issues': issues.map((issue) => issue.toJson()).toList(),
+    'selectedIssueId': selectedIssueId,
+  };
+
+  factory MusicChart.fromJson(Map<String, dynamic> json) => MusicChart(
+    id: json['id'] as String? ?? '',
+    title: json['title'] as String? ?? '',
+    source: json['source'] as String? ?? '',
+    issueLabel: json['issueLabel'] as String? ?? '',
+    entries: (json['entries'] as List? ?? const <Object>[])
+        .whereType<Map<String, dynamic>>()
+        .map(ChartEntry.fromJson)
+        .toList(),
+    accent: (json['accent'] as num?)?.toInt() ?? 0xFF356EFF,
+    providerKey: json['providerKey'] as String?,
+    logoUrl: json['logoUrl'] as String?,
+    issues: (json['issues'] as List? ?? const <Object>[])
+        .whereType<Map<String, dynamic>>()
+        .map(ChartIssue.fromJson)
+        .toList(),
+    selectedIssueId: (json['selectedIssueId'] as num?)?.toInt(),
+  );
+}
+
+class ChartIssue {
+  const ChartIssue({required this.id, required this.label});
+  final int id;
+  final String label;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{'id': id, 'label': label};
+  factory ChartIssue.fromJson(Map<String, dynamic> json) => ChartIssue(
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    label: json['label'] as String? ?? '',
+  );
+}
+
+class ChartEntry {
+  const ChartEntry({
+    required this.rank,
+    required this.title,
+    required this.artist,
+    this.translatedTitle,
+    this.coverUrl,
+    this.sourceUrl,
+    this.previousRank,
+    this.peakRank,
+    this.weeksOnChart,
+    this.score,
+    this.trend = const <double>[],
+    this.changeLabel,
+    this.track,
+  });
+
+  final int rank;
+  final String title;
+  final String artist;
+  final String? translatedTitle;
+  final String? coverUrl;
+  final String? sourceUrl;
+  final int? previousRank;
+  final int? peakRank;
+  final int? weeksOnChart;
+  final int? score;
+  final List<double> trend;
+  final String? changeLabel;
+  final Track? track;
+
+  ChartEntry copyWith({Track? track}) => ChartEntry(
+    rank: rank,
+    title: title,
+    artist: artist,
+    translatedTitle: translatedTitle,
+    coverUrl: coverUrl,
+    sourceUrl: sourceUrl,
+    previousRank: previousRank,
+    peakRank: peakRank,
+    weeksOnChart: weeksOnChart,
+    score: score,
+    trend: trend,
+    changeLabel: changeLabel,
+    track: track ?? this.track,
+  );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'rank': rank,
+    'title': title,
+    'artist': artist,
+    'translatedTitle': translatedTitle,
+    'coverUrl': coverUrl,
+    'sourceUrl': sourceUrl,
+    'previousRank': previousRank,
+    'peakRank': peakRank,
+    'weeksOnChart': weeksOnChart,
+    'score': score,
+    'trend': trend,
+    'changeLabel': changeLabel,
+    'track': track?.toJson(),
+  };
+
+  factory ChartEntry.fromJson(Map<String, dynamic> json) => ChartEntry(
+    rank: (json['rank'] as num?)?.toInt() ?? 0,
+    title: json['title'] as String? ?? '',
+    artist: json['artist'] as String? ?? '',
+    translatedTitle: json['translatedTitle'] as String?,
+    coverUrl: json['coverUrl'] as String?,
+    sourceUrl: json['sourceUrl'] as String?,
+    previousRank: (json['previousRank'] as num?)?.toInt(),
+    peakRank: (json['peakRank'] as num?)?.toInt(),
+    weeksOnChart: (json['weeksOnChart'] as num?)?.toInt(),
+    score: (json['score'] as num?)?.toInt(),
+    trend: (json['trend'] as List? ?? const <Object>[])
+        .whereType<num>()
+        .map((value) => value.toDouble())
+        .toList(),
+    changeLabel: json['changeLabel'] as String?,
+    track: json['track'] is Map<String, dynamic>
+        ? Track.fromJson(json['track'] as Map<String, dynamic>)
+        : null,
+  );
+}
+
 class Album {
   const Album({
     required this.id,
