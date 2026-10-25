@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../utils/system_http.dart';
 import 'biliboard_song_metadata.g.dart';
 import 'models.dart';
 
@@ -13,36 +14,57 @@ class BiliboardClient {
   static const String _weeklyArchive =
       'https://cdn.jsdelivr.net/gh/VincentZyuApps/'
       'billboard-data@main/data/bilibili/';
+
+  /// Per-attempt budget. The origin sits behind Cloudflare and answers in well
+  /// under a second through a working route, but a direct route from some
+  /// networks can stall for tens of seconds, so the load falls back instead of
+  /// waiting on a dead connection.
+  static const Duration _attemptTimeout = Duration(seconds: 8);
+
   // A supplied client is retained for deterministic tests. Production calls
-  // use a short-lived connection because Cloudflare can leave reused Windows
-  // sockets waiting until timeout after a few chart requests.
+  // resolve the operating system's proxy and keep one connection open for the
+  // whole load, because every extra handshake costs seconds on this host.
   final http.Client? client;
   Map<int, String>? _weeklyArchivePaths;
 
   Future<List<MusicChart>> latestCharts() async {
-    final List<dynamic> boards = await _getList('/api/public/boards');
-    const accents = <int>[0xFF3978F6, 0xFFFF4F86, 0xFF8B5CF6];
-    final loaded = <MusicChart?>[];
-    for (var index = 0; index < boards.length; index++) {
-      final board = boards[index];
-      if (board is! Map<String, dynamic>) continue;
-      loaded.add(
-        await _latestChart(
-          board,
-          accents[index % accents.length],
-        ).catchError((_) => null),
+    final _ChartTransport transport = await _openTransport();
+    try {
+      final List<dynamic> boards = await _getList(
+        transport,
+        '/api/public/boards',
       );
+      const accents = <int>[0xFF3978F6, 0xFFFF4F86, 0xFF8B5CF6];
+      // Boards are independent: walking them in sequence paid a fresh
+      // handshake per board and turned one slow answer into a stalled shelf.
+      final List<MusicChart?> loaded = await Future.wait<MusicChart?>(
+        <Future<MusicChart?>>[
+          for (var index = 0; index < boards.length; index++)
+            if (boards[index] case final Map<String, dynamic> board)
+              _latestChart(
+                transport,
+                board,
+                accents[index % accents.length],
+              ).catchError((_) => null)
+            else
+              Future<MusicChart?>.value(),
+        ],
+      );
+      return loaded.whereType<MusicChart>().toList();
+    } finally {
+      transport.close();
     }
-    return loaded.whereType<MusicChart>().toList();
   }
 
   Future<MusicChart?> _latestChart(
+    _ChartTransport transport,
     Map<String, dynamic> board,
     int accent,
   ) async {
     final int boardId = (board['id'] as num?)?.toInt() ?? 0;
     if (boardId <= 0) return null;
     final List<dynamic> issues = await _getList(
+      transport,
       '/api/public/boards/$boardId/issues',
     );
     final parsedIssues = issues
@@ -58,6 +80,7 @@ class BiliboardClient {
     final int issueId = (issue['issue_id'] as num?)?.toInt() ?? 0;
     if (issueId <= 0) return null;
     final List<dynamic> ranking = await _getList(
+      transport,
       '/api/public/boards/$boardId/issues/$issueId/rankings',
     );
     final entries = ranking
@@ -91,40 +114,50 @@ class BiliboardClient {
     if (boardId <= 0) {
       throw ArgumentError.value(chart.providerKey, 'chart.providerKey');
     }
-    if (boardId == 1) {
-      final archived = await _archivedWeeklyChart(chart, issue);
-      if (archived != null) return archived;
+    final _ChartTransport transport = await _openTransport();
+    try {
+      if (boardId == 1) {
+        final archived = await _archivedWeeklyChart(transport, chart, issue);
+        if (archived != null) return archived;
+      }
+      final ranking = await _getList(
+        transport,
+        '/api/public/boards/$boardId/issues/${issue.id}/rankings',
+      );
+      final entries = ranking
+          .whereType<Map<String, dynamic>>()
+          .map(_entryFromJson)
+          .where((entry) => entry.rank > 0 && entry.title.isNotEmpty)
+          .toList();
+      return MusicChart(
+        id: 'biliboard:$boardId:${issue.id}',
+        title: chart.title,
+        source: chart.source,
+        issueLabel: issue.label,
+        entries: entries,
+        accent: chart.accent,
+        providerKey: chart.providerKey,
+        logoUrl: chart.logoUrl,
+        issues: chart.issues,
+        selectedIssueId: issue.id,
+      );
+    } finally {
+      transport.close();
     }
-    final ranking = await _getList(
-      '/api/public/boards/$boardId/issues/${issue.id}/rankings',
-    );
-    final entries = ranking
-        .whereType<Map<String, dynamic>>()
-        .map(_entryFromJson)
-        .where((entry) => entry.rank > 0 && entry.title.isNotEmpty)
-        .toList();
-    return MusicChart(
-      id: 'biliboard:$boardId:${issue.id}',
-      title: chart.title,
-      source: chart.source,
-      issueLabel: issue.label,
-      entries: entries,
-      accent: chart.accent,
-      providerKey: chart.providerKey,
-      logoUrl: chart.logoUrl,
-      issues: chart.issues,
-      selectedIssueId: issue.id,
-    );
   }
 
   Future<MusicChart?> _archivedWeeklyChart(
+    _ChartTransport transport,
     MusicChart chart,
     ChartIssue issue,
   ) async {
     try {
       var paths = _weeklyArchivePaths;
       if (paths == null) {
-        final index = await _getJson(Uri.parse('${_weeklyArchive}index.json'));
+        final index = await _getJson(
+          transport,
+          Uri.parse('${_weeklyArchive}index.json'),
+        );
         paths = <int, String>{
           for (final item in (index['issues'] as List? ?? const <Object>[]))
             if (item is Map<String, dynamic> &&
@@ -136,7 +169,10 @@ class BiliboardClient {
       }
       final path = paths[issue.id];
       if (path == null) return null;
-      final payload = await _getJson(Uri.parse('$_weeklyArchive$path'));
+      final payload = await _getJson(
+        transport,
+        Uri.parse('$_weeklyArchive$path'),
+      );
       final entries = (payload['items'] as List? ?? const <Object>[])
           .whereType<Map<String, dynamic>>()
           .map(_archiveEntryFromJson)
@@ -256,36 +292,79 @@ class BiliboardClient {
     );
   }
 
-  Future<List<dynamic>> _getList(String path) async {
-    final value = await _getJson(Uri.parse('$_origin$path'));
+  Future<List<dynamic>> _getList(_ChartTransport transport, String path) async {
+    final value = await _getJson(transport, Uri.parse('$_origin$path'));
     if (value case <String, dynamic>{'items': final List<dynamic> items}) {
       return items;
     }
     throw const FormatException('Expected a JSON list.');
   }
 
-  Future<dynamic> _getJson(Uri uri) async {
-    final requestClient = client ?? http.Client();
-    try {
-      final response = await requestClient
-          .get(
-            uri,
-            headers: const <String, String>{
-              'accept': 'application/json',
-              'user-agent': 'Mozilla/5.0 Lazer/1.0',
-              'connection': 'close',
-            },
-          )
-          .timeout(const Duration(seconds: 8));
-      if (response.statusCode != 200) {
-        throw StateError('Biliboard request failed: ${response.statusCode}');
-      }
-      final value = jsonDecode(response.body);
-      if (value is List) return <String, dynamic>{'items': value};
-      if (value is Map<String, dynamic>) return value;
-      throw const FormatException('Expected JSON data.');
-    } finally {
-      if (client == null) requestClient.close();
+  Future<dynamic> _getJson(_ChartTransport transport, Uri uri) async {
+    final http.Response response = await transport.get(uri);
+    if (response.statusCode != 200) {
+      throw StateError('Biliboard request failed: ${response.statusCode}');
     }
+    // The feed is UTF-8 but not every response advertises a charset, and the
+    // package default would turn the board names into mojibake.
+    final value = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+    if (value is List) return <String, dynamic>{'items': value};
+    if (value is Map<String, dynamic>) return value;
+    throw const FormatException('Expected JSON data.');
+  }
+
+  Future<_ChartTransport> _openTransport() async {
+    final http.Client? injected = client;
+    if (injected != null) return _ChartTransport.single(injected, false);
+    final SystemHttpProxy? proxy = await SystemHttpProxy.resolve();
+    if (proxy == null) {
+      return _ChartTransport.single(
+        openExternalClient(connectionTimeout: _attemptTimeout),
+        true,
+      );
+    }
+    return _ChartTransport.routed(
+      openExternalClient(connectionTimeout: _attemptTimeout, proxy: proxy),
+      openExternalClient(connectionTimeout: _attemptTimeout),
+    );
+  }
+}
+
+/// One connection pool per chart load, preferring the system proxy and falling
+/// back to a direct connection so a stale proxy entry cannot empty the shelf.
+class _ChartTransport {
+  _ChartTransport.single(this._direct, this._owned) : _viaProxy = null;
+
+  _ChartTransport.routed(this._viaProxy, this._direct) : _owned = true;
+
+  static const Map<String, String> _headers = <String, String>{
+    'accept': 'application/json',
+    'user-agent': 'Mozilla/5.0 Lazer/1.0',
+  };
+
+  final http.Client? _viaProxy;
+  final http.Client _direct;
+  final bool _owned;
+
+  Future<http.Response> get(Uri uri) async {
+    final http.Client? proxy = _viaProxy;
+    if (proxy != null) {
+      try {
+        return await proxy
+            .get(uri, headers: _headers)
+            .timeout(BiliboardClient._attemptTimeout);
+      } catch (_) {
+        // Retry directly below.
+      }
+    }
+    return _direct
+        .get(uri, headers: _headers)
+        .timeout(BiliboardClient._attemptTimeout);
+  }
+
+  void close() {
+    if (!_owned) return;
+    _viaProxy?.close();
+    _direct.close();
   }
 }
