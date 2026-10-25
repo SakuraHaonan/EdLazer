@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hero.png" width="860" alt="Lazer：跨平台音乐客户端">
+  <img src="docs/images/mascot.png" width="220" alt="The Lazer mascot">
 </p>
 
 <h1 align="center">Lazer · nextgen</h1>
