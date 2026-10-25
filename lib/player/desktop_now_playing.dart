@@ -122,7 +122,7 @@ class DesktopNowPlaying extends StatelessWidget {
                                           begin: const Offset(.025, 0),
                                           end: Offset.zero,
                                         ).animate(animation),
-                                        child: child,
+                                        child: RepaintBoundary(child: child),
                                       ),
                                     ),
                                 layoutBuilder: (current, previous) => Stack(

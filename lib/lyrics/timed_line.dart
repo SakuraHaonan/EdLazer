@@ -206,6 +206,13 @@ class _WordPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final focus = emphasis().clamp(0.0, 1.0);
+    if (focus <= 0) {
+      // Fully unfocused rows are painted by the parent's colour filter; the
+      // old code still pushed an opaque saveLayer here for every visible
+      // word-timed line on every frame of the song.
+      layout.bright.paint(canvas, Offset.zero);
+      return;
+    }
     if (focus < 1) {
       canvas.saveLayer(
         null,
@@ -214,7 +221,6 @@ class _WordPainter extends CustomPainter {
       layout.bright.paint(canvas, Offset.zero);
       canvas.restore();
     }
-    if (focus <= 0) return;
     // Retain the word painter while the row exits; fade its emphasis using
     // the same spring as the row's scale and color instead of swapping to Text.
     canvas.saveLayer(

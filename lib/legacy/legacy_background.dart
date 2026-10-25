@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../data/models.dart';
 import '../state/ui_preferences.dart';
@@ -94,8 +93,15 @@ class AlbumFlowBackground extends StatefulWidget {
 }
 
 class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const Duration _paletteFade = Duration(milliseconds: 650);
+
+  /// The mesh drifts on a ten-second time base: over one 120 fps frame the
+  /// change is a fraction of a percent of the warp. Re-rendering it at the
+  /// display rate therefore buys nothing visible while spending the whole
+  /// frame budget; a steady 30 updates per second is indistinguishable and
+  /// leaves the UI thread free for page and lyric motion.
+  static const Duration _frameInterval = Duration(milliseconds: 33);
 
   late List<Color> _from = normalizeFlowPalette(widget.colors);
   late List<Color> _to = _from;
@@ -105,23 +111,60 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
     value: 1,
   );
   final ValueNotifier<int> _frames = ValueNotifier<int>(0);
-  Ticker? _ticker;
+  final Stopwatch _clock = Stopwatch();
+  Timer? _timer;
+  Duration _lastAdvance = Duration.zero;
   double _phase = 0;
-  Duration _last = Duration.zero;
   bool _reduceMotion = false;
+  bool _tickerAllowed = true;
+  bool _appActive = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _palette
+      ..addListener(_onPaletteFrame)
+      ..addStatusListener(_onPaletteStatus);
     _syncPlayback();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final bool active = state == AppLifecycleState.resumed;
+    if (active == _appActive) return;
+    _appActive = active;
+    _syncPlayback();
+  }
+
+  /// The palette crossfade used to repaint the whole mesh at the display
+  /// rate. It now shares the mesh's 30 fps cadence; a 650 ms colour fade is
+  /// far too slow for the intermediate frames to be visible.
+  final Stopwatch _paletteClock = Stopwatch()..start();
+  int _lastPaletteFrameUs = 0;
+
+  void _onPaletteFrame() {
+    final int now = _paletteClock.elapsedMicroseconds;
+    if (now - _lastPaletteFrameUs < _frameInterval.inMicroseconds) return;
+    _lastPaletteFrameUs = now;
+    _frames.value++;
+  }
+
+  void _onPaletteStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed ||
+        status == AnimationStatus.dismissed) {
+      _frames.value++;
+    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final bool reduce = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    if (reduce != _reduceMotion) {
+    final bool allowed = TickerMode.valuesOf(context).enabled;
+    if (reduce != _reduceMotion || allowed != _tickerAllowed) {
       _reduceMotion = reduce;
+      _tickerAllowed = allowed;
       _syncPlayback();
     }
   }
@@ -131,7 +174,7 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
     super.didUpdateWidget(oldWidget);
     final List<Color> next = normalizeFlowPalette(widget.colors);
     if (!_samePalette(next, _to)) {
-      _from = _currentPalette();
+      _from = _rawPalette();
       _to = next;
       if (_reduceMotion) {
         _palette.value = 1;
@@ -147,47 +190,68 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
 
   @override
   void dispose() {
-    _ticker?.dispose();
-    _palette.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    _palette
+      ..removeListener(_onPaletteFrame)
+      ..removeStatusListener(_onPaletteStatus)
+      ..dispose();
     _frames.dispose();
     super.dispose();
   }
 
-  bool get _runs => widget.animated && !_reduceMotion && !widget.solid;
+  bool get _runs =>
+      widget.animated &&
+      !_reduceMotion &&
+      !widget.solid &&
+      _tickerAllowed &&
+      _appActive;
 
   void _syncPlayback() {
     if (_runs) {
-      if (_ticker == null) {
-        _last = Duration.zero;
-        _ticker = createTicker(_onTick)..start();
+      if (_timer == null) {
+        _clock
+          ..reset()
+          ..start();
+        _lastAdvance = Duration.zero;
+        _timer = Timer.periodic(_frameInterval, (_) => _advance());
       }
     } else {
-      _ticker?.dispose();
-      _ticker = null;
+      _timer?.cancel();
+      _timer = null;
+      _clock.stop();
     }
   }
 
-  void _onTick(Duration elapsed) {
-    if (_last == Duration.zero) {
-      _last = elapsed;
-      return;
-    }
+  void _advance() {
+    final Duration elapsed = _clock.elapsed;
     final double delta =
-        (elapsed - _last).inMicroseconds / Duration.microsecondsPerSecond;
-    _last = elapsed;
+        (elapsed - _lastAdvance).inMicroseconds /
+        Duration.microsecondsPerSecond;
+    _lastAdvance = elapsed;
     // Slowly rotating/breathing mesh: AMLL drives its WebGL mesh from a
     // 10-second time base, with a volume-responsive UV rotation.
     _phase = (_phase + delta.clamp(0.0, .1)) % 10000;
     _frames.value++;
   }
 
-  List<Color> _currentPalette() {
+  /// The palette before the per-colour vibrancy treatment, used as the
+  /// crossfade origin so the adjustment is never applied twice.
+  List<Color> _rawPalette() {
     final double t = _fluidEase(_palette.value);
     return List<Color>.generate(
       5,
       (int i) => Color.lerp(_from[i], _to[i], t) ?? _to[i],
     );
   }
+
+  /// The palette actually painted: saturation and lightness are nudged once
+  /// per colour instead of once per mesh vertex. The old per-vertex HSL
+  /// conversion cost ~550 round trips through HSL every frame; doing it here
+  /// leaves the mesh with plain colour lerps and looks the same.
+  List<Color> _currentPalette() => <Color>[
+    for (final Color color in _rawPalette()) _vivid(color),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +265,9 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
             phase: () => _phase,
             veil: widget.veil,
             solid: widget.solid,
-            repaint: Listenable.merge(<Listenable>[_palette, _frames]),
+            // The palette controller reports through [_onPaletteFrame], so
+            // the painter only follows the throttled mesh lane.
+            repaint: _frames,
           ),
           isComplex: true,
           willChange: _runs,
@@ -210,6 +276,14 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
       ),
     );
   }
+}
+
+Color _vivid(Color color) {
+  final HSLColor hsl = HSLColor.fromColor(color);
+  return hsl
+      .withSaturation((hsl.saturation * 1.08).clamp(0.0, 1.0))
+      .withLightness((hsl.lightness * .92).clamp(0.0, 1.0))
+      .toColor();
 }
 
 /// Paints the AMLL-derived animated mesh in one pass.
@@ -284,12 +358,32 @@ class _FlowPainter extends CustomPainter {
     final Color lower = _samplePalette(colors, sampleB);
     final double mix = (.42 + .25 * math.sin((u - v) * 2.35 + time * .14))
         .clamp(0.0, 1.0);
-    final Color base = Color.lerp(upper, lower, mix) ?? lower;
-    final HSLColor hsl = HSLColor.fromColor(base);
-    return hsl
-        .withSaturation((hsl.saturation * 1.08).clamp(0.0, 1.0))
-        .withLightness((hsl.lightness * .92).clamp(0.0, 1.0))
-        .toColor();
+    // The palette arrives already saturation/lightness-treated, so this is a
+    // plain colour blend — no HSL conversion per vertex.
+    return Color.lerp(upper, lower, mix) ?? lower;
+  }
+
+  ui.Shader? _veilShader;
+  double _veilExtent = -1;
+  Color? _veilTint;
+
+  ui.Shader _veilShaderFor(Size size, Color veil) {
+    final double extent = size.shortestSide;
+    if (_veilShader == null || _veilExtent != extent || _veilTint != veil) {
+      _veilExtent = extent;
+      _veilTint = veil;
+      _veilShader = ui.Gradient.radial(
+        size.center(Offset.zero),
+        extent * 0.5,
+        <Color>[
+          veil.withValues(alpha: 0),
+          veil.withValues(alpha: veil.a * 0.28),
+          veil.withValues(alpha: veil.a * 0.72),
+        ],
+        const <double>[0, 0.5, 1],
+      );
+    }
+    return _veilShader!;
   }
 
   @override
@@ -333,17 +427,7 @@ class _FlowPainter extends CustomPainter {
     }
     if (veil.a > 0) {
       final Rect bounds = Offset.zero & size;
-      final ui.Shader veilShader = ui.Gradient.radial(
-        size.center(Offset.zero),
-        size.shortestSide * 0.5,
-        <Color>[
-          veil.withValues(alpha: 0),
-          veil.withValues(alpha: veil.a * 0.28),
-          veil.withValues(alpha: veil.a * 0.72),
-        ],
-        const <double>[0, 0.5, 1],
-      );
-      canvas.drawRect(bounds, Paint()..shader = veilShader);
+      canvas.drawRect(bounds, Paint()..shader = _veilShaderFor(size, veil));
       canvas.drawRect(
         bounds,
         Paint()..color = veil.withValues(alpha: veil.a * 0.72),

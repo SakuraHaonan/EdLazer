@@ -634,42 +634,44 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     ),
   );
 
-  Widget _readingPane(Track track) => AnimatedSwitcher(
-    duration: const Duration(milliseconds: 280),
-    switchInCurve: Curves.easeOutCubic,
-    switchOutCurve: Curves.easeInCubic,
-    transitionBuilder: (child, animation) => FadeTransition(
-      opacity: animation,
-      child: ScaleTransition(
-        scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
-        child: child,
+  Widget _readingPane(Track track) => RepaintBoundary(
+    child: AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+          child: RepaintBoundary(child: child),
+        ),
       ),
-    ),
-    layoutBuilder: (current, previous) => Stack(
-      fit: StackFit.expand,
-      children: [
-        for (final old in previous)
-          ExcludeSemantics(child: IgnorePointer(child: old)),
-        ?current,
-      ],
-    ),
-    child: _lyricsMode
-        ? KeyedSubtree(
-            key: const ValueKey('mobile-lyrics'),
-            child: _mobileLyrics(),
-          )
-        : LayoutBuilder(
-            key: const ValueKey('mobile-cover'),
-            builder: (context, box) => Center(
-              child: SizedBox.square(
-                dimension: (box.maxHeight - 16).clamp(
-                  0,
-                  box.maxWidth.clamp(0, 380),
+      layoutBuilder: (current, previous) => Stack(
+        fit: StackFit.expand,
+        children: [
+          for (final old in previous)
+            ExcludeSemantics(child: IgnorePointer(child: old)),
+          ?current,
+        ],
+      ),
+      child: _lyricsMode
+          ? KeyedSubtree(
+              key: const ValueKey('mobile-lyrics'),
+              child: _mobileLyrics(),
+            )
+          : LayoutBuilder(
+              key: const ValueKey('mobile-cover'),
+              builder: (context, box) => Center(
+                child: SizedBox.square(
+                  dimension: (box.maxHeight - 16).clamp(
+                    0,
+                    box.maxWidth.clamp(0, 380),
+                  ),
+                  child: _cover(track),
                 ),
-                child: _cover(track),
               ),
             ),
-          ),
+    ),
   );
 
   Widget _mobile(Track track) {

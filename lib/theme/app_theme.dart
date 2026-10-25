@@ -25,6 +25,13 @@ ThemeData buildAppTheme({
     onSurface: palette.slateDark,
     error: palette.clayDeep,
     onError: Colors.white,
+    // The dark player draws its own surfaces, but a snack bar shown from it
+    // still resolves through this local theme. Without these the framework
+    // falls back to `onPrimary` (white) for the action label, which is what
+    // made 查看 look like a white button.
+    inverseSurface: palette.ivoryLight,
+    onInverseSurface: palette.slateDark,
+    inversePrimary: palette.clayDeep,
   );
 
   return ThemeData(
@@ -54,9 +61,19 @@ ThemeData buildAppTheme({
         fontSize: 12,
       ),
     ),
-    snackBarTheme: const SnackBarThemeData(
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: palette.ivoryLight,
+      contentTextStyle: TextStyle(
+        fontFamily: AppFonts.sans,
+        fontFamilyFallback: AppFonts.sansFallback,
+        fontSize: 14,
+        height: 1.4,
+        color: palette.slateDark,
+      ),
+      actionTextColor: palette.clayDeep,
+      behavior: SnackBarBehavior.floating,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     // Global safety net: any Text without an explicit AppText style still
     // renders in bundled MiSans instead of the system fallback.

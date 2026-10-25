@@ -26,6 +26,9 @@ const XTypeGroup _imageTypeGroup = XTypeGroup(
     'image/bmp',
     'image/gif',
   ],
+  // iOS rejects a type group without uniform type identifiers (the picker
+  // throws before it ever opens). `public.image` covers every format above.
+  uniformTypeIdentifiers: <String>['public.image'],
 );
 
 /// Prefix of the copies this app keeps; also how [deleteCustomBackgroundImage]

@@ -73,6 +73,8 @@ class _LyricViewportState extends State<LyricViewport>
   double _offset = 0;
   double _velocity = 0;
   Duration _lastFrame = Duration.zero;
+  Duration _lastPaint = Duration.zero;
+  static const Duration _frameInterval = Duration(milliseconds: 16);
   Duration? _lastMedia;
   int _lastWall = 0;
   Timer? _resume;
@@ -258,11 +260,17 @@ class _LyricViewportState extends State<LyricViewport>
     final Ticker? ticker = _ticker;
     if (ticker != null && !ticker.isActive) {
       _lastFrame = Duration.zero;
+      _lastPaint = Duration.zero;
       ticker.start();
     }
   }
 
   void _tick(Duration elapsed) {
+    // The AMLL reference runs its word animation at 60 fps; on a 120 Hz panel
+    // this halves the number of full lyric repaints (each visible row is a
+    // colour-filtered, blurred text layer) with no visible difference.
+    if (elapsed - _lastPaint < _frameInterval) return;
+    _lastPaint = elapsed;
     final dt = ((elapsed - _lastFrame).inMicroseconds / 1e6).clamp(0.0, 0.1);
     _lastFrame = elapsed;
     if (widget.state.playing) _followLine();

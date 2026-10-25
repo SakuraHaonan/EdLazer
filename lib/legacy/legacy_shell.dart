@@ -72,6 +72,24 @@ class _LegacyShellState extends State<LegacyShell>
   bool _nowPlayingOpen = false;
   bool _nowPlayingSettled = true;
 
+  /// The browse tree is fully covered while the player is up. Caching it
+  /// keeps playback notifications (track changes, lyric loads, download
+  /// progress) from rebuilding the shelf/mosaic page underneath during the
+  /// player's own animations. The cache is refreshed as soon as the player
+  /// starts closing so the revealed page is current.
+  ///
+  /// Everything that decides the tree's shape is stored alongside it. A
+  /// window resize while the player is open keeps the same widget instance
+  /// but lays it out at the new width, so a cached desktop tree would overflow
+  /// a phone-sized window; comparing these flags rebuilds it in time.
+  Widget? _coveredShell;
+  bool _coveredShellStale = false;
+  Brightness? _coveredShellBrightness;
+  Color? _coveredShellAccent;
+  bool? _coveredShellCompact;
+  bool? _coveredShellCompactBar;
+  bool? _coveredShellBackdrop;
+
   AppState get state => widget.state;
 
   @override
@@ -289,7 +307,12 @@ class _LegacyShellState extends State<LegacyShell>
 
   void _closeNowPlaying() {
     if (!_nowPlayingOpen) return;
-    setState(() => _nowPlayingSettled = false);
+    setState(() {
+      _nowPlayingSettled = false;
+      // Rebuild the browse tree once so the uncovered page reflects whatever
+      // changed while the player was on top.
+      _coveredShellStale = true;
+    });
     _nowPlayingMotion.reverse();
   }
 
@@ -344,44 +367,74 @@ class _LegacyShellState extends State<LegacyShell>
           final Color canvas = brightness == Brightness.dark && !paintedBackdrop
               ? AppleColors.darkCanvas
               : apple.background;
-          final Widget shell = Scaffold(
-            backgroundColor: canvas,
-            body: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                if (paintedBackdrop || needsSeed)
-                  LegacyAlbumBackdrop(
-                    track: state.current,
-                    mode: state.legacyBackground,
-                    imagePath: state.legacyBackgroundImagePath,
-                    uiAlpha: state.legacyUiAlpha,
-                    onSeed: state.setLegacySeed,
+          final bool backdrop = paintedBackdrop || needsSeed;
+          if (_coveredShell != null &&
+              (_coveredShellBrightness != brightness ||
+                  _coveredShellAccent != accent ||
+                  _coveredShellCompact != compact ||
+                  _coveredShellCompactBar != compactBar ||
+                  _coveredShellBackdrop != backdrop)) {
+            _coveredShellStale = true;
+          }
+          final Widget? cachedShell = _coveredShell;
+          final bool reuseShell =
+              cachedShell != null && _nowPlayingOpen && !_coveredShellStale;
+          final Widget shell = reuseShell
+              ? cachedShell
+              : Scaffold(
+                  backgroundColor: canvas,
+                  body: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      if (paintedBackdrop || needsSeed)
+                        LegacyAlbumBackdrop(
+                          track: state.current,
+                          mode: state.legacyBackground,
+                          imagePath: state.legacyBackgroundImagePath,
+                          uiAlpha: state.legacyUiAlpha,
+                          onSeed: state.setLegacySeed,
+                        ),
+                      // Content sits on a semantic system background from
+                      // which the album tint is allowed to breathe through.
+                      // Keeping this veil opaque enough is what makes Apple's
+                      // high-contrast labels remain readable over arbitrary
+                      // artwork.
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: paintedBackdrop
+                              ? apple.background.withValues(
+                                  alpha: (state.legacyUiAlpha * .9).clamp(
+                                    .56,
+                                    .92,
+                                  ),
+                                )
+                              : canvas,
+                        ),
+                      ),
+                      SafeArea(
+                        bottom: false,
+                        // Televisions overscan: keep the chrome inside the
+                        // panel's visible box even though Android reports no
+                        // safe insets.
+                        minimum: tvSafeInsets(context),
+                        child: compact
+                            ? _compactLayout(apple, compactBar: compactBar)
+                            : _desktopLayout(apple, compactBar: compactBar),
+                      ),
+                    ],
                   ),
-                // Content sits on a semantic system background from which the
-                // album tint is allowed to breathe through. Keeping this veil
-                // opaque enough is what makes Apple's high-contrast labels
-                // remain readable over arbitrary artwork.
-                Positioned.fill(
-                  child: ColoredBox(
-                    color: paintedBackdrop
-                        ? apple.background.withValues(
-                            alpha: (state.legacyUiAlpha * .9).clamp(.56, .92),
-                          )
-                        : canvas,
-                  ),
-                ),
-                SafeArea(
-                  bottom: false,
-                  // Televisions overscan: keep the chrome inside the panel's
-                  // visible box even though Android reports no safe insets.
-                  minimum: tvSafeInsets(context),
-                  child: compact
-                      ? _compactLayout(apple, compactBar: compactBar)
-                      : _desktopLayout(apple, compactBar: compactBar),
-                ),
-              ],
-            ),
-          );
+                );
+          if (_nowPlayingOpen) {
+            _coveredShell = shell;
+            _coveredShellStale = false;
+            _coveredShellBrightness = brightness;
+            _coveredShellAccent = accent;
+            _coveredShellCompact = compact;
+            _coveredShellCompactBar = compactBar;
+            _coveredShellBackdrop = backdrop;
+          } else if (_coveredShell != null) {
+            _coveredShell = null;
+          }
           return PopScope<void>(
             // Back is handled in-app while a page or the player is open; at
             // the browse root it keeps the platform's default (leave the app).
@@ -976,7 +1029,21 @@ class _LegacyShellState extends State<LegacyShell>
       switchOutCurve: Curves.easeInCubic,
       layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
         alignment: Alignment.topCenter,
-        children: <Widget>[...previous, ?current],
+        children: <Widget>[
+          // The outgoing page is already fading out: stop its own animations
+          // (the moving cover mosaics, list flings, progress spinners) so the
+          // transition only pays for the fade, not two live pages. Each child
+          // is also its own layer, which lets the opacity and slide below be
+          // composited instead of re-rasterising both pages every frame.
+          for (final Widget old in previous)
+            TickerMode(
+              enabled: false,
+              child: IgnorePointer(
+                child: ExcludeSemantics(child: RepaintBoundary(child: old)),
+              ),
+            ),
+          ?current,
+        ],
       ),
       transitionBuilder: (Widget child, Animation<double> animation) {
         final Animation<double> eased = CurvedAnimation(
@@ -991,7 +1058,7 @@ class _LegacyShellState extends State<LegacyShell>
               begin: const Offset(0.04, 0),
               end: Offset.zero,
             ).animate(eased),
-            child: child,
+            child: RepaintBoundary(child: child),
           ),
         );
       },

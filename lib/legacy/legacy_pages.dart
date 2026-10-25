@@ -1465,19 +1465,21 @@ class _MovingCoverMosaicState extends State<_MovingCoverMosaic>
           child: child,
         ),
       ),
-      child: OverflowBox(
-        alignment: Alignment.topLeft,
-        minWidth: 0,
-        maxWidth: double.infinity,
-        child: SizedBox(
-          width: repeated.length * widget.tile / widget.rows,
-          height: widget.tile * widget.rows,
-          child: Wrap(
-            direction: Axis.vertical,
-            children: <Widget>[
-              for (final url in repeated)
-                LegacyCover(url: url, size: widget.tile, radius: 0),
-            ],
+      child: RepaintBoundary(
+        child: OverflowBox(
+          alignment: Alignment.topLeft,
+          minWidth: 0,
+          maxWidth: double.infinity,
+          child: SizedBox(
+            width: repeated.length * widget.tile / widget.rows,
+            height: widget.tile * widget.rows,
+            child: Wrap(
+              direction: Axis.vertical,
+              children: <Widget>[
+                for (final url in repeated)
+                  LegacyCover(url: url, size: widget.tile, radius: 0),
+              ],
+            ),
           ),
         ),
       ),
@@ -3030,6 +3032,10 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
   List<double>? _rowTops;
   List<double>? _rowHeights;
   bool _metricsDirty = true;
+  // The locator asks for the playing row on every scroll frame; remembering
+  // the answer keeps a long playlist from scanning its tracks each frame.
+  String? _rowIndexTrackId;
+  int _rowIndexCache = -1;
 
   @override
   void initState() {
@@ -3077,6 +3083,8 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
         _tracks = tracks;
         _note = note;
         _metricsDirty = true;
+        _rowIndexTrackId = null;
+        _rowIndexCache = -1;
       });
       _scheduleLocateRefresh();
     } catch (_) {
@@ -3140,9 +3148,18 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
 
   int _currentIndex(List<Track> tracks) {
     final Track? current = widget.state.current;
-    return current == null
-        ? -1
-        : tracks.indexWhere((Track track) => track.id == current.id);
+    if (current == null) {
+      _rowIndexTrackId = null;
+      _rowIndexCache = -1;
+      return -1;
+    }
+    if (_rowIndexTrackId == current.id) return _rowIndexCache;
+    final int index = tracks.indexWhere(
+      (Track track) => track.id == current.id,
+    );
+    _rowIndexTrackId = current.id;
+    _rowIndexCache = index;
+    return index;
   }
 
   void _scheduleLocateRefresh() {

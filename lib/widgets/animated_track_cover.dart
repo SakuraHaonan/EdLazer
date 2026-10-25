@@ -25,7 +25,9 @@ class AnimatedTrackCover extends StatelessWidget {
           begin: Offset(direction < 0 ? -1 : 1, 0),
           end: Offset.zero,
         ).animate(animation),
-        child: child,
+        // The slide only moves a cached layer; the old implementation moved
+        // the full-size artwork pixels every frame.
+        child: RepaintBoundary(child: child),
       ),
       layoutBuilder: (current, previous) => Stack(
         fit: StackFit.expand,
