@@ -183,8 +183,8 @@ void main() {
     expect(find.text('主页'), findsOneWidget);
     expect(find.text('音乐库'), findsOneWidget);
     expect(find.text('我喜欢'), findsOneWidget);
-    expect(find.text('今天为你整理'), findsOneWidget);
-    expect(find.text('测试歌单'), findsWidgets);
+    expect(find.text('每日推荐'), findsWidgets);
+    expect(find.text('最近播放'), findsOneWidget);
     expect(find.text('未选择曲目'), findsOneWidget);
     expect(tester.takeException(), isNull);
 

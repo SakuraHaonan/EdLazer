@@ -148,7 +148,7 @@ class Catalog {
   }
 
   Future<void> invalidatePlaylist(String id) =>
-      cache.expireJson('playlist:$_scope:$id');
+      cache.expireJson('playlist-v2:$_scope:$id');
 
   Future<void> invalidateCollections(int uid) =>
       cache.expireJson('collections:$_scope:$uid');
