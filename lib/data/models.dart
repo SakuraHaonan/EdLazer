@@ -229,7 +229,7 @@ class ChartEntry {
   final String? changeLabel;
   final Track? track;
 
-  ChartEntry copyWith({Track? track}) => ChartEntry(
+  ChartEntry copyWith({Track? track, List<double>? trend}) => ChartEntry(
     rank: rank,
     title: title,
     artist: artist,
@@ -240,7 +240,7 @@ class ChartEntry {
     peakRank: peakRank,
     weeksOnChart: weeksOnChart,
     score: score,
-    trend: trend,
+    trend: trend ?? this.trend,
     changeLabel: changeLabel,
     track: track ?? this.track,
   );

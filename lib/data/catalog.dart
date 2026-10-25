@@ -390,27 +390,45 @@ class Catalog {
 
   /// External rankings load independently from the main discovery feed. A
   /// slow chart host must never hold the entire home page hostage.
-  Future<List<MusicChart>> discoveryCharts() => _cached(
-    'external-charts-v3',
-    const Duration(hours: 2),
-    (json) => (json['charts'] as List? ?? const <Object>[])
-        .whereType<Map<String, dynamic>>()
-        .map(MusicChart.fromJson)
-        .toList(),
-    (value) => <String, Object?>{
-      'charts': value.map((chart) => chart.toJson()).toList(),
-    },
-    () async {
-      final loaded = await Future.wait<Object?>(<Future<Object?>>[
-        billboard.latestChart().catchError((_) => null),
-        charts.latestCharts().catchError((_) => const <MusicChart>[]),
-      ]);
-      return <MusicChart>[
-        if (loaded.first case final MusicChart chart) chart,
-        ...(loaded.last as List<MusicChart>),
-      ];
-    },
-  );
+  Future<List<MusicChart>> discoveryCharts() async {
+    // Cache providers separately. If one host has a transient outage, a
+    // successful sibling must not turn that partial shelf into a fresh
+    // two-hour cache entry that prevents the failed provider from retrying.
+    final loaded = await Future.wait<List<MusicChart>>(
+      <Future<List<MusicChart>>>[
+        _cached(
+          'external-billboard-v1',
+          const Duration(hours: 2),
+          _decodeCharts,
+          _encodeCharts,
+          () async {
+            final chart = await billboard.latestChart();
+            if (chart == null) throw StateError('Billboard chart is empty.');
+            return <MusicChart>[chart];
+          },
+        ).catchError((_) => const <MusicChart>[]),
+        _cached(
+          'external-biliboard-v1',
+          const Duration(hours: 2),
+          _decodeCharts,
+          _encodeCharts,
+          charts.latestCharts,
+        ).catchError((_) => const <MusicChart>[]),
+      ],
+    );
+    return <MusicChart>[...loaded.first, ...loaded.last];
+  }
+
+  static List<MusicChart> _decodeCharts(Map<String, dynamic> json) =>
+      (json['charts'] as List? ?? const <Object>[])
+          .whereType<Map<String, dynamic>>()
+          .map(MusicChart.fromJson)
+          .toList();
+
+  static Map<String, dynamic> _encodeCharts(List<MusicChart> value) =>
+      <String, Object?>{
+        'charts': value.map((chart) => chart.toJson()).toList(),
+      };
 
   /// NetEase mirrors a handful of established charts and, unlike a scraped
   /// ranking, gives us immediately playable song ids. These are current-only:
@@ -487,7 +505,10 @@ class Catalog {
     const Duration(hours: 6),
     MusicChart.fromJson,
     (value) => value.toJson(),
-    () => charts.chartForIssue(chart, issue),
+    () => switch (chart.providerKey) {
+      'billboard:hot-100' => billboard.chartForIssue(chart, issue),
+      _ => charts.chartForIssue(chart, issue),
+    },
   );
 
   Future<List<Track>> heartModeTracks(Playlist liked) async {
@@ -532,51 +553,107 @@ class Catalog {
     return station;
   }
 
-  Future<MusicChart> matchChart(MusicChart chart) => _cached(
-    'chart-match-v2:${chart.id}',
-    const Duration(hours: 6),
-    MusicChart.fromJson,
-    (value) => value.toJson(),
-    () async {
-      final List<ChartEntry> entries = <ChartEntry>[];
-      final int matchCount = math.min(20, chart.entries.length);
-      for (var start = 0; start < matchCount; start += 4) {
-        final int end = math.min(start + 4, matchCount);
-        entries.addAll(
-          await Future.wait(
-            chart.entries.sublist(start, end).map(_matchChartEntry),
-          ),
+  Future<MusicChart> prepareChart(MusicChart chart) async {
+    var prepared = chart;
+    if (chart.providerKey == 'billboard:hot-100') {
+      try {
+        prepared = await _cached(
+          'billboard-history-v1:${chart.id}',
+          const Duration(hours: 12),
+          MusicChart.fromJson,
+          (value) => value.toJson(),
+          () => billboard.withHistory(chart),
         );
+      } catch (_) {
+        // Playback matching still works when the optional history host is down.
       }
-      entries.addAll(chart.entries.skip(matchCount));
-      return MusicChart(
-        id: chart.id,
-        title: chart.title,
-        source: chart.source,
-        issueLabel: chart.issueLabel,
-        entries: entries,
-        accent: chart.accent,
-        providerKey: chart.providerKey,
-        logoUrl: chart.logoUrl,
-        issues: chart.issues,
-        selectedIssueId: chart.selectedIssueId,
-      );
-    },
-  );
+    }
+    return matchChart(prepared);
+  }
 
-  Future<ChartEntry> _matchChartEntry(ChartEntry entry) async {
-    Track? match;
+  Future<MusicChart> matchChart(MusicChart chart) async {
+    final List<ChartEntry> entries = <ChartEntry>[];
+    final relaxedTitleMatch = (chart.providerKey ?? '').startsWith(
+      'biliboard:',
+    );
+    for (var start = 0; start < chart.entries.length; start += 8) {
+      final int end = math.min(start + 8, chart.entries.length);
+      entries.addAll(
+        await Future.wait(
+          chart.entries
+              .sublist(start, end)
+              .map(
+                (entry) => _matchChartEntry(
+                  entry,
+                  relaxedTitleMatch: relaxedTitleMatch,
+                ),
+              ),
+        ),
+      );
+    }
+    return MusicChart(
+      id: chart.id,
+      title: chart.title,
+      source: chart.source,
+      issueLabel: chart.issueLabel,
+      entries: entries,
+      accent: chart.accent,
+      providerKey: chart.providerKey,
+      logoUrl: chart.logoUrl,
+      issues: chart.issues,
+      selectedIssueId: chart.selectedIssueId,
+    );
+  }
+
+  Future<ChartEntry> _matchChartEntry(
+    ChartEntry entry, {
+    required bool relaxedTitleMatch,
+  }) async {
+    final identity = sha256.convert(
+      utf8.encode(
+        '${relaxedTitleMatch ? 'relaxed' : 'strict'}|'
+        '${_normaliseMusicText(entry.title)}|'
+        '${_normaliseMusicText(entry.translatedTitle ?? '')}|'
+        '${_normaliseMusicText(entry.artist)}',
+      ),
+    );
     try {
-      final String sourceArtist = _normaliseMusicText(entry.artist);
-      final String sourceTitle = _normaliseMusicText(entry.title);
-      final String query = <String>[
-        entry.title,
-        entry.artist,
-      ].where((part) => part.trim().isNotEmpty).join(' ');
+      final cached = await _cached(
+        'chart-entry-match-v1:$identity',
+        const Duration(days: 14),
+        ChartEntry.fromJson,
+        (value) => value.toJson(),
+        () => _resolveChartEntry(entry, relaxedTitleMatch: relaxedTitleMatch),
+      );
+      return entry.copyWith(track: cached.track);
+    } catch (_) {
+      // Do not cache a failed/empty match. A later board or retry may succeed.
+      return entry;
+    }
+  }
+
+  Future<ChartEntry> _resolveChartEntry(
+    ChartEntry entry, {
+    required bool relaxedTitleMatch,
+  }) async {
+    Track? match;
+    final String sourceArtist = _normaliseMusicText(entry.artist);
+    final String sourceTitle = _normaliseMusicText(entry.title);
+    final requiredScore = relaxedTitleMatch
+        ? .6
+        : sourceArtist.isEmpty
+        ? .65
+        : .78;
+    final String query = <String>[
+      entry.title,
+      entry.artist,
+    ].where((part) => part.trim().isNotEmpty).join(' ');
+    double bestScore = 0;
+
+    Future<void> search(String value) async {
       final candidates = await gateway
-          .search(query, limit: 8, useCloudSearch: true)
+          .search(value, limit: 8, useCloudSearch: true)
           .timeout(const Duration(seconds: 5));
-      double bestScore = 0;
       for (final candidate in candidates) {
         final double score = _chartMatchScore(entry, candidate);
         if (score > bestScore) {
@@ -584,16 +661,22 @@ class Catalog {
           match = trackFromSong(candidate);
         }
       }
-      // Some trusted chart archives only retain the canonical song title.
-      // In that case an exact title match is still useful and is the only
-      // route to a playable result; partial-title matches remain rejected.
-      final requiredScore = sourceArtist.isEmpty ? .65 : .78;
-      if (bestScore < requiredScore ||
-          (sourceArtist.isEmpty && sourceTitle.runes.length < 4)) {
-        match = null;
-      }
-    } catch (_) {
-      match = null;
+    }
+
+    await search(query);
+    final titleQuery = entry.title.trim();
+    if (bestScore < requiredScore &&
+        titleQuery.isNotEmpty &&
+        titleQuery != query) {
+      await search(titleQuery);
+    }
+    // Biliboard producer aliases often differ from the artist credit used by
+    // streaming services. An exact canonical/translated title is sufficient
+    // there; partial-title matches remain rejected.
+    if (bestScore < requiredScore ||
+        (sourceArtist.isEmpty && sourceTitle.runes.length < 4) ||
+        match == null) {
+      throw StateError('No trustworthy playable match.');
     }
     return entry.copyWith(track: match);
   }
@@ -609,13 +692,17 @@ class Catalog {
       score += .6;
     } else if (title.length >= 3 &&
         (candidateTitle.contains(title) || title.contains(candidateTitle))) {
-      score += .45;
+      score += .5;
     }
     final String sourceArtist = _normaliseMusicText(entry.artist);
     final String candidateArtist = _normaliseMusicText(song.artistLine);
     if (sourceArtist.isNotEmpty && candidateArtist.isNotEmpty) {
       if (sourceArtist == candidateArtist) {
         score += .35;
+      } else if (sourceArtist.length >= 3 &&
+          (candidateArtist.contains(sourceArtist) ||
+              sourceArtist.contains(candidateArtist))) {
+        score += .3;
       } else {
         final sourceParts = sourceArtist.split(' ').where((p) => p.length > 1);
         if (sourceParts.any(candidateArtist.contains)) score += .22;
@@ -626,7 +713,24 @@ class Catalog {
 
   static String _normaliseMusicText(String value) => value
       .toLowerCase()
-      .replaceAll(RegExp(r'\b(feat|ft|with)\.?\b.*$'), '')
+      .replaceAll(RegExp(r'[àáâãäåāăą]'), 'a')
+      .replaceAll('æ', 'ae')
+      .replaceAll(RegExp(r'[çćč]'), 'c')
+      .replaceAll(RegExp(r'[ďđ]'), 'd')
+      .replaceAll(RegExp(r'[èéêëēėę]'), 'e')
+      .replaceAll(RegExp(r'[ìíîïīį]'), 'i')
+      .replaceAll(RegExp(r'[ł]'), 'l')
+      .replaceAll(RegExp(r'[ñńň]'), 'n')
+      .replaceAll(RegExp(r'[òóôõöøōő]'), 'o')
+      .replaceAll('œ', 'oe')
+      .replaceAll(RegExp(r'[ř]'), 'r')
+      .replaceAll(RegExp(r'[śšş]'), 's')
+      .replaceAll('ß', 'ss')
+      .replaceAll(RegExp(r'[ť]'), 't')
+      .replaceAll(RegExp(r'[ùúûüūůű]'), 'u')
+      .replaceAll(RegExp(r'[ýÿ]'), 'y')
+      .replaceAll(RegExp(r'[źžż]'), 'z')
+      .replaceAll(RegExp(r'\b(featuring|feat|ft|with)\.?\b.*$'), '')
       .replaceAll(RegExp(r'[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+'), ' ')
       .trim();
 

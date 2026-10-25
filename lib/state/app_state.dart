@@ -614,7 +614,8 @@ class AppState extends ChangeNotifier {
     try {
       if (force) {
         await Future.wait(<Future<void>>[
-          catalog.cache.expireJson('external-charts-v3'),
+          catalog.cache.expireJson('external-billboard-v1'),
+          catalog.cache.expireJson('external-biliboard-v1'),
           catalog.cache.expireJson('netease-mirror-charts-v2'),
         ]);
       }

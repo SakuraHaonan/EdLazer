@@ -2075,7 +2075,7 @@ class _LegacyChartPageState extends State<LegacyChartPage> {
 
   Future<void> _matchInBackground(MusicChart source, int serial) async {
     try {
-      final matched = await widget.state.catalog.matchChart(source);
+      final matched = await widget.state.catalog.prepareChart(source);
       if (!mounted || serial != _requestSerial) return;
       setState(() => _chart = matched);
     } catch (_) {
@@ -3651,8 +3651,6 @@ class _SearchTabButton extends StatelessWidget {
     );
   }
 }
-
-
 
 /// A single-column, inset-grouped Settings page, following the iOS Settings
 /// information architecture rather than a desktop form grid.
