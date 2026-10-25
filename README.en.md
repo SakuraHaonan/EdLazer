@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hero.png" width="860" alt="Lazer, a cross-platform music client">
+  <img src="docs/images/mascot.png" width="220" alt="The Lazer mascot">
 </p>
 
 <h1 align="center">Lazer · nextgen</h1>
@@ -19,16 +19,6 @@
 </p>
 
 <p align="center"><a href="README.md">简体中文</a> | English</p>
-
----
-
-## Say hi to the mascot
-
-<p align="center">
-  <img src="docs/images/mascot.png" width="220" alt="The Lazer mascot">
-</p>
-
-<p align="center"><i>“Leave the playlist to me. You just enjoy it.”</i></p>
 
 ## What it does
 
