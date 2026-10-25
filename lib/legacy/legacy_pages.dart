@@ -3480,6 +3480,11 @@ class _PlaylistHeader extends StatelessWidget {
         // keep a plain three-line block with no leftover height to spend.
         if (summary != null)
           Padding(padding: const EdgeInsets.only(top: 8), child: summary),
+        // The metadata block needs air before the transport row: the pill is
+        // a solid shape, and butting it against the count line reads as one
+        // smudged block. The desktop column anchors the row to the cover's
+        // bottom edge either way, so this only opens space above it.
+        const SizedBox(height: 16),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
