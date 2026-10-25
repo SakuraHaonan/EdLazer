@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lazer_nextgen/cache/disk_cache.dart';
+import 'package:lazer_nextgen/data/biliboard.dart';
+import 'package:lazer_nextgen/data/billboard.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
@@ -122,6 +124,191 @@ class _Gateway extends NeteaseGateway {
     String keywords, {
     int limit = 20,
   }) async => const <GatewayPlaylist>[];
+}
+
+class _ChartGateway extends NeteaseGateway {
+  int searchCalls = 0;
+
+  @override
+  Future<List<GatewaySong>> search(
+    String keywords, {
+    GatewaySearchType type = GatewaySearchType.song,
+    int limit = 30,
+    int offset = 0,
+    bool useCloudSearch = false,
+  }) async {
+    searchCalls++;
+    final match = RegExp(r'^Song (\d+)').firstMatch(keywords);
+    if (match == null) return const <GatewaySong>[];
+    final id = int.parse(match.group(1)!);
+    return <GatewaySong>[
+      GatewaySong(
+        id: id,
+        title: 'Song $id',
+        artists: <String>['Artist $id'],
+        albumName: 'Album $id',
+        duration: const Duration(minutes: 3),
+      ),
+    ];
+  }
+}
+
+class _StaticBillboard extends BillboardClient {
+  @override
+  Future<MusicChart?> latestChart() async => const MusicChart(
+    id: 'billboard:test',
+    title: 'Billboard Hot 100',
+    source: 'Billboard',
+    issueLabel: 'Current',
+    entries: <ChartEntry>[],
+    providerKey: 'billboard:hot-100',
+  );
+}
+
+class _RecoveringBiliboard extends BiliboardClient {
+  int calls = 0;
+
+  @override
+  Future<List<MusicChart>> latestCharts() async {
+    calls++;
+    if (calls == 1) throw const SocketException('temporary outage');
+    return const <MusicChart>[
+      MusicChart(
+        id: 'biliboard:1:124',
+        title: '周榜',
+        source: 'Biliboard',
+        issueLabel: '2026 · 第 43 周',
+        entries: <ChartEntry>[],
+        providerKey: 'biliboard:1',
+      ),
+    ];
+  }
+}
+
+class _FallbackChartGateway extends NeteaseGateway {
+  int searchCalls = 0;
+
+  @override
+  Future<List<GatewaySong>> search(
+    String keywords, {
+    GatewaySearchType type = GatewaySearchType.song,
+    int limit = 30,
+    int offset = 0,
+    bool useCloudSearch = false,
+  }) async {
+    searchCalls++;
+    if (keywords != 'Nicole Kidman') return const <GatewaySong>[];
+    return const <GatewaySong>[
+      GatewaySong(
+        id: 6,
+        title: 'Nicole Kidman',
+        artists: <String>['ADÉLA'],
+        albumName: 'The Provocateur',
+        duration: Duration(minutes: 3),
+      ),
+    ];
+  }
+}
+
+class _SharedSongGateway extends NeteaseGateway {
+  int searchCalls = 0;
+
+  @override
+  Future<List<GatewaySong>> search(
+    String keywords, {
+    GatewaySearchType type = GatewaySearchType.song,
+    int limit = 30,
+    int offset = 0,
+    bool useCloudSearch = false,
+  }) async {
+    searchCalls++;
+    if (searchCalls > 1) throw const SocketException('rate limited');
+    return const <GatewaySong>[
+      GatewaySong(
+        id: 7,
+        title: 'Shared Song',
+        artists: <String>['Producer'],
+        albumName: 'Shared Album',
+        duration: Duration(minutes: 3),
+      ),
+    ];
+  }
+}
+
+class _BiliboardAliasGateway extends NeteaseGateway {
+  @override
+  Future<List<GatewaySong>> search(
+    String keywords, {
+    GatewaySearchType type = GatewaySearchType.song,
+    int limit = 30,
+    int offset = 0,
+    bool useCloudSearch = false,
+  }) async => const <GatewaySong>[
+    GatewaySong(
+      id: 8,
+      title: 'シャルル',
+      artists: <String>['須田景凪'],
+      albumName: 'Corridor',
+      duration: Duration(minutes: 4),
+    ),
+  ];
+}
+
+class _CloudSearchFailureGateway extends NeteaseGateway {
+  int cloudCalls = 0;
+  int classicCalls = 0;
+
+  @override
+  Future<List<GatewaySong>> search(
+    String keywords, {
+    GatewaySearchType type = GatewaySearchType.song,
+    int limit = 30,
+    int offset = 0,
+    bool useCloudSearch = false,
+  }) async {
+    if (useCloudSearch) {
+      cloudCalls++;
+      throw const SocketException('cloud search temporarily unavailable');
+    }
+    classicCalls++;
+    return const <GatewaySong>[
+      GatewaySong(
+        id: 9,
+        title: 'シスターに懺悔を',
+        artists: <String>['廃原メモリ'],
+        albumName: 'シスターに懺悔を',
+        duration: Duration(minutes: 3),
+      ),
+    ];
+  }
+}
+
+class _LateChartGateway extends NeteaseGateway {
+  bool available = false;
+  bool failing = false;
+  int searchCalls = 0;
+
+  @override
+  Future<List<GatewaySong>> search(
+    String keywords, {
+    GatewaySearchType type = GatewaySearchType.song,
+    int limit = 30,
+    int offset = 0,
+    bool useCloudSearch = false,
+  }) async {
+    searchCalls++;
+    if (failing) throw const SocketException('search host unreachable');
+    if (!available) return const <GatewaySong>[];
+    return const <GatewaySong>[
+      GatewaySong(
+        id: 9,
+        title: 'シスターに懺悔を',
+        artists: <String>['廃原メモリ'],
+        albumName: 'シスターに懺悔を',
+        duration: Duration(minutes: 3),
+      ),
+    ];
+  }
 }
 
 void main() {
@@ -278,6 +465,258 @@ void main() {
       'transNames': ['另一首的译名'],
     });
     expect(alternate.translatedTitle, '另一首的译名');
+  });
+
+  test(
+    'chart matching resolves every entry instead of only the first page',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lazer-chart-match-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final gateway = _ChartGateway();
+      final catalog = Catalog(
+        gateway: gateway,
+        cache: DiskCache(directory: () async => directory),
+      );
+      final chart = MusicChart(
+        id: 'billboard:test-100',
+        title: 'Billboard Hot 100',
+        source: 'Billboard',
+        issueLabel: 'Test issue',
+        entries: <ChartEntry>[
+          for (var rank = 1; rank <= 100; rank++)
+            ChartEntry(rank: rank, title: 'Song $rank', artist: 'Artist $rank'),
+        ],
+      );
+
+      final matched = await catalog.matchChart(chart);
+
+      expect(
+        matched.entries.where((entry) => entry.track != null),
+        hasLength(100),
+      );
+      expect(gateway.searchCalls, 100);
+    },
+  );
+
+  test('a temporary Biliboard failure is retried instead of cached', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'lazer-chart-source-cache-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final biliboard = _RecoveringBiliboard();
+    final catalog = Catalog(
+      gateway: _Gateway(),
+      cache: DiskCache(directory: () async => directory),
+      billboard: _StaticBillboard(),
+      charts: biliboard,
+    );
+
+    final first = await catalog.discoveryCharts();
+    final recovered = await catalog.discoveryCharts();
+
+    expect(first.map((chart) => chart.providerKey), <String?>[
+      'billboard:hot-100',
+    ]);
+    expect(
+      recovered.map((chart) => chart.providerKey),
+      contains('biliboard:1'),
+    );
+    expect(biliboard.calls, 2);
+  });
+
+  test('chart matching retries by title and folds artist diacritics', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'lazer-chart-fallback-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final gateway = _FallbackChartGateway();
+    final catalog = Catalog(
+      gateway: gateway,
+      cache: DiskCache(directory: () async => directory),
+    );
+    const chart = MusicChart(
+      id: 'billboard:fallback',
+      title: 'Billboard Hot 100',
+      source: 'Billboard',
+      issueLabel: 'Test issue',
+      entries: <ChartEntry>[
+        ChartEntry(rank: 1, title: 'Nicole Kidman', artist: 'ADELA'),
+      ],
+    );
+
+    final matched = await catalog.matchChart(chart);
+
+    expect(matched.entries.single.track?.id, '6');
+    // Query, the classic-search pass behind an empty cloud answer, then the
+    // title-only retry that actually hits.
+    expect(gateway.searchCalls, 3);
+  });
+
+  test(
+    'the same song reuses a positive match across Biliboard boards',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lazer-chart-shared-match-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final gateway = _SharedSongGateway();
+      final catalog = Catalog(
+        gateway: gateway,
+        cache: DiskCache(directory: () async => directory),
+      );
+      MusicChart board(int id) => MusicChart(
+        id: 'biliboard:$id:1',
+        title: 'Board $id',
+        source: 'Biliboard',
+        issueLabel: 'Current',
+        providerKey: 'biliboard:$id',
+        entries: const <ChartEntry>[
+          ChartEntry(rank: 1, title: 'Shared Song', artist: 'Producer'),
+        ],
+      );
+
+      final weekly = await catalog.matchChart(board(1));
+      final legends = await catalog.matchChart(board(2));
+
+      expect(weekly.entries.single.track?.id, '7');
+      expect(legends.entries.single.track?.id, '7');
+      expect(gateway.searchCalls, 1);
+    },
+  );
+
+  test(
+    'Biliboard accepts an exact title when producer aliases differ',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lazer-chart-alias-match-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final catalog = Catalog(
+        gateway: _BiliboardAliasGateway(),
+        cache: DiskCache(directory: () async => directory),
+      );
+      const chart = MusicChart(
+        id: 'biliboard:2:84',
+        title: '传说曲周榜',
+        source: 'Biliboard',
+        issueLabel: 'Current',
+        providerKey: 'biliboard:2',
+        entries: <ChartEntry>[
+          ChartEntry(rank: 1, title: 'シャルル', artist: 'バルーン'),
+        ],
+      );
+
+      final matched = await catalog.matchChart(chart);
+
+      expect(matched.entries.single.track?.id, '8');
+    },
+  );
+
+  test('chart matching falls back when NetEase cloud search fails', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'lazer-chart-search-fallback-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final gateway = _CloudSearchFailureGateway();
+    final catalog = Catalog(
+      gateway: gateway,
+      cache: DiskCache(directory: () async => directory),
+    );
+    const chart = MusicChart(
+      id: 'biliboard:1:124',
+      title: '周榜',
+      source: 'Biliboard',
+      issueLabel: 'Current',
+      providerKey: 'biliboard:1',
+      entries: <ChartEntry>[
+        ChartEntry(rank: 1, title: 'シスターに懺悔を', artist: '廃原メモリ'),
+      ],
+    );
+
+    final matched = await catalog.matchChart(chart);
+
+    expect(matched.entries.single.track?.id, '9');
+    expect(gateway.cloudCalls, 1);
+    expect(gateway.classicCalls, 1);
+  });
+
+  test('a row that matched nothing is remembered briefly, not for weeks', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'lazer-chart-retry-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final gateway = _LateChartGateway();
+    final catalog = Catalog(
+      gateway: gateway,
+      cache: DiskCache(directory: () async => directory),
+    );
+    const chart = MusicChart(
+      id: 'biliboard:1:124',
+      title: '周榜',
+      source: 'Biliboard',
+      issueLabel: 'Current',
+      providerKey: 'biliboard:1',
+      entries: <ChartEntry>[
+        ChartEntry(rank: 1, title: 'シスターに懺悔を', artist: '廃原メモリ'),
+      ],
+    );
+
+    final firstVisit = await catalog.matchChart(chart);
+    expect(firstVisit.entries.single.track, isNull);
+    final afterMiss = gateway.searchCalls;
+    expect(afterMiss, greaterThan(0));
+
+    // Re-opening the board inside the miss window must not fire the same
+    // searches again: that storm is what made the search host reject a whole
+    // board and leave every row without a play link.
+    final reopened = await catalog.matchChart(chart);
+    expect(reopened.entries.single.track, isNull);
+    expect(gateway.searchCalls, afterMiss);
+
+    // An explicit retry searches again and resolves the row.
+    gateway.available = true;
+    final retried = await catalog.matchChart(chart, force: true);
+    expect(retried.entries.single.track?.id, '9');
+    expect(gateway.searchCalls, greaterThan(afterMiss));
+
+    // Once resolved the row is served from cache, forced retry or not.
+    final served = gateway.searchCalls;
+    final again = await catalog.matchChart(chart, force: true);
+    expect(again.entries.single.track?.id, '9');
+    expect(gateway.searchCalls, served);
+  });
+
+  test('a search outage leaves every row retryable', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'lazer-chart-outage-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final gateway = _LateChartGateway()..failing = true;
+    final catalog = Catalog(
+      gateway: gateway,
+      cache: DiskCache(directory: () async => directory),
+    );
+    const chart = MusicChart(
+      id: 'biliboard:1:124',
+      title: '周榜',
+      source: 'Biliboard',
+      issueLabel: 'Current',
+      providerKey: 'biliboard:1',
+      entries: <ChartEntry>[
+        ChartEntry(rank: 1, title: 'シスターに懺悔を', artist: '廃原メモリ'),
+      ],
+    );
+
+    expect((await catalog.matchChart(chart)).entries.single.track, isNull);
+
+    // No negative entry is written for a transport failure, so the very next
+    // visit resolves without waiting out any window.
+    gateway
+      ..failing = false
+      ..available = true;
+    expect((await catalog.matchChart(chart)).entries.single.track?.id, '9');
   });
 
   test('home and search contain only gateway music', () async {

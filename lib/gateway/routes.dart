@@ -45,19 +45,20 @@ NeteaseRequest buildNeteaseRequest(
     bool web = false,
     bool plain = false,
     Map<String, Object?> body = const <String, Object?>{},
-  }) => NeteaseRequest(
-    path: path,
-    payload: body,
-    encoding: plain
-        ? NeteaseEncoding.api
-        : (web ? NeteaseEncoding.weapi : NeteaseEncoding.eapi),
-    mobileClient: alias.startsWith('/listentogether/'),
-  );
+  }) =>
+      NeteaseRequest(
+        path: path,
+        payload: body,
+        encoding: plain
+            ? NeteaseEncoding.api
+            : (web ? NeteaseEncoding.weapi : NeteaseEncoding.eapi),
+        mobileClient: alias.startsWith('/listentogether/'),
+      );
 
   Map<String, Object?> page({int defaultLimit = 30}) => <String, Object?>{
-    'limit': value('limit', defaultLimit.toString()),
-    'offset': value('offset', '0'),
-  };
+        'limit': value('limit', defaultLimit.toString()),
+        'offset': value('offset', '0'),
+      };
 
   switch (alias) {
     case '/login/cellphone':
@@ -137,8 +138,8 @@ NeteaseRequest buildNeteaseRequest(
       final String path = voice
           ? '/api/search/voice/get'
           : alias == '/cloudsearch'
-          ? '/api/cloudsearch/pc'
-          : '/api/search/get';
+              ? '/api/cloudsearch/pc'
+              : '/api/search/get';
       return request(
         path,
         body: <String, Object?>{
@@ -179,8 +180,8 @@ NeteaseRequest buildNeteaseRequest(
         'higher' => 192000,
         'exhigh' => 320000,
         _ => throw UnsupportedError(
-          'This audio quality requires an unsupported upstream handshake.',
-        ),
+            'This audio quality requires an unsupported upstream handshake.',
+          ),
       };
       return request(
         '/api/song/enhance/player/url',
@@ -255,6 +256,8 @@ NeteaseRequest buildNeteaseRequest(
           'total': true,
         },
       );
+    case '/toplist/detail':
+      return request('/api/toplist/detail', web: true);
     case '/user/detail':
       return request('/api/v1/user/detail/${id('uid')}', web: true);
     case '/comment/music':
@@ -318,6 +321,12 @@ NeteaseRequest buildNeteaseRequest(
         web: true,
         body: <String, Object?>{...page(), 'total': true},
       );
+    case '/simi/artist':
+      return request(
+        '/api/discovery/simiArtist',
+        web: true,
+        body: <String, Object?>{'artistid': id()},
+      );
     case '/banner':
       return request(
         '/api/v2/banner/get',
@@ -346,8 +355,29 @@ NeteaseRequest buildNeteaseRequest(
         web: true,
         body: {'limit': value('limit', '30'), 'total': true, 'n': 1000},
       );
+    case '/personalized/newsong':
+      return request(
+        '/api/personalized/newsong',
+        web: true,
+        body: <String, Object?>{
+          'type': 'recommend',
+          'limit': value('limit', '20'),
+          'areaId': value('areaId', '0'),
+        },
+      );
     case '/personal_fm':
       return request('/api/v1/radio/get', web: true);
+    case '/playmode/intelligence/list':
+      return request(
+        '/api/playmode/intelligence/list',
+        body: <String, Object?>{
+          'songId': id(),
+          'type': 'fromPlayOne',
+          'playlistId': id('pid'),
+          'startMusicId': value('sid', value('id')),
+          'count': value('count', '1'),
+        },
+      );
     case '/likelist':
       return request(
         '/api/song/like/get',
@@ -450,20 +480,17 @@ NeteaseRequest buildNeteaseRequest(
 }
 
 List<int> _songIds(String value) {
-  return value
-      .split(',')
-      .map((String raw) {
-        final int? parsed = int.tryParse(raw.trim());
-        if (parsed == null || parsed <= 0) {
-          throw ArgumentError.value(
-            value,
-            'ids',
-            'Song IDs must be positive integers.',
-          );
-        }
-        return parsed;
-      })
-      .toList(growable: false);
+  return value.split(',').map((String raw) {
+    final int? parsed = int.tryParse(raw.trim());
+    if (parsed == null || parsed <= 0) {
+      throw ArgumentError.value(
+        value,
+        'ids',
+        'Song IDs must be positive integers.',
+      );
+    }
+    return parsed;
+  }).toList(growable: false);
 }
 
 String _songIdPayload(String value) =>

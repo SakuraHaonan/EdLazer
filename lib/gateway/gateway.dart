@@ -7,11 +7,11 @@ enum GatewaySearchType { song, album, artist, playlist }
 
 extension on GatewaySearchType {
   int get apiValue => switch (this) {
-    GatewaySearchType.song => 1,
-    GatewaySearchType.album => 10,
-    GatewaySearchType.artist => 100,
-    GatewaySearchType.playlist => 1000,
-  };
+        GatewaySearchType.song => 1,
+        GatewaySearchType.album => 10,
+        GatewaySearchType.artist => 100,
+        GatewaySearchType.playlist => 1000,
+      };
 }
 
 class GatewayUserProfile {
@@ -49,9 +49,8 @@ class GatewayLoginStatus {
 
   factory GatewayLoginStatus.fromJson(Map<String, dynamic> json) {
     final dynamic data = json['data'];
-    final Map<String, dynamic> dataMap = data is Map<String, dynamic>
-        ? data
-        : const <String, dynamic>{};
+    final Map<String, dynamic> dataMap =
+        data is Map<String, dynamic> ? data : const <String, dynamic>{};
     final dynamic profile = dataMap['profile'];
     final dynamic account = dataMap['account'];
     return GatewayLoginStatus(
@@ -73,10 +72,10 @@ class GatewayAccount {
   final int? vipType;
 
   factory GatewayAccount.fromJson(Map<String, dynamic> json) => GatewayAccount(
-    id: (json['id'] as num?)?.toInt() ?? 0,
-    userName: json['userName'] as String?,
-    vipType: (json['vipType'] as num?)?.toInt(),
-  );
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        userName: json['userName'] as String?,
+        vipType: (json['vipType'] as num?)?.toInt(),
+      );
 }
 
 class GatewayLoginResult {
@@ -127,10 +126,11 @@ class GatewayArtist {
   final String name;
   final String? coverUrl;
   factory GatewayArtist.fromJson(Map<String, dynamic> json) => GatewayArtist(
-    id: (json['id'] as num?)?.toInt() ?? 0,
-    name: json['name'] as String? ?? '',
-    coverUrl: (json['cover'] ?? json['picUrl'] ?? json['img1v1Url']) as String?,
-  );
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        name: json['name'] as String? ?? '',
+        coverUrl:
+            (json['cover'] ?? json['picUrl'] ?? json['img1v1Url']) as String?,
+      );
   static List<GatewayArtist> list(Object? values) => values is List
       ? [
           for (final value in values)
@@ -171,28 +171,26 @@ class GatewaySong {
   factory GatewaySong.fromJson(Map<String, dynamic> json) {
     final dynamic ar = json['ar'] ?? json['artists'];
     final dynamic al = json['al'] ?? json['album'];
-    final Map<String, dynamic> album = al is Map<String, dynamic>
-        ? al
-        : const <String, dynamic>{};
+    final Map<String, dynamic> album =
+        al is Map<String, dynamic> ? al : const <String, dynamic>{};
     final List<String> artists = ar is List
         ? ar
-              .whereType<Map<String, dynamic>>()
-              .map<String>(
-                (Map<String, dynamic> artist) =>
-                    artist['name'] as String? ?? '',
-              )
-              .where((String name) => name.isNotEmpty)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<String>(
+              (Map<String, dynamic> artist) => artist['name'] as String? ?? '',
+            )
+            .where((String name) => name.isNotEmpty)
+            .toList()
         : const <String>[];
     final dynamic dt = json['dt'] ?? json['duration'];
     final dynamic translated = json['tns'] ?? json['transNames'];
     final String translatedTitle = translated is List
         ? translated
-              .whereType<String>()
-              .map((value) => value.trim())
-              .where((value) => value.isNotEmpty && value != json['name'])
-              .toSet()
-              .join(' / ')
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty && value != json['name'])
+            .toSet()
+            .join(' / ')
         : '';
     return GatewaySong(
       id: (json['id'] as num?)?.toInt() ?? 0,
@@ -266,12 +264,12 @@ class GatewayPlaylist {
       specialType: (json['specialType'] as num?)?.toInt(),
       trackIds: trackIds is List
           ? trackIds
-                .whereType<Map<String, dynamic>>()
-                .map<int>(
-                  (Map<String, dynamic> id) => (id['id'] as num?)?.toInt() ?? 0,
-                )
-                .where((int id) => id > 0)
-                .toList()
+              .whereType<Map<String, dynamic>>()
+              .map<int>(
+                (Map<String, dynamic> id) => (id['id'] as num?)?.toInt() ?? 0,
+              )
+              .where((int id) => id > 0)
+              .toList()
           : const <int>[],
     );
   }
@@ -301,8 +299,7 @@ class GatewayAlbum {
   final String subType;
 
   factory GatewayAlbum.fromJson(Map<String, dynamic> json) {
-    final dynamic artist =
-        json['artist'] ??
+    final dynamic artist = json['artist'] ??
         (json['artists'] is List && (json['artists'] as List).isNotEmpty
             ? (json['artists'] as List).first
             : null);
@@ -319,8 +316,8 @@ class GatewayAlbum {
       artist: names.isNotEmpty
           ? names.join(' / ')
           : artist is Map<String, dynamic>
-          ? artist['name'] as String? ?? ''
-          : '',
+              ? artist['name'] as String? ?? ''
+              : '',
       coverUrl: (json['picUrl'] ?? json['blurPicUrl']) as String?,
       publishTime: (json['publishTime'] as num?)?.toInt(),
       trackCount: (json['size'] as num?)?.toInt() ?? 0,
@@ -375,7 +372,7 @@ class GatewayLyrics {
 /// Port of NeteaseMusicGateway.kt: the typed facade over the route table.
 class NeteaseGateway {
   NeteaseGateway({NeteaseTransport? transport})
-    : _transport = transport ?? NeteaseTransport();
+      : _transport = transport ?? NeteaseTransport();
 
   final NeteaseTransport _transport;
 
@@ -560,22 +557,21 @@ class NeteaseGateway {
     if (limit <= 0 || offset < 0) throw ArgumentError('Invalid search page.');
     final Map<String, dynamic> body = await _transport
         .request(useCloudSearch ? '/cloudsearch' : '/search', <String, String>{
-          'keywords': keywords,
-          'type': type.apiValue.toString(),
-          'limit': limit.toString(),
-          'offset': offset.toString(),
-        });
+      'keywords': keywords,
+      'type': type.apiValue.toString(),
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+    });
     final dynamic result = body['result'];
-    final Map<String, dynamic> resultMap = result is Map<String, dynamic>
-        ? result
-        : const <String, dynamic>{};
+    final Map<String, dynamic> resultMap =
+        result is Map<String, dynamic> ? result : const <String, dynamic>{};
     final dynamic songs = resultMap['songs'];
     return songs is List
         ? songs
-              .whereType<Map<String, dynamic>>()
-              .map<GatewaySong>(GatewaySong.fromJson)
-              .where((GatewaySong song) => song.id > 0)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewaySong>(GatewaySong.fromJson)
+            .where((GatewaySong song) => song.id > 0)
+            .toList()
         : const <GatewaySong>[];
   }
 
@@ -602,23 +598,22 @@ class NeteaseGateway {
     if (keywords.trim().isEmpty) {
       throw ArgumentError('keywords cannot be blank.');
     }
-    final Map<String, dynamic> body = await _transport
-        .request('/search', <String, String>{
-          'keywords': keywords,
-          'type': GatewaySearchType.playlist.apiValue.toString(),
-          'limit': limit.toString(),
-        });
+    final Map<String, dynamic> body =
+        await _transport.request('/search', <String, String>{
+      'keywords': keywords,
+      'type': GatewaySearchType.playlist.apiValue.toString(),
+      'limit': limit.toString(),
+    });
     final dynamic result = body['result'];
-    final Map<String, dynamic> resultMap = result is Map<String, dynamic>
-        ? result
-        : const <String, dynamic>{};
+    final Map<String, dynamic> resultMap =
+        result is Map<String, dynamic> ? result : const <String, dynamic>{};
     final dynamic playlists = resultMap['playlists'];
     return playlists is List
         ? playlists
-              .whereType<Map<String, dynamic>>()
-              .map<GatewayPlaylist>(GatewayPlaylist.fromJson)
-              .where((GatewayPlaylist playlist) => playlist.id > 0)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewayPlaylist>(GatewayPlaylist.fromJson)
+            .where((GatewayPlaylist playlist) => playlist.id > 0)
+            .toList()
         : const <GatewayPlaylist>[];
   }
 
@@ -629,24 +624,49 @@ class NeteaseGateway {
     if (keywords.trim().isEmpty) {
       throw ArgumentError('keywords cannot be blank.');
     }
-    final Map<String, dynamic> body = await _transport
-        .request('/search', <String, String>{
-          'keywords': keywords,
-          'type': GatewaySearchType.album.apiValue.toString(),
-          'limit': limit.toString(),
-        });
+    final Map<String, dynamic> body =
+        await _transport.request('/search', <String, String>{
+      'keywords': keywords,
+      'type': GatewaySearchType.album.apiValue.toString(),
+      'limit': limit.toString(),
+    });
     final dynamic result = body['result'];
-    final Map<String, dynamic> resultMap = result is Map<String, dynamic>
-        ? result
-        : const <String, dynamic>{};
+    final Map<String, dynamic> resultMap =
+        result is Map<String, dynamic> ? result : const <String, dynamic>{};
     final dynamic albums = resultMap['albums'];
     return albums is List
         ? albums
-              .whereType<Map<String, dynamic>>()
-              .map<GatewayAlbum>(GatewayAlbum.fromJson)
-              .where((GatewayAlbum album) => album.id > 0)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewayAlbum>(GatewayAlbum.fromJson)
+            .where((GatewayAlbum album) => album.id > 0)
+            .toList()
         : const <GatewayAlbum>[];
+  }
+
+  Future<List<GatewayArtist>> searchArtists(
+    String keywords, {
+    int limit = 10,
+  }) async {
+    if (keywords.trim().isEmpty) {
+      throw ArgumentError('keywords cannot be blank.');
+    }
+    final Map<String, dynamic> body =
+        await _transport.request('/search', <String, String>{
+      'keywords': keywords,
+      'type': GatewaySearchType.artist.apiValue.toString(),
+      'limit': limit.toString(),
+    });
+    final dynamic result = body['result'];
+    final Map<String, dynamic> resultMap =
+        result is Map<String, dynamic> ? result : const <String, dynamic>{};
+    final dynamic artists = resultMap['artists'];
+    return artists is List
+        ? artists
+            .whereType<Map<String, dynamic>>()
+            .map<GatewayArtist>(GatewayArtist.fromJson)
+            .where((GatewayArtist artist) => artist.id > 0)
+            .toList()
+        : const <GatewayArtist>[];
   }
 
   Future<List<String>> hotSearches() async {
@@ -675,10 +695,10 @@ class NeteaseGateway {
     final dynamic songs = body['songs'];
     return songs is List
         ? songs
-              .whereType<Map<String, dynamic>>()
-              .map<GatewaySong>(GatewaySong.fromJson)
-              .where((GatewaySong song) => song.id > 0)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewaySong>(GatewaySong.fromJson)
+            .where((GatewaySong song) => song.id > 0)
+            .toList()
         : const <GatewaySong>[];
   }
 
@@ -790,9 +810,24 @@ class NeteaseGateway {
     final dynamic playlists = body['playlists'];
     return playlists is List
         ? playlists
-              .whereType<Map<String, dynamic>>()
-              .map<GatewayPlaylist>(GatewayPlaylist.fromJson)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewayPlaylist>(GatewayPlaylist.fromJson)
+            .toList()
+        : const <GatewayPlaylist>[];
+  }
+
+  Future<List<GatewayPlaylist>> chartPlaylists() async {
+    final Map<String, dynamic> body = await _transport.request(
+      '/toplist/detail',
+      const <String, String>{},
+    );
+    final dynamic playlists = body['list'];
+    return playlists is List
+        ? playlists
+            .whereType<Map<String, dynamic>>()
+            .map<GatewayPlaylist>(GatewayPlaylist.fromJson)
+            .where((playlist) => playlist.id > 0)
+            .toList()
         : const <GatewayPlaylist>[];
   }
 
@@ -812,9 +847,9 @@ class NeteaseGateway {
     final dynamic playlists = body['playlist'];
     return playlists is List
         ? playlists
-              .whereType<Map<String, dynamic>>()
-              .map<GatewayPlaylist>(GatewayPlaylist.fromJson)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewayPlaylist>(GatewayPlaylist.fromJson)
+            .toList()
         : const <GatewayPlaylist>[];
   }
 
@@ -837,10 +872,20 @@ class NeteaseGateway {
     final dynamic songs = body['songs'];
     return songs is List
         ? songs
-              .whereType<Map<String, dynamic>>()
-              .map<GatewaySong>(GatewaySong.fromJson)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewaySong>(GatewaySong.fromJson)
+            .toList()
         : const <GatewaySong>[];
+  }
+
+  Future<List<GatewayArtist>> similarArtists(int id) async {
+    if (id <= 0) throw ArgumentError.value(id, 'id');
+    final body = await _transport.request('/simi/artist', <String, String>{
+      'id': '$id',
+    });
+    return GatewayArtist.list(
+      body['artists'],
+    ).where((artist) => artist.id > 0).toList();
   }
 
   Future<Map<String, dynamic>> artistSongs(
@@ -884,16 +929,15 @@ class NeteaseGateway {
       const <String, String>{},
     );
     final dynamic data = body['data'];
-    final Map<String, dynamic> dataMap = data is Map<String, dynamic>
-        ? data
-        : const <String, dynamic>{};
+    final Map<String, dynamic> dataMap =
+        data is Map<String, dynamic> ? data : const <String, dynamic>{};
     final dynamic songs = dataMap['dailySongs'] ?? body['recommend'];
     return songs is List
         ? songs
-              .whereType<Map<String, dynamic>>()
-              .map<GatewaySong>(GatewaySong.fromJson)
-              .where((GatewaySong song) => song.id > 0)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewaySong>(GatewaySong.fromJson)
+            .where((GatewaySong song) => song.id > 0)
+            .toList()
         : const <GatewaySong>[];
   }
 
@@ -938,6 +982,47 @@ class NeteaseGateway {
         .toList();
   }
 
+  Future<List<GatewaySong>> personalizedNewSongs({int limit = 20}) async {
+    final body = await _transport.request('/personalized/newsong', {
+      'limit': '$limit',
+    });
+    final dynamic result = body['result'];
+    if (result is! List) return const <GatewaySong>[];
+    return result
+        .whereType<Map<String, dynamic>>()
+        .map((item) {
+          final dynamic song = item['song'];
+          return song is Map<String, dynamic> ? song : item;
+        })
+        .map(GatewaySong.fromJson)
+        .where((song) => song.id > 0)
+        .toList();
+  }
+
+  Future<List<GatewaySong>> intelligenceList({
+    required int songId,
+    required int playlistId,
+    int count = 20,
+  }) async {
+    final body = await _transport.request('/playmode/intelligence/list', {
+      'id': '$songId',
+      'pid': '$playlistId',
+      'sid': '$songId',
+      'count': '$count',
+    });
+    final dynamic data = body['data'];
+    if (data is! List) return const <GatewaySong>[];
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map((item) {
+          final dynamic song = item['songInfo'] ?? item['song'];
+          return song is Map<String, dynamic> ? song : item;
+        })
+        .map(GatewaySong.fromJson)
+        .where((song) => song.id > 0)
+        .toList();
+  }
+
   Future<List<GatewaySong>> personalFm() async {
     final Map<String, dynamic> body = await _transport.request(
       '/personal_fm',
@@ -946,10 +1031,10 @@ class NeteaseGateway {
     final dynamic data = body['data'];
     return data is List
         ? data
-              .whereType<Map<String, dynamic>>()
-              .map<GatewaySong>(GatewaySong.fromJson)
-              .where((GatewaySong song) => song.id > 0)
-              .toList()
+            .whereType<Map<String, dynamic>>()
+            .map<GatewaySong>(GatewaySong.fromJson)
+            .where((GatewaySong song) => song.id > 0)
+            .toList()
         : const <GatewaySong>[];
   }
 
@@ -1019,9 +1104,9 @@ class NeteaseGateway {
       'id': '$songId',
       'commentId': '$commentId',
       'content': content.trim().substring(
-        0,
-        content.trim().length.clamp(0, 140),
-      ),
+            0,
+            content.trim().length.clamp(0, 140),
+          ),
     });
   }
 
@@ -1056,9 +1141,9 @@ class NeteaseGateway {
   }
 
   Future<Map<String, dynamic>> listenTogetherCreateRoom() => _transport.request(
-    '/listentogether/room/create',
-    const <String, String>{},
-  );
+        '/listentogether/room/create',
+        const <String, String>{},
+      );
 
   Future<Map<String, dynamic>> listenTogetherCreateMultiRoom(
     int songId, {
@@ -1068,19 +1153,20 @@ class NeteaseGateway {
     if (songId <= 0) throw ArgumentError.value(songId, 'songId');
     return _transport
         .request('/listentogether/multi/room/create', <String, String>{
-          'id': '$songId',
-          'nextSongIds': nextSongIds.join(','),
-          'playedTime': '${playedTimeMillis.clamp(0, 1 << 62)}',
-        });
+      'id': '$songId',
+      'nextSongIds': nextSongIds.join(','),
+      'playedTime': '${playedTimeMillis.clamp(0, 1 << 62)}',
+    });
   }
 
   Future<Map<String, dynamic>> listenTogetherAccept(
     String roomId,
     int inviterId,
-  ) => _transport.request('/listentogether/accept', <String, String>{
-    'roomId': roomId,
-    'inviterId': '$inviterId',
-  });
+  ) =>
+      _transport.request('/listentogether/accept', <String, String>{
+        'roomId': roomId,
+        'inviterId': '$inviterId',
+      });
 
   Future<Map<String, dynamic>> listenTogetherRoomCheck(String roomId) =>
       _transport.request('/listentogether/room/check', <String, String>{
@@ -1098,28 +1184,31 @@ class NeteaseGateway {
     int songId,
     String playStatus,
     int progress,
-  ) => _transport.request('/listentogether/heartbeat', <String, String>{
-    'roomId': roomId,
-    'songId': '$songId',
-    'playStatus': playStatus,
-    'progress': '${progress.clamp(0, 1 << 62)}',
-  });
+  ) =>
+      _transport.request('/listentogether/heartbeat', <String, String>{
+        'roomId': roomId,
+        'songId': '$songId',
+        'playStatus': playStatus,
+        'progress': '${progress.clamp(0, 1 << 62)}',
+      });
 
   Future<Map<String, dynamic>> listenTogetherPlayCommand(
     String roomId,
     Map<String, Object?> commandInfo,
-  ) => _transport.request('/listentogether/play/command', <String, String>{
-    'roomId': roomId,
-    'commandInfo': jsonEncode(commandInfo),
-  });
+  ) =>
+      _transport.request('/listentogether/play/command', <String, String>{
+        'roomId': roomId,
+        'commandInfo': jsonEncode(commandInfo),
+      });
 
   Future<Map<String, dynamic>> listenTogetherSyncList(
     String roomId,
     Map<String, Object?> playlistParam,
-  ) => _transport.request('/listentogether/sync/list/command', <String, String>{
-    'roomId': roomId,
-    'playlistParam': jsonEncode(playlistParam),
-  });
+  ) =>
+      _transport.request('/listentogether/sync/list/command', <String, String>{
+        'roomId': roomId,
+        'playlistParam': jsonEncode(playlistParam),
+      });
 
   Future<Map<String, dynamic>> listenTogetherPlaylist(String roomId) =>
       _transport.request('/listentogether/sync/playlist/get', <String, String>{

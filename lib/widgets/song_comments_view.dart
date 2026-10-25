@@ -132,21 +132,9 @@ class _SongCommentsViewState extends State<SongCommentsView> {
               padding: const EdgeInsets.fromLTRB(20, 10, 10, 2),
               child: Row(
                 children: <Widget>[
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      child: Text(
-                        initialLoading ? '正在加载评论…' : '${_comments.total} 条评论',
-                        key: ValueKey<(bool, int)>((
-                          initialLoading,
-                          _comments.total,
-                        )),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ),
+                  // The count lives in the tab label elsewhere; repeating it
+                  // here only added a header row above the wall.
+                  const Spacer(),
                   AccessibleIconButton(
                     tooltip: '刷新评论',
                     onPressed:

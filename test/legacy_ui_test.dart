@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +9,7 @@ import 'package:lazer_nextgen/data/catalog_details.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
+import 'package:lazer_nextgen/legacy/legacy_pages.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/detail_requests.dart';
@@ -107,6 +110,28 @@ class _Catalog extends Catalog {
   );
 }
 
+class _DeferredChartCatalog extends _Catalog {
+  final Completer<MusicChart> prepared = Completer<MusicChart>();
+
+  @override
+  Future<MusicChart> prepareChart(MusicChart chart, {bool force = false}) =>
+      prepared.future;
+}
+
+class _UnmatchedChartCatalog extends _Catalog {
+  int prepareCalls = 0;
+  bool forced = false;
+
+  @override
+  Future<MusicChart> prepareChart(MusicChart chart, {bool force = false}) async {
+    prepareCalls++;
+    forced = forced || force;
+    // Answers, but never resolves a playable row: this is the board the user
+    // saw with no play links at all.
+    return chart;
+  }
+}
+
 class _SignedInState extends AppState {
   _SignedInState() : super(catalog: _Catalog());
 
@@ -183,8 +208,8 @@ void main() {
     expect(find.text('主页'), findsOneWidget);
     expect(find.text('音乐库'), findsOneWidget);
     expect(find.text('我喜欢'), findsOneWidget);
-    expect(find.text('今天为你整理'), findsOneWidget);
-    expect(find.text('测试歌单'), findsWidgets);
+    expect(find.text('每日推荐'), findsWidgets);
+    expect(find.text('最近播放'), findsOneWidget);
     expect(find.text('未选择曲目'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -421,7 +446,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'まにまに');
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
-    expect(find.text('单曲'), findsOneWidget);
+    expect(find.text('歌曲'), findsOneWidget);
     expect(find.text('歌单'), findsOneWidget);
     expect(find.text('まにまに'), findsWidgets);
     expect(tester.takeException(), isNull);
@@ -453,5 +478,93 @@ void main() {
     );
     expect(find.descendant(of: tile, matching: find.text('C')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('chart rows show matching progress before playback is resolved', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final catalog = _DeferredChartCatalog();
+    final state = AppState(catalog: catalog);
+    addTearDown(state.dispose);
+    const source = MusicChart(
+      id: 'biliboard:1:124',
+      title: '周榜',
+      source: 'Biliboard',
+      issueLabel: 'Current',
+      providerKey: 'biliboard:1',
+      entries: <ChartEntry>[
+        ChartEntry(rank: 1, title: 'まにまに', artist: 'r-906'),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(),
+        home: Scaffold(
+          body: LegacyChartPage(state: state, chart: source),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.link_off_rounded), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+    catalog.prepared.complete(
+      const MusicChart(
+        id: 'biliboard:1:124',
+        title: '周榜',
+        source: 'Biliboard',
+        issueLabel: 'Current',
+        providerKey: 'biliboard:1',
+        entries: <ChartEntry>[
+          ChartEntry(rank: 1, title: 'まにまに', artist: 'r-906', track: _track),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('a board that resolved no playable row offers a retry', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final catalog = _UnmatchedChartCatalog();
+    final state = AppState(catalog: catalog);
+    addTearDown(state.dispose);
+    const source = MusicChart(
+      id: 'biliboard:1:124',
+      title: 'weekly',
+      source: 'Biliboard',
+      issueLabel: 'Current',
+      providerKey: 'biliboard:1',
+      entries: <ChartEntry>[
+        ChartEntry(rank: 1, title: 'unmatched', artist: 'producer'),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(),
+        home: Scaffold(body: LegacyChartPage(state: state, chart: source)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(catalog.prepareCalls, 1);
+    expect(find.byIcon(Icons.link_off_rounded), findsOneWidget);
+    expect(find.text('\u91cd\u8bd5'), findsOneWidget);
+
+    await tester.tap(find.text('\u91cd\u8bd5'));
+    await tester.pumpAndSettle();
+
+    expect(catalog.prepareCalls, 2);
+    expect(catalog.forced, isTrue);
   });
 }

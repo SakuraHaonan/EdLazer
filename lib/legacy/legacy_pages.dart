@@ -1,8 +1,9 @@
 import 'dart:async';
+
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
+    show TargetPlatform, defaultTargetPlatform, listEquals;
 import 'package:flutter/material.dart';
 
 import '../data/catalog.dart';
@@ -17,6 +18,7 @@ import '../widgets/accessible_controls.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
+import '../state/detail_requests.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
 import 'legacy_widgets.dart';
@@ -785,125 +787,1864 @@ double _pageInset(BuildContext context) =>
 
 /// Apple-style browse page: a large title, one featured card, a horizontal
 /// recommendation shelf and the quick-pick track list.
-class LegacyHomePage extends StatelessWidget {
+class LegacyHomePage extends StatefulWidget {
   const LegacyHomePage({
     super.key,
     required this.state,
     required this.onOpenPlaylist,
     required this.onPlayTrack,
+    required this.onOpenChart,
   });
 
   final AppState state;
   final ValueChanged<Playlist> onOpenPlaylist;
   final void Function(List<Track> tracks, int index) onPlayTrack;
+  final ValueChanged<MusicChart> onOpenChart;
+
+  @override
+  State<LegacyHomePage> createState() => _LegacyHomePageState();
+}
+
+class _LegacyHomePageState extends State<LegacyHomePage> {
+  bool _startingStation = false;
+
+  Future<void> _playStation(Future<List<Track>> Function() load) async {
+    if (_startingStation) return;
+    setState(() => _startingStation = true);
+    try {
+      final tracks = await load();
+      if (!mounted) return;
+      if (tracks.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('暂时没有可播放的歌曲')));
+      } else {
+        widget.state.playStationQueue(tracks, loadMore: load);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('播放队列加载失败，请稍后重试')));
+      }
+    } finally {
+      if (mounted) setState(() => _startingStation = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final HomeFeed? feed = state.home;
+    final HomeFeed? feed = widget.state.home;
     if (feed == null) {
       return LegacyNotice(
-        message: state.homeError ?? '正在加载曲库…',
-        action: state.homeError == null
+        message: widget.state.homeError ?? '正在加载曲库…',
+        action: widget.state.homeError == null
             ? null
             : FilledButton(
-                onPressed: () => unawaited(state.refreshHome(force: true)),
+                onPressed: () =>
+                    unawaited(widget.state.refreshHome(force: true)),
                 child: const Text('重试'),
               ),
       );
     }
-    final List<Playlist> rail = _uniquePlaylists(<Playlist>[
-      ...feed.recommended,
-      ...feed.playlists,
-    ]);
-    final List<Track> tracks = feed.quick.isNotEmpty
-        ? feed.quick
-        : feed.featuredTracks;
-    final String? likedName = state.collections.liked?.name;
+    final List<Playlist> recommendations = _uniquePlaylists(feed.recommended);
+    final List<Track> recent = widget.state.recentTracks;
+    final ArtistRef? stationArtist = recent
+        .expand((track) => track.artists)
+        .where((artist) => artist.id > 0)
+        .firstOrNull;
     final double inset = _pageInset(context);
     final bool compact = MediaQuery.sizeOf(context).width < 720;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1180),
         child: CustomScrollView(
+          key: const PageStorageKey<String>('discovery-scroll'),
           slivers: <Widget>[
             SliverPadding(
               padding: EdgeInsets.fromLTRB(inset, 8, inset, 0),
               sliver: SliverList(
                 delegate: SliverChildListDelegate(<Widget>[
-                  const ApplePageTitle(
-                    title: '现在就听',
-                    subtitle: '今天为你整理',
-                    padding: EdgeInsets.fromLTRB(0, 12, 0, 16),
+                  _HomeActionShelf(
+                    busy: _startingStation,
+                    covers: <String?>[
+                      ...recent.map((track) => track.coverUrl),
+                      ...feed.quick.map((track) => track.coverUrl),
+                      ...feed.albums.map((album) => album.coverUrl),
+                    ],
+                    onDaily: !widget.state.signedIn || feed.quick.isEmpty
+                        ? null
+                        : () => widget.state.playQueue(feed.quick),
+                    onFm: widget.state.signedIn
+                        ? () => _playStation(
+                            widget.state.catalog.personalFmTracks,
+                          )
+                        : null,
+                    onHeart: widget.state.collections.liked == null
+                        ? null
+                        : () => _playStation(
+                            () => widget.state.catalog.heartModeTracks(
+                              widget.state.collections.liked!,
+                            ),
+                          ),
+                    onReplay: recent.isEmpty
+                        ? null
+                        : () => widget.state.playQueue(recent),
                   ),
-                  if (rail.isNotEmpty) ...<Widget>[
-                    _FeaturedPlaylistCard(
-                      playlist: rail.first,
-                      onTap: () => onOpenPlaylist(rail.first),
+                  const SizedBox(height: 34),
+                  LegacySectionHeader(title: '最近播放'),
+                  const SizedBox(height: 10),
+                  if (recent.isNotEmpty)
+                    _HomeTrackGrid(
+                      state: widget.state,
+                      tracks: recent,
+                      onPlay: widget.onPlayTrack,
+                    )
+                  else
+                    const LegacyNotice(message: '还没有最近播放记录'),
+                  if (feed.albums.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 36),
+                    const LegacySectionHeader(title: '为你推荐的新发行'),
+                    const SizedBox(height: 14),
+                    _HomeReleaseShelf(
+                      state: widget.state,
+                      albums: feed.albums,
                       compact: compact,
                     ),
-                    const SizedBox(height: 8),
-                    const LegacySectionHeader(
-                      title: '为你推荐',
-                      subtitle: '根据你的聆听偏好',
-                    ),
+                  ],
+                  if (feed.editorialPlaylists.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 38),
+                    const LegacySectionHeader(title: '网易云编辑精选'),
                     const SizedBox(height: 14),
-                    SizedBox(
-                      height: compact ? 202 : 224,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        clipBehavior: Clip.none,
-                        itemCount: rail.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 16),
-                        itemBuilder: (BuildContext context, int index) {
-                          final Playlist playlist = rail[index];
-                          return LegacyPlaylistCard(
-                            playlist: playlist,
-                            width: compact ? 144 : 168,
-                            onTap: () => onOpenPlaylist(playlist),
-                          );
-                        },
-                      ),
+                    _EditorialPlaylistShelf(
+                      playlists: feed.editorialPlaylists,
+                      onOpen: widget.onOpenPlaylist,
+                      compact: compact,
                     ),
                   ],
-                  const SizedBox(height: 26),
-                  LegacySectionHeader(
-                    title: likedName ?? '继续播放',
-                    subtitle: tracks.isEmpty ? null : '${tracks.length} 首',
-                  ),
-                  const SizedBox(height: 8),
-                  if (tracks.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
-                      child: Text(
-                        '曲库还没有返回可播放的曲目。',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppleSemanticColors.of(context).secondaryLabel,
-                        ),
+                  const SizedBox(height: 38),
+                  const LegacySectionHeader(title: '排行榜'),
+                  const SizedBox(height: 14),
+                  if (widget.state.discoveryCharts.isNotEmpty)
+                    _ChartShelf(
+                      charts: widget.state.discoveryCharts,
+                      onOpen: widget.onOpenChart,
+                      compact: compact,
+                    )
+                  else
+                    _ChartLoadCard(
+                      loading: widget.state.discoveryChartsLoading,
+                      message: widget.state.discoveryChartsError,
+                      onRetry: () => unawaited(
+                        widget.state.refreshDiscoveryCharts(force: true),
                       ),
                     ),
+                  if (recommendations.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 38),
+                    const LegacySectionHeader(title: '猜你喜欢'),
+                    const SizedBox(height: 14),
+                    _RecommendationShelf(
+                      playlists: recommendations,
+                      onOpen: widget.onOpenPlaylist,
+                      compact: compact,
+                    ),
+                  ],
+                  const SizedBox(height: 38),
+                  LegacySectionHeader(title: '为你创建的电台'),
+                  const SizedBox(height: 14),
+                  _StationStrip(
+                    enabled: widget.state.signedIn,
+                    covers: <String?>[
+                      ...recent.map((track) => track.coverUrl),
+                      ...feed.quick.map((track) => track.coverUrl),
+                      ...feed.albums.map((album) => album.coverUrl),
+                    ],
+                    onFm: () =>
+                        _playStation(widget.state.catalog.personalFmTracks),
+                    onLiked: widget.state.collections.liked == null
+                        ? null
+                        : () => _playStation(() async {
+                            final tracks = await widget.state.catalog
+                                .playlistTracks(
+                                  widget.state.collections.liked!.id,
+                                );
+                            return List<Track>.of(tracks)..shuffle();
+                          }),
+                    onHeart: widget.state.collections.liked == null
+                        ? null
+                        : () => _playStation(
+                            () => widget.state.catalog.heartModeTracks(
+                              widget.state.collections.liked!,
+                            ),
+                          ),
+                    artistName: stationArtist?.name,
+                    onArtist: stationArtist == null
+                        ? null
+                        : () => _playStation(
+                            () => widget.state.catalog.artistStationTracks(
+                              stationArtist,
+                            ),
+                          ),
+                  ),
                 ]),
               ),
             ),
-            if (tracks.isNotEmpty)
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: inset),
-                sliver: SliverList.builder(
-                  itemCount: tracks.length,
-                  itemBuilder: (BuildContext context, int i) => LegacyTrackRow(
-                    track: tracks[i],
-                    index: i,
-                    current: state.current?.id == tracks[i].id,
-                    playing: state.playing,
-                    onTap: () => onPlayTrack(tracks, i),
-                  ),
-                ),
-              ),
             const SliverToBoxAdapter(child: SizedBox(height: 28)),
           ],
         ),
       ),
     );
   }
+}
+
+class _HomeActionShelf extends StatelessWidget {
+  const _HomeActionShelf({
+    required this.busy,
+    required this.covers,
+    this.onDaily,
+    this.onFm,
+    this.onHeart,
+    this.onReplay,
+  });
+
+  final bool busy;
+  final List<String?> covers;
+  final VoidCallback? onDaily;
+  final VoidCallback? onFm;
+  final VoidCallback? onHeart;
+  final VoidCallback? onReplay;
+
+  @override
+  Widget build(BuildContext context) {
+    final items =
+        <
+          ({
+            String title,
+            String subtitle,
+            IconData icon,
+            List<Color> colors,
+            VoidCallback? tap,
+          })
+        >[
+          (
+            title: '每日推荐',
+            subtitle: '今日限定好歌',
+            icon: Icons.calendar_today_rounded,
+            colors: const <Color>[Color(0xFFFF375F), Color(0xFFFF7A45)],
+            tap: onDaily,
+          ),
+          (
+            title: '私人漫游',
+            subtitle: '发现没听过的音乐',
+            icon: Icons.waves_rounded,
+            colors: const <Color>[Color(0xFF7357FF), Color(0xFF35A7FF)],
+            tap: onFm,
+          ),
+          (
+            title: '心动模式',
+            subtitle: '红心与相似推荐',
+            icon: Icons.favorite_rounded,
+            colors: const <Color>[Color(0xFFE5488A), Color(0xFF8C52FF)],
+            tap: onHeart,
+          ),
+          (
+            title: '反复聆听',
+            subtitle: '回到你爱的歌',
+            icon: Icons.replay_rounded,
+            colors: const <Color>[Color(0xFF087E8B), Color(0xFF42C98B)],
+            tap: onReplay,
+          ),
+        ];
+    return _PagedHorizontalShelf(
+      key: const ValueKey<String>('home-actions'),
+      height: 164,
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return _HomeActionCard(
+          title: item.title,
+          subtitle: item.subtitle,
+          icon: item.icon,
+          colors: item.colors,
+          covers: covers.isEmpty
+              ? const <String?>[]
+              : <String?>[
+                  for (var offset = 0; offset < covers.length; offset++)
+                    covers[(index * 2 + offset) % covers.length],
+                ],
+          onTap: busy ? null : item.tap,
+        );
+      },
+    );
+  }
+}
+
+class _HomeActionCard extends StatefulWidget {
+  const _HomeActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.colors,
+    required this.covers,
+    this.onTap,
+  });
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<Color> colors;
+  final List<String?> covers;
+  final VoidCallback? onTap;
+
+  @override
+  State<_HomeActionCard> createState() => _HomeActionCardState();
+}
+
+class _HomeActionCardState extends State<_HomeActionCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: widget.onTap == null
+        ? SystemMouseCursors.basic
+        : SystemMouseCursors.click,
+    onEnter: (_) => setState(() => _hover = true),
+    onExit: (_) => setState(() => _hover = false),
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap == null
+          ? null
+          : feedbackAction(context, widget.onTap!),
+      child: AnimatedScale(
+        scale: _hover && widget.onTap != null ? 1.015 : 1,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            width: 228,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: widget.onTap == null
+                    ? widget.colors
+                          .map((color) => color.withValues(alpha: .42))
+                          .toList()
+                    : widget.colors,
+              ),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: widget.colors.last.withValues(
+                    alpha: _hover ? .28 : .16,
+                  ),
+                  blurRadius: _hover ? 24 : 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                Opacity(
+                  opacity: widget.onTap == null ? .28 : .52,
+                  child: _MovingCoverMosaic(covers: widget.covers),
+                ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[Color(0x18000000), Color(0xD9000000)],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Icon(widget.icon, color: Colors.white, size: 26),
+                      const Spacer(),
+                      Text(
+                        widget.title,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -.35,
+                            ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        widget.subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: .78),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _PagedHorizontalShelf extends StatefulWidget {
+  const _PagedHorizontalShelf({
+    super.key,
+    required this.height,
+    required this.itemCount,
+    required this.itemBuilder,
+    this.gap = 14,
+  });
+
+  final double height;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+  final double gap;
+
+  @override
+  State<_PagedHorizontalShelf> createState() => _PagedHorizontalShelfState();
+}
+
+class _PagedHorizontalShelfState extends State<_PagedHorizontalShelf> {
+  final ScrollController _controller = ScrollController(
+    keepScrollOffset: false,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshAfterLayout();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PagedHorizontalShelf oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.itemCount != widget.itemCount ||
+        oldWidget.height != widget.height) {
+      _refreshAfterLayout();
+    }
+  }
+
+  void _refreshAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _page(double direction) {
+    if (!_controller.hasClients) return;
+    final position = _controller.position;
+    if (!position.hasContentDimensions) return;
+    final target =
+        (position.pixels + position.viewportDimension * .86 * direction).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        );
+    _controller.animateTo(
+      target,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 340),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool desktop = MediaQuery.sizeOf(context).width >= 720;
+    return SizedBox(
+      height: widget.height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          ListView.separated(
+            controller: _controller,
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            physics: const BouncingScrollPhysics(),
+            itemCount: widget.itemCount,
+            separatorBuilder: (_, _) => SizedBox(width: widget.gap),
+            itemBuilder: widget.itemBuilder,
+          ),
+          if (desktop)
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) {
+                  final bool attached =
+                      _controller.hasClients &&
+                      _controller.position.hasContentDimensions;
+                  final double pixels = attached
+                      ? _controller.position.pixels
+                      : 0;
+                  final double max = attached
+                      ? _controller.position.maxScrollExtent
+                      : 0;
+                  return IgnorePointer(
+                    ignoring: !attached || max <= 0,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: <Widget>[
+                        _ShelfArrow(
+                          icon: Icons.chevron_left_rounded,
+                          visible: attached && pixels > 1,
+                          onTap: () => _page(-1),
+                        ),
+                        _ShelfArrow(
+                          icon: Icons.chevron_right_rounded,
+                          visible: attached && pixels < max - 1,
+                          onTap: () => _page(1),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShelfArrow extends StatelessWidget {
+  const _ShelfArrow({
+    required this.icon,
+    required this.visible,
+    required this.onTap,
+  });
+  final IconData icon;
+  final bool visible;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => AnimatedOpacity(
+    opacity: visible ? 1 : 0,
+    duration: const Duration(milliseconds: 140),
+    child: Material(
+      color: AppleSemanticColors.of(
+        context,
+      ).tertiaryBackground.withValues(alpha: .94),
+      elevation: 8,
+      shadowColor: Colors.black26,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: visible ? onTap : null,
+        child: SizedBox.square(dimension: 38, child: Icon(icon, size: 24)),
+      ),
+    ),
+  );
+}
+
+class _MovingCoverMosaic extends StatefulWidget {
+  const _MovingCoverMosaic({
+    required this.covers,
+    this.angle = 0,
+    this.reverse = false,
+    this.rows = 2,
+    this.tile = 76,
+    this.diagonal = 0,
+  });
+  final List<String?> covers;
+  final double angle;
+  final bool reverse;
+  final int rows;
+  final double tile;
+  final double diagonal;
+
+  @override
+  State<_MovingCoverMosaic> createState() => _MovingCoverMosaicState();
+}
+
+class _MovingCoverMosaicState extends State<_MovingCoverMosaic>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _motion = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 18),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _motion.stop();
+    } else if (!_motion.isAnimating) {
+      _motion.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final covers = widget.covers
+        .where((url) => url?.isNotEmpty ?? false)
+        .take(8)
+        .toList();
+    if (covers.isEmpty) return const SizedBox.expand();
+    final repeated = List<String?>.generate(
+      math.max(24, widget.rows * 12),
+      (index) => covers[index % covers.length],
+    );
+    final travel = widget.tile * covers.length;
+    return AnimatedBuilder(
+      animation: _motion,
+      builder: (context, child) => Transform.rotate(
+        angle: widget.angle,
+        child: Transform.translate(
+          offset: Offset(
+            widget.reverse
+                ? -travel + _motion.value * travel
+                : -_motion.value * travel,
+            (_motion.value - .5) * widget.tile * widget.diagonal,
+          ),
+          child: child,
+        ),
+      ),
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        minWidth: 0,
+        maxWidth: double.infinity,
+        child: SizedBox(
+          width: repeated.length * widget.tile / widget.rows,
+          height: widget.tile * widget.rows,
+          child: Wrap(
+            direction: Axis.vertical,
+            children: <Widget>[
+              for (final url in repeated)
+                LegacyCover(url: url, size: widget.tile, radius: 0),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeTrackGrid extends StatelessWidget {
+  const _HomeTrackGrid({
+    required this.state,
+    required this.tracks,
+    required this.onPlay,
+  });
+  final AppState state;
+  final List<Track> tracks;
+  final void Function(List<Track>, int) onPlay;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      const int rows = 3;
+      final int visibleColumns = box.maxWidth >= 920
+          ? 3
+          : box.maxWidth >= 560
+          ? 2
+          : 1;
+      final List<Track> shown = tracks;
+      final int columns = (shown.length / rows).ceil();
+      final double width =
+          (box.maxWidth - (visibleColumns - 1) * 10) / visibleColumns;
+      return _PagedHorizontalShelf(
+        key: const ValueKey<String>('recent-tracks'),
+        height: rows * 66 + (rows - 1) * 8,
+        gap: 10,
+        itemCount: columns,
+        itemBuilder: (context, column) => SizedBox(
+          width: width,
+          child: Column(
+            children: <Widget>[
+              for (var row = 0; row < rows; row++) ...<Widget>[
+                if (row > 0) const SizedBox(height: 8),
+                if (column * rows + row < shown.length)
+                  _ArtistTrackCard(
+                    track: shown[column * rows + row],
+                    current: state.current?.id == shown[column * rows + row].id,
+                    onTap: () => onPlay(shown, column * rows + row),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _HomeReleaseShelf extends StatelessWidget {
+  const _HomeReleaseShelf({
+    required this.state,
+    required this.albums,
+    required this.compact,
+  });
+  final AppState state;
+  final List<Album> albums;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => _PagedHorizontalShelf(
+    key: const ValueKey<String>('new-releases'),
+    height: compact ? 204 : 226,
+    itemCount: albums.length,
+    gap: 16,
+    itemBuilder: (context, index) {
+      final album = albums[index];
+      final double size = compact ? 146 : 168;
+      return SizedBox(
+        width: size,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(11),
+          onTap: feedbackAction(
+            context,
+            () => unawaited(openAlbumDetails(context, state, album)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              LegacyCover(url: album.coverUrl, size: size, radius: 11),
+              const SizedBox(height: 8),
+              Text(
+                album.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                album.artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppleSemanticColors.of(context).secondaryLabel,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _EditorialPlaylistShelf extends StatelessWidget {
+  const _EditorialPlaylistShelf({
+    required this.playlists,
+    required this.onOpen,
+    required this.compact,
+  });
+  final List<Playlist> playlists;
+  final ValueChanged<Playlist> onOpen;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => _PagedHorizontalShelf(
+    key: const ValueKey<String>('editorial-playlists'),
+    height: compact ? 190 : 214,
+    itemCount: playlists.length,
+    gap: 16,
+    itemBuilder: (context, index) {
+      final playlist = playlists[index];
+      return SizedBox(
+        width: compact ? 270 : 330,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: feedbackAction(context, () => onOpen(playlist)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                LegacyCover(url: playlist.coverUrl, radius: 0),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[Color(0x11000000), Color(0xD9000000)],
+                      stops: <double>[.25, 1],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 18,
+                  right: 18,
+                  bottom: 16,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        '网易云编辑精选',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        playlist.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _ChartShelf extends StatelessWidget {
+  const _ChartShelf({
+    required this.charts,
+    required this.onOpen,
+    required this.compact,
+  });
+  final List<MusicChart> charts;
+  final ValueChanged<MusicChart> onOpen;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => _PagedHorizontalShelf(
+    key: const ValueKey<String>('charts'),
+    height: compact ? 274 : 294,
+    itemCount: charts.length,
+    gap: 16,
+    itemBuilder: (context, index) {
+      final chart = charts[index];
+      return SizedBox(
+        width: compact ? 246 : 278,
+        child: Material(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: feedbackAction(context, () => onOpen(chart)),
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                Transform.scale(
+                  scale: 1.32,
+                  child: _MovingCoverMosaic(
+                    covers: chart.entries
+                        .map(_chartEntryCover)
+                        .toList(growable: false),
+                    angle: -.11,
+                    reverse: true,
+                    rows: 4,
+                    tile: 82,
+                    diagonal: -.55,
+                  ),
+                ),
+                ColoredBox(color: Colors.black.withValues(alpha: .68)),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[Color(0x12000000), Color(0xF2000000)],
+                      stops: <double>[.22, 1],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      _ChartLogo(chart: chart),
+                      const Spacer(),
+                      Text(
+                        chart.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -.6,
+                            ),
+                      ),
+                      Text(
+                        chart.issueLabel,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 9),
+                      for (final entry in chart.entries.take(3))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 5),
+                          child: Row(
+                            children: <Widget>[
+                              SizedBox(
+                                width: 24,
+                                child: Text(
+                                  '${entry.rank}',
+                                  style: const TextStyle(
+                                    color: Colors.white60,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  entry.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+String? _chartEntryCover(ChartEntry entry) =>
+    entry.track?.coverUrl ?? entry.coverUrl;
+
+String _chartBrand(MusicChart chart) {
+  final title = chart.title.toLowerCase();
+  if (title.contains('billboard')) return 'billboard';
+  if ((chart.providerKey ?? '').startsWith('biliboard:')) return 'BILIBOARD';
+  if (title.contains('uk')) return 'OFFICIAL CHARTS';
+  if (title.contains('beatport')) return 'BEATPORT';
+  if (title.contains('oricon')) return 'ORICON';
+  if (title.contains('nrj')) return 'NRJ';
+  return 'CHARTS';
+}
+
+String? _chartLogoAsset(MusicChart chart) {
+  final title = chart.title.toLowerCase();
+  if (title.contains('billboard')) {
+    return 'assets/chart_logos/billboard.png';
+  }
+  if ((chart.providerKey ?? '').startsWith('biliboard:')) {
+    return 'assets/chart_logos/biliboard.png';
+  }
+  if (title.contains('uk')) {
+    return 'assets/chart_logos/official_charts.png';
+  }
+  if (title.contains('beatport')) {
+    return 'assets/chart_logos/beatport.png';
+  }
+  if (title.contains('oricon')) return 'assets/chart_logos/oricon.png';
+  if (title.contains('nrj')) return 'assets/chart_logos/nrj.png';
+  return null;
+}
+
+class _ChartLogo extends StatelessWidget {
+  const _ChartLogo({required this.chart, this.large = false});
+  final MusicChart chart;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = _chartLogoAsset(chart);
+    final biliboard = (chart.providerKey ?? '').startsWith('biliboard:');
+    if (asset == null) {
+      return Text(
+        _chartBrand(chart),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: large ? 21 : 16,
+          height: 1,
+          fontWeight: FontWeight.w900,
+          letterSpacing: .5,
+        ),
+      );
+    }
+    return SizedBox(
+      height: large ? 52 : 38,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Image.asset(
+            asset,
+            width: large ? (biliboard ? 58 : 190) : (biliboard ? 42 : 144),
+            height: large ? 52 : 38,
+            alignment: Alignment.centerLeft,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+          ),
+          if (biliboard) ...<Widget>[
+            SizedBox(width: large ? 10 : 7),
+            Text(
+              'BiliBoard',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: large ? 25 : 18,
+                height: 1,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -.6,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RecommendationShelf extends StatelessWidget {
+  const _RecommendationShelf({
+    required this.playlists,
+    required this.onOpen,
+    required this.compact,
+  });
+  final List<Playlist> playlists;
+  final ValueChanged<Playlist> onOpen;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => _PagedHorizontalShelf(
+    key: const ValueKey<String>('recommendations'),
+    height: compact ? 202 : 224,
+    itemCount: playlists.length,
+    gap: 16,
+    itemBuilder: (context, index) => LegacyPlaylistCard(
+      playlist: playlists[index],
+      width: compact ? 144 : 168,
+      onTap: () => onOpen(playlists[index]),
+    ),
+  );
+}
+
+class _StationStrip extends StatelessWidget {
+  const _StationStrip({
+    required this.enabled,
+    required this.onFm,
+    required this.covers,
+    this.onLiked,
+    this.onHeart,
+    this.artistName,
+    this.onArtist,
+  });
+  final bool enabled;
+  final VoidCallback onFm;
+  final List<String?> covers;
+  final VoidCallback? onLiked;
+  final VoidCallback? onHeart;
+  final String? artistName;
+  final VoidCallback? onArtist;
+
+  @override
+  Widget build(BuildContext context) {
+    final stations =
+        <({String title, String detail, IconData icon, VoidCallback? tap})>[
+          (
+            title: '私人漫游',
+            detail: '算法探索',
+            icon: Icons.radar_rounded,
+            tap: enabled ? onFm : null,
+          ),
+          (
+            title: '红心随机',
+            detail: '只播放收藏',
+            icon: Icons.shuffle_rounded,
+            tap: onLiked,
+          ),
+          (
+            title: '心动模式',
+            detail: '熟悉与新鲜',
+            icon: Icons.favorite_rounded,
+            tap: onHeart,
+          ),
+          if (artistName != null)
+            (
+              title: '$artistName 电台',
+              detail: '相似歌手与曲风',
+              icon: Icons.graphic_eq_rounded,
+              tap: onArtist,
+            ),
+        ];
+    return _PagedHorizontalShelf(
+      key: const ValueKey<String>('stations'),
+      height: 154,
+      itemCount: stations.length,
+      itemBuilder: (context, index) {
+        final station = stations[index];
+        return _StationCard(
+          title: station.title,
+          detail: station.detail,
+          icon: station.icon,
+          covers: covers.isEmpty
+              ? const <String?>[]
+              : <String?>[
+                  for (var offset = 0; offset < covers.length; offset++)
+                    covers[(index * 3 + offset) % covers.length],
+                ],
+          onTap: station.tap,
+        );
+      },
+    );
+  }
+}
+
+class _StationCard extends StatelessWidget {
+  const _StationCard({
+    required this.title,
+    required this.detail,
+    required this.icon,
+    required this.covers,
+    this.onTap,
+  });
+  final String title;
+  final String detail;
+  final IconData icon;
+  final List<String?> covers;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 272,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap == null ? null : feedbackAction(context, onTap!),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            ColoredBox(
+              color: AppleSemanticColors.of(context).secondaryGroupedBackground,
+              child: Opacity(
+                opacity: onTap == null ? .18 : .58,
+                child: _MovingCoverMosaic(covers: covers),
+              ),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[Color(0x22000000), Color(0xE0000000)],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      Icon(icon, color: Colors.white, size: 22),
+                      const Icon(
+                        Icons.play_circle_fill_rounded,
+                        color: Colors.white,
+                        size: 29,
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    detail,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ChartLoadCard extends StatelessWidget {
+  const _ChartLoadCard({
+    required this.loading,
+    required this.message,
+    required this.onRetry,
+  });
+  final bool loading;
+  final String? message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 112,
+    padding: const EdgeInsets.symmetric(horizontal: 18),
+    decoration: BoxDecoration(
+      color: AppleSemanticColors.of(context).secondaryGroupedBackground,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: <Widget>[
+        if (loading)
+          const SizedBox.square(
+            dimension: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else
+          const Icon(Icons.leaderboard_rounded),
+        const SizedBox(width: 13),
+        Expanded(child: Text(loading ? '正在载入排行榜…' : message ?? '暂无榜单数据')),
+        if (!loading) TextButton(onPressed: onRetry, child: const Text('重试')),
+      ],
+    ),
+  );
+}
+
+class LegacyChartPage extends StatefulWidget {
+  const LegacyChartPage({super.key, required this.state, required this.chart});
+  final AppState state;
+  final MusicChart chart;
+
+  @override
+  State<LegacyChartPage> createState() => _LegacyChartPageState();
+}
+
+class _LegacyChartPageState extends State<LegacyChartPage> {
+  MusicChart? _chart;
+  bool _loading = true;
+  bool _matching = false;
+  int _requestSerial = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final serial = ++_requestSerial;
+    final source = widget.chart;
+    if (mounted) {
+      setState(() {
+        _chart = source;
+        _loading = false;
+        _matching = source.entries.any((entry) => entry.track == null);
+      });
+    }
+    if (source.entries.any((entry) => entry.track == null)) {
+      unawaited(_matchInBackground(source, serial));
+    }
+  }
+
+  Future<void> _matchInBackground(
+    MusicChart source,
+    int serial, {
+    bool force = false,
+  }) async {
+    try {
+      final matched = await widget.state.catalog.prepareChart(
+        source,
+        force: force,
+      );
+      if (!mounted || serial != _requestSerial) return;
+      setState(() {
+        _chart = matched;
+        _matching = false;
+      });
+    } catch (_) {
+      // Covers, ranks and source links remain usable without a NetEase match.
+      if (mounted && serial == _requestSerial) {
+        setState(() => _matching = false);
+      }
+    }
+  }
+
+  /// Re-runs the match after a board came back without a single playable row.
+  Future<void> _retryMatching() async {
+    if (_matching) return;
+    final source = _chart ?? widget.chart;
+    final serial = ++_requestSerial;
+    setState(() => _matching = true);
+    await _matchInBackground(source, serial, force: true);
+  }
+
+  Future<void> _selectIssue(ChartIssue issue) async {
+    final current = _chart ?? widget.chart;
+    if (issue.id == current.selectedIssueId || _loading) return;
+    final serial = ++_requestSerial;
+    setState(() {
+      _loading = true;
+      _matching = false;
+    });
+    try {
+      final raw = await widget.state.catalog.chartIssue(current, issue);
+      if (!mounted || serial != _requestSerial) return;
+      setState(() {
+        _chart = raw;
+        _loading = false;
+        _matching = raw.entries.any((entry) => entry.track == null);
+      });
+      unawaited(_matchInBackground(raw, serial));
+    } catch (_) {
+      if (mounted && serial == _requestSerial) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('这一期暂时载入失败，请稍后重试。')));
+      }
+    } finally {
+      if (mounted && serial == _requestSerial && _loading) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chart = _chart ?? widget.chart;
+    final Color accent = Color(chart.accent);
+    final double inset = _pageInset(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: CustomScrollView(
+          slivers: <Widget>[
+            SliverToBoxAdapter(
+              child: Container(
+                margin: EdgeInsets.fromLTRB(inset, 20, inset, 28),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: <Color>[
+                      accent,
+                      Color.lerp(accent, Colors.black, .66)!,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: accent.withValues(alpha: .2),
+                      blurRadius: 30,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: _ChartHero(
+                  chart: chart,
+                  loading: _loading,
+                  onIssueSelected: _selectIssue,
+                ),
+              ),
+            ),
+            if (_loading)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 18),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ),
+            if (!_loading &&
+                !_matching &&
+                chart.entries.isNotEmpty &&
+                chart.entries.every((entry) => entry.track == null))
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(inset, 0, inset, 16),
+                  child: _ChartLoadCard(
+                    loading: false,
+                    message: '这些歌曲暂时匹配不到网易云，可以重新匹配',
+                    onRetry: () => unawaited(_retryMatching()),
+                  ),
+                ),
+              ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 40),
+              sliver: SliverList.separated(
+                itemCount: chart.entries.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 2),
+                itemBuilder: (context, index) => _ChartTrackRow(
+                  entry: chart.entries[index],
+                  matching: _matching && chart.entries[index].track == null,
+                  onTap: chart.entries[index].track == null
+                      ? null
+                      : () => widget.state.playQueue(
+                          chart.entries
+                              .map((entry) => entry.track)
+                              .whereType<Track>()
+                              .toList(),
+                          startIndex: chart.entries
+                              .take(index)
+                              .where((entry) => entry.track != null)
+                              .length,
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChartHero extends StatelessWidget {
+  const _ChartHero({
+    required this.chart,
+    required this.loading,
+    required this.onIssueSelected,
+  });
+
+  final MusicChart chart;
+  final bool loading;
+  final ValueChanged<ChartIssue> onIssueSelected;
+
+  Widget _info(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      _ChartLogo(chart: chart, large: true),
+      const SizedBox(height: 18),
+      Text(
+        chart.title,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -1.1,
+        ),
+      ),
+      const SizedBox(height: 9),
+      Row(
+        children: <Widget>[
+          Flexible(
+            child: _ChartIssuePicker(
+              chart: chart,
+              loading: loading,
+              onSelected: onIssueSelected,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${chart.entries.length} 首',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
+          ),
+        ],
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final compact = constraints.maxWidth < 700;
+      if (compact) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 25, 24, 16),
+              child: _info(context),
+            ),
+            SizedBox(
+              height: 178,
+              child: _ChartHeroArtwork(entries: chart.entries.take(3).toList()),
+            ),
+          ],
+        );
+      }
+      return SizedBox(
+        height: 286,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            Positioned(
+              top: -28,
+              right: -24,
+              bottom: -28,
+              width: constraints.maxWidth * .61,
+              child: _ChartHeroArtwork(entries: chart.entries.take(3).toList()),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: <Color>[
+                    Color(0xEE16080D),
+                    Color(0xC816080D),
+                    Color(0x0016080D),
+                  ],
+                  stops: <double>[0, .47, .78],
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: constraints.maxWidth * .52,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(32, 30, 20, 30),
+                  child: _info(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+class _ChartHeroArtwork extends StatelessWidget {
+  const _ChartHeroArtwork({required this.entries});
+  final List<ChartEntry> entries;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final covers = entries.map(_chartEntryCover).toList(growable: false);
+      final side = math.min(
+        constraints.maxHeight * .78,
+        constraints.maxWidth * .42,
+      );
+      return Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          for (var index = covers.length - 1; index >= 0; index--)
+            Positioned(
+              left: constraints.maxWidth * (.07 + index * .205),
+              top: constraints.maxHeight * (.1 + index * .045),
+              child: Transform.rotate(
+                angle: (index - 1) * .055,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const <BoxShadow>[
+                      BoxShadow(
+                        color: Color(0x66000000),
+                        blurRadius: 28,
+                        offset: Offset(0, 14),
+                      ),
+                    ],
+                  ),
+                  child: LegacyCover(
+                    url: covers[index],
+                    size: side,
+                    radius: 16,
+                    iconSize: 34,
+                  ),
+                ),
+              ),
+            ),
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[Color(0x00000000), Color(0xB8000000)],
+                  stops: <double>[.48, 1],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _ChartIssuePicker extends StatelessWidget {
+  const _ChartIssuePicker({
+    required this.chart,
+    required this.loading,
+    required this.onSelected,
+  });
+
+  final MusicChart chart;
+  final bool loading;
+  final ValueChanged<ChartIssue> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: Colors.white,
+      fontWeight: FontWeight.w700,
+    );
+    if (chart.issues.length < 2) {
+      return Text(chart.issueLabel, style: textStyle);
+    }
+    return PopupMenuButton<ChartIssue>(
+      enabled: !loading,
+      tooltip: '选择榜单期数',
+      onSelected: onSelected,
+      itemBuilder: (context) => <PopupMenuEntry<ChartIssue>>[
+        for (final issue in chart.issues)
+          PopupMenuItem<ChartIssue>(
+            value: issue,
+            child: Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 20,
+                  child: issue.id == chart.selectedIssueId
+                      ? const Icon(Icons.check_rounded, size: 17)
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Text(issue.label),
+              ],
+            ),
+          ),
+      ],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white24, width: .5),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(chart.issueLabel, style: textStyle),
+              const SizedBox(width: 4),
+              if (loading)
+                const SizedBox.square(
+                  dimension: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 17,
+                  color: Colors.white,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChartTrackRow extends StatelessWidget {
+  const _ChartTrackRow({
+    required this.entry,
+    this.matching = false,
+    this.onTap,
+  });
+  final ChartEntry entry;
+  final bool matching;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final apple = AppleSemanticColors.of(context);
+    final roomy = MediaQuery.sizeOf(context).width >= 760;
+    final int? previous = entry.previousRank;
+    final IconData? trend = switch (entry.changeLabel) {
+      'NEW' => Icons.fiber_new_rounded,
+      '重返' || '重投' => Icons.replay_rounded,
+      _ when previous != null && previous > entry.rank =>
+        Icons.arrow_upward_rounded,
+      _ when previous != null && previous < entry.rank =>
+        Icons.arrow_downward_rounded,
+      _ when previous != null => Icons.remove_rounded,
+      _ => null,
+    };
+    return ListTile(
+      minTileHeight: 68,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      tileColor: apple.secondaryGroupedBackground,
+      onTap: onTap == null ? null : feedbackAction(context, onTap!),
+      leading: SizedBox(
+        width: 84,
+        child: Row(
+          children: <Widget>[
+            SizedBox(
+              width: 38,
+              child: Text(
+                '${entry.rank}',
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.visible,
+                textAlign: TextAlign.right,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(width: 6),
+            LegacyCover(
+              url: entry.track?.coverUrl ?? entry.coverUrl,
+              size: 40,
+              radius: 6,
+            ),
+          ],
+        ),
+      ),
+      title: Text(
+        entry.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        <String>[
+          entry.artist.isNotEmpty ? entry.artist : entry.track?.artist ?? '',
+          if (entry.peakRank != null) '最高 #${entry.peakRank}',
+          if (entry.weeksOnChart != null) '${entry.weeksOnChart} 周',
+          if (!roomy && entry.score != null)
+            '${_formatChartScore(entry.score!)} 点',
+        ].where((value) => value.isNotEmpty).join(' · '),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (roomy && entry.score != null) ...<Widget>[
+            Text(
+              '${_formatChartScore(entry.score!)} 点',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: apple.secondaryLabel,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          if (roomy && entry.trend.length > 1) ...<Widget>[
+            SizedBox(
+              width: 64,
+              height: 28,
+              child: CustomPaint(
+                painter: _ChartSparklinePainter(
+                  values: entry.trend,
+                  color: apple.accent,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          if (trend != null) Icon(trend, size: 16, color: apple.secondaryLabel),
+          if (entry.changeLabel != null) ...<Widget>[
+            if (trend != null) const SizedBox(width: 3),
+            Text(
+              entry.changeLabel!,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: apple.secondaryLabel,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (trend != null || entry.changeLabel != null)
+            const SizedBox(width: 10),
+          if (matching)
+            const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 1.7),
+            )
+          else
+            Icon(
+              onTap == null ? Icons.link_off_rounded : Icons.play_arrow_rounded,
+              color: onTap == null ? apple.tertiaryLabel : apple.accent,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatChartScore(int score) {
+  if (score >= 100000000) {
+    return '${(score / 100000000).toStringAsFixed(1)}亿';
+  }
+  if (score >= 10000) return '${(score / 10000).toStringAsFixed(1)}万';
+  return '$score';
+}
+
+class _ChartSparklinePainter extends CustomPainter {
+  const _ChartSparklinePainter({required this.values, required this.color});
+
+  final List<double> values;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final minValue = values.reduce(math.min);
+    final maxValue = values.reduce(math.max);
+    final span = math.max(1.0, maxValue - minValue);
+    final path = Path();
+    for (var index = 0; index < values.length; index++) {
+      final x = size.width * index / (values.length - 1);
+      final y = size.height - ((values[index] - minValue) / span * size.height);
+      if (index == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 1.8
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ChartSparklinePainter oldDelegate) =>
+      oldDelegate.color != color || !listEquals(oldDelegate.values, values);
 }
 
 /// Large recommendation hero. Album art is the content; a bottom scrim keeps
@@ -1695,6 +3436,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
   final TextEditingController _search = TextEditingController();
   Timer? _debounce;
   SearchResults? _results;
+  _SearchTab _tab = _SearchTab.songs;
   String _query = '';
   bool _loading = false;
   String? _error;
@@ -1813,35 +3555,153 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
         icon: Icons.search_rounded,
       );
     }
-    return ListView(
-      padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (results.tracks.isNotEmpty) ...<Widget>[
-          LegacySectionHeader(
-            title: '单曲',
-            subtitle: '${results.tracks.length} 首',
+        Padding(
+          padding: EdgeInsets.fromLTRB(inset, 0, inset, 10),
+          child: Row(
+            children: <Widget>[
+              _SearchTabButton(
+                label: '歌曲',
+                active: _tab == _SearchTab.songs,
+                onTap: () => setState(() => _tab = _SearchTab.songs),
+              ),
+              const SizedBox(width: 8),
+              _SearchTabButton(
+                label: '专辑',
+                active: _tab == _SearchTab.albums,
+                onTap: () => setState(() => _tab = _SearchTab.albums),
+              ),
+              const SizedBox(width: 8),
+              _SearchTabButton(
+                label: '歌手',
+                active: _tab == _SearchTab.artists,
+                onTap: () => setState(() => _tab = _SearchTab.artists),
+              ),
+              const SizedBox(width: 8),
+              _SearchTabButton(
+                label: '歌单',
+                active: _tab == _SearchTab.playlists,
+                onTap: () => setState(() => _tab = _SearchTab.playlists),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          for (int i = 0; i < results.tracks.length; i++)
-            LegacyTrackRow(
-              track: results.tracks[i],
-              index: i,
-              current: widget.state.current?.id == results.tracks[i].id,
-              playing: widget.state.playing,
-              onTap: () =>
-                  widget.state.playQueue(results.tracks, startIndex: i),
+        ),
+        Expanded(
+          child: switch (_tab) {
+            _SearchTab.songs => ListView(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              children: <Widget>[
+                for (int i = 0; i < results.tracks.length; i++)
+                  LegacyTrackRow(
+                    track: results.tracks[i],
+                    index: i,
+                    current: widget.state.current?.id == results.tracks[i].id,
+                    playing: widget.state.playing,
+                    onTap: () =>
+                        widget.state.playQueue(results.tracks, startIndex: i),
+                  ),
+              ],
             ),
-          const SizedBox(height: 28),
-        ],
-        if (results.playlists.isNotEmpty) ...<Widget>[
-          const LegacySectionHeader(title: '歌单'),
-          const SizedBox(height: 14),
-          LegacyPlaylistGrid(
-            playlists: results.playlists,
-            onOpen: widget.onOpenPlaylist,
-          ),
-        ],
+            _SearchTab.albums => ListView(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              children: <Widget>[
+                for (final Album album in results.albums)
+                  AppleListTile(
+                    title: album.title,
+                    subtitle: album.artist,
+                    minHeight: 56,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    leading: LegacyCover(
+                      url: album.coverUrl,
+                      size: 44,
+                      radius: 6,
+                    ),
+                    onTap: () => unawaited(
+                      openAlbumDetails(context, widget.state, album),
+                    ),
+                  ),
+              ],
+            ),
+            _SearchTab.artists => ListView(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              children: <Widget>[
+                for (final ArtistRef artist in results.artists)
+                  AppleListTile(
+                    title: artist.name,
+                    subtitle: '歌手',
+                    minHeight: 56,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    leading: ClipOval(
+                      child: LegacyCover(
+                        url: artist.coverUrl,
+                        size: 44,
+                        radius: 22,
+                      ),
+                    ),
+                    onTap: () => artistDetailRequest.value = artist,
+                  ),
+              ],
+            ),
+            _SearchTab.playlists => ListView(
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              children: <Widget>[
+                LegacyPlaylistGrid(
+                  playlists: results.playlists,
+                  onOpen: widget.onOpenPlaylist,
+                ),
+              ],
+            ),
+          },
+        ),
       ],
+    );
+  }
+}
+
+/// Tabs across the top of the search results.
+enum _SearchTab { songs, albums, artists, playlists }
+
+class _SearchTabButton extends StatelessWidget {
+  const _SearchTabButton({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return Semantics(
+      button: true,
+      selected: active,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: active ? apple.label.withValues(alpha: .1) : null,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: active ? apple.label : apple.secondaryLabel,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

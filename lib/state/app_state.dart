@@ -111,13 +111,18 @@ class AppState extends ChangeNotifier {
     Catalog? catalog,
     this.audioEngine,
     this._independentPlayback = false,
+    this.enableExternalCharts = false,
   }) : catalog = catalog ?? Catalog() {
     _completionSubscription = audioEngine?.completed.listen(
       (_) => _onEngineCompleted(),
     );
+    // An engine that can hold a queue hands the next track over without a
+    // reload; that hand-off arrives as an index change, never as a completion.
+    _indexSubscription = _queueEngine?.indexStream.listen(_onEngineAdvanced);
   }
 
   bool _independentPlayback;
+  final bool enableExternalCharts;
   bool get independentPlayback => _independentPlayback;
 
   Future<void> setIndependentPlayback(bool value) async {
@@ -130,9 +135,12 @@ class AppState extends ChangeNotifier {
 
   static const String _sessionKey = 'lazer_gateway_cookie';
   static const String _queueKey = 'lazer_playback_queue_v1';
+  static const String _recentTracksKey = 'lazer_recent_tracks_v1';
+  static const int _recentTracksLimit = 60;
 
   final Catalog catalog;
   StreamSubscription<void>? _completionSubscription;
+  StreamSubscription<int>? _indexSubscription;
   static const playbackInterval = Duration(milliseconds: 100);
   static const lyricFollowInterval = Duration(milliseconds: 5);
   bool hapticsEnabled = true;
@@ -427,9 +435,23 @@ class AppState extends ChangeNotifier {
   /// Real playback engine (just_audio in the app).
   final AudioEngine? audioEngine;
 
+  /// The engine's queue capability, when it has one.
+  ///
+  /// Present only for engines that can cross a track boundary without a
+  /// reload; everything else keeps the completion-driven, one-URL-at-a-time
+  /// path in [_startAudio].
+  QueueAudioEngine? get _queueEngine {
+    final AudioEngine? engine = audioEngine;
+    // The two interfaces are unrelated, so `is` cannot promote the field type.
+    return engine is QueueAudioEngine ? engine as QueueAudioEngine : null;
+  }
+
   /// Live home feed once [bootstrap] loaded it.
   HomeFeed? get home => catalog.home;
   String? get homeError => catalog.homeError;
+  List<MusicChart> discoveryCharts = const <MusicChart>[];
+  bool discoveryChartsLoading = false;
+  String? discoveryChartsError;
   String? playbackError;
   UserCollections collections = UserCollections.empty;
   bool collectionsLoading = false;
@@ -564,6 +586,7 @@ class AppState extends ChangeNotifier {
     // Apply interaction preferences before session and catalogue requests.
     notifyListeners();
     await audioEngine?.setVolume(_volume);
+    await _restoreRecentTracks();
     await _restoreQueue();
     unawaited(_loadCurrentArtwork());
     unawaited(ensureCurrentLyrics());
@@ -578,6 +601,74 @@ class AppState extends ChangeNotifier {
     unawaited(refreshCollections());
     await catalog.loadHome(userId: _user.userId);
     notifyListeners();
+    if (enableExternalCharts) {
+      unawaited(refreshDiscoveryCharts(force: force));
+    }
+  }
+
+  Future<void> refreshDiscoveryCharts({bool force = false}) async {
+    if (discoveryChartsLoading) return;
+    discoveryChartsLoading = true;
+    discoveryChartsError = null;
+    notifyListeners();
+    try {
+      if (force) {
+        await Future.wait(<Future<void>>[
+          catalog.cache.expireJson('external-billboard-v1'),
+          catalog.cache.expireJson('external-biliboard-v1'),
+          catalog.cache.expireJson('netease-mirror-charts-v2'),
+        ]);
+      }
+      final externalFuture = catalog.discoveryCharts().catchError(
+        (_) => const <MusicChart>[],
+      );
+      try {
+        final netease = await catalog.neteaseMirrorCharts();
+        if (netease.isNotEmpty) {
+          discoveryCharts = _sortDiscoveryCharts(netease);
+          notifyListeners();
+        }
+      } catch (_) {
+        // External charts below can still populate the section.
+      }
+      final external = await externalFuture;
+      if (external.isNotEmpty) {
+        final ids = discoveryCharts.map((chart) => chart.id).toSet();
+        discoveryCharts = _sortDiscoveryCharts(<MusicChart>[
+          ...discoveryCharts,
+          ...external.where((chart) => ids.add(chart.id)),
+        ]);
+      }
+      if (discoveryCharts.isEmpty) discoveryChartsError = '暂无榜单数据';
+    } catch (_) {
+      if (discoveryCharts.isEmpty) {
+        discoveryChartsError = '榜单暂时连接不上';
+      }
+    } finally {
+      discoveryChartsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  List<MusicChart> _sortDiscoveryCharts(Iterable<MusicChart> charts) {
+    final result = charts.toList();
+    int priority(MusicChart chart) {
+      final title = chart.title.toLowerCase();
+      if (title.contains('billboard')) return 0;
+      final provider = chart.providerKey ?? '';
+      if (provider == 'biliboard:1') return 1;
+      if (provider == 'biliboard:2') return 2;
+      if (provider == 'biliboard:3') return 3;
+      if (provider.startsWith('biliboard:')) return 4;
+      return 5;
+    }
+
+    result.sort((left, right) {
+      final byPriority = priority(left).compareTo(priority(right));
+      if (byPriority != 0) return byPriority;
+      return left.title.compareTo(right.title);
+    });
+    return result;
   }
 
   Future<void> _restoreSession() async {
@@ -781,6 +872,9 @@ class AppState extends ChangeNotifier {
     collectionsLoading = false;
     collectionsError = null;
     pause();
+    _stationLoader = null;
+    _stationLoading = false;
+    _stationSeen.clear();
     _queue = <Track>[];
     _queueIndex = 0;
     _position = Duration.zero;
@@ -860,6 +954,7 @@ class AppState extends ChangeNotifier {
 
   Timer? _ticker;
   List<Track> _queue = <Track>[];
+  List<Track> _recentTracks = <Track>[];
   int _queueIndex = 0;
   Duration _position = Duration.zero;
   bool _playing = false;
@@ -869,7 +964,21 @@ class AppState extends ChangeNotifier {
   int _generation = 0;
   int trackChangeDirection = 1;
 
+  /// App queue index of the track already appended to the engine's queue.
+  ///
+  /// Non-null means the engine can cross into [that track] by itself; the
+  /// platform's index change is then adopted instead of loading a URL again.
+  int? _queuedNextIndex;
+
+  /// Identifier of the engine queue the appends belong to.
+  int? _queueId;
+
+  Future<List<Track>> Function()? _stationLoader;
+  bool _stationLoading = false;
+  final Set<String> _stationSeen = <String>{};
+
   List<Track> get queue => List<Track>.unmodifiable(_queue);
+  List<Track> get recentTracks => List<Track>.unmodifiable(_recentTracks);
   Track? get current =>
       _queue.isEmpty ? null : _queue[_queueIndex.clamp(0, _queue.length - 1)];
   Duration get position => _position;
@@ -912,6 +1021,32 @@ class AppState extends ChangeNotifier {
   }
 
   void playQueue(List<Track> tracks, {int startIndex = 0}) {
+    _stationLoader = null;
+    _stationLoading = false;
+    _stationSeen.clear();
+    _replaceQueue(tracks, startIndex: startIndex);
+  }
+
+  /// Starts a radio queue which keeps asking [loadMore] for fresh songs as the
+  /// listener approaches its tail. The first batch is supplied by the caller
+  /// so tapping a station still gives immediate feedback.
+  void playStationQueue(
+    List<Track> tracks, {
+    required Future<List<Track>> Function() loadMore,
+  }) {
+    if (tracks.isEmpty) return;
+    _stationLoader = loadMore;
+    _stationLoading = false;
+    _stationSeen
+      ..clear()
+      ..addAll(tracks.map((track) => track.id));
+    _shuffle = false;
+    _repeat = LoopMode.off;
+    _replaceQueue(tracks);
+    unawaited(_ensureStationBuffer());
+  }
+
+  void _replaceQueue(List<Track> tracks, {int startIndex = 0}) {
     if (tracks.isEmpty) return;
     trackChangeDirection = 1;
     _queue = List<Track>.of(tracks);
@@ -969,6 +1104,8 @@ class AppState extends ChangeNotifier {
     ++_generation;
     _playing = false;
     _realActive = false;
+    _queuedNextIndex = null;
+    _queueId = null;
     _position = Duration.zero;
     playbackError = null;
     _ticker?.cancel();
@@ -978,21 +1115,14 @@ class AppState extends ChangeNotifier {
 
   void next() {
     if (_queue.isEmpty) return;
-    trackChangeDirection = 1;
-    playbackError = null;
-    _queueIndex = _shuffle
-        ? (_queue.length == 1
-              ? 0
-              : (_randomIndex(_queue.length, avoid: _queueIndex)))
-        : (_queueIndex + 1) % _queue.length;
-    unawaited(_saveQueue());
-    _position = Duration.zero;
-    unawaited(_loadLyrics());
-    if (_playing) {
-      unawaited(_startAudio());
-      _ensureTicker();
+    if (_stationLoader != null && _queueIndex >= _queue.length - 1) {
+      unawaited(_advanceStationFromTail());
+      return;
     }
-    notifyListeners();
+    final int target = _manualNextIndex();
+    // When the following track is already in the engine's queue, jumping to it
+    // keeps the decoder running instead of reloading (an audible gap).
+    _moveTo(target, direction: 1, gapless: target == _queuedNextIndex);
   }
 
   void previous() {
@@ -1003,15 +1133,118 @@ class AppState extends ChangeNotifier {
       _position = Duration.zero;
       if (_realActive) unawaited(audioEngine!.seek(Duration.zero));
     } else {
-      trackChangeDirection = -1;
-      _queueIndex = (_queueIndex - 1 + _queue.length) % _queue.length;
-      unawaited(_saveQueue());
-      _position = Duration.zero;
-      unawaited(_loadLyrics());
-      if (_playing) unawaited(_startAudio());
+      final int target = (_queueIndex - 1 + _queue.length) % _queue.length;
+      _moveTo(target, direction: -1);
     }
     notifyListeners();
     if (_playing) _ensureTicker();
+  }
+
+  /// Adopts [index] as the current track and gets the engine onto it.
+  ///
+  /// [gapless] means the engine already holds that track next in its queue, so
+  /// it only has to cross the boundary; otherwise the URL is loaded afresh.
+  void _moveTo(int index, {required int direction, bool gapless = false}) {
+    if (_queue.isEmpty) return;
+    trackChangeDirection = direction;
+    playbackError = null;
+    _queueIndex = index.clamp(0, _queue.length - 1);
+    _queuedNextIndex = null;
+    unawaited(_saveQueue());
+    _position = Duration.zero;
+    unawaited(_loadLyrics());
+    if (_playing) {
+      if (gapless && audioEngine?.active == true) {
+        unawaited(_crossIntoQueuedTrack());
+      } else {
+        unawaited(_startAudio());
+      }
+      _ensureTicker();
+    }
+    notifyListeners();
+    unawaited(_ensureStationBuffer());
+  }
+
+  Future<void> _advanceStationFromTail() async {
+    final int before = _queue.length;
+    await _waitForStationLoad();
+    if (_queue.length <= before) await _ensureStationBuffer(force: true);
+    if (!_playing || _queue.length <= before) return;
+    _moveTo(before, direction: 1);
+  }
+
+  Future<void> _waitForStationLoad() async {
+    // A user can hit Next while the proactive tail request is still in flight.
+    // Join that work instead of treating "already loading" as an empty radio.
+    for (var tick = 0; _stationLoading && tick < 400; tick++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
+  Future<bool> _ensureStationBuffer({bool force = false}) async {
+    final loader = _stationLoader;
+    if (loader == null || _stationLoading) return false;
+    if (!force && _queue.length - _queueIndex >= 6) return false;
+    _stationLoading = true;
+    try {
+      List<Track> lastLoaded = const <Track>[];
+      // Some recommendation endpoints can repeat a tiny batch. Give them a
+      // second chance before deciding there is temporarily nothing new.
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final loaded = await loader();
+        lastLoaded = loaded;
+        if (_stationLoader != loader) return false;
+        final fresh = loaded.where((track) => _stationSeen.add(track.id));
+        final additions = fresh.take(30).toList();
+        if (additions.isEmpty) continue;
+        _queue.addAll(additions);
+        unawaited(_saveQueue());
+        notifyListeners();
+        return true;
+      }
+      // A finite recommendation surface must not turn a radio into a three-
+      // song loop or a stopped queue. Once every fresh result has been heard,
+      // reshuffle the returned pool and keep the station flowing.
+      final fallback =
+          lastLoaded.where((track) => track.id != current?.id).toList()
+            ..shuffle();
+      if (fallback.isNotEmpty && _stationLoader == loader) {
+        _queue.addAll(fallback.take(20));
+        unawaited(_saveQueue());
+        notifyListeners();
+        return true;
+      }
+    } catch (_) {
+      // The current radio buffer remains playable; another tail event retries.
+    } finally {
+      _stationLoading = false;
+    }
+    return false;
+  }
+
+  /// Index a manual "next" moves to: never a no-op, and repeat-one still walks
+  /// the queue (only playback running out honours [LoopMode.one]).
+  int _manualNextIndex() {
+    if (_shuffle) {
+      return _queue.length == 1
+          ? 0
+          : _randomIndex(_queue.length, avoid: _queueIndex);
+    }
+    return (_queueIndex + 1) % _queue.length;
+  }
+
+  /// Index the queue advances to when the current track plays out on its own.
+  ///
+  /// Null means playback stops after the current track.
+  int? _autoAdvanceIndex() {
+    if (_repeat == LoopMode.one) return _queueIndex;
+    if (_shuffle && _queue.length > 1) {
+      return _randomIndex(_queue.length, avoid: _queueIndex);
+    }
+    if (_repeat == LoopMode.off && _queueIndex >= _queue.length - 1) {
+      return null;
+    }
+    return (_queueIndex + 1) % _queue.length;
   }
 
   void seek(double fraction) {
@@ -1078,6 +1311,7 @@ class AppState extends ChangeNotifier {
     if (track == null) return;
     final int generation = ++_generation;
     _realActive = false;
+    _queuedNextIndex = null;
     String? url;
     try {
       url = await catalog.audioUrlFor(track);
@@ -1094,8 +1328,19 @@ class AppState extends ChangeNotifier {
       _failPlayback('当前设备没有可用的音频播放器。');
       return;
     }
+    final QueueAudioEngine? queueEngine = _queueEngine;
+    int? queueId;
     try {
-      await engine.setUrl(url);
+      if (queueEngine != null) {
+        try {
+          queueId = await queueEngine.setQueue(<String>[url]);
+        } catch (_) {
+          // The platform refused a queue (or cannot build one): keep playing
+          // through the single-source path rather than failing the track.
+          queueId = null;
+        }
+      }
+      if (queueId == null) await engine.setUrl(url);
       if (generation != _generation) return;
       await engine.setVolume(_volume);
     } catch (error) {
@@ -1103,9 +1348,84 @@ class AppState extends ChangeNotifier {
       return;
     }
     if (generation != _generation) return;
+    _queueId = queueId;
     _realActive = true;
+    unawaited(_recordCurrentLocally());
+    unawaited(_ensureStationBuffer());
     if (_playing) unawaited(_resumeAudio());
+    unawaited(_prefetchNext());
     notifyListeners();
+  }
+
+  /// Hands the track that follows the current one to the engine, so the
+  /// platform can cross into it while the decoder is still running.
+  ///
+  /// The queue engine is optional: with a plain [AudioEngine] this is a no-op
+  /// and playback keeps the load-on-completion path.
+  Future<void> _prefetchNext() async {
+    final QueueAudioEngine? engine = _queueEngine;
+    final int? queueId = _queueId;
+    if (engine == null || queueId == null || _queue.isEmpty) return;
+    final int? next = _autoAdvanceIndex();
+    if (next == null) {
+      _queuedNextIndex = null;
+      return;
+    }
+    String? url;
+    try {
+      url = await catalog.audioUrlFor(_queue[next]);
+    } catch (_) {
+      url = null;
+    }
+    // A track change or a stop while the URL was in flight invalidates this
+    // prefetch: the engine may already hold a different queue.
+    if (queueId != _queueId || !_realActive) return;
+    if (url == null || url.isEmpty) return;
+    bool appended;
+    try {
+      appended = await engine.appendToQueue(queueId, url);
+    } catch (_) {
+      appended = false;
+    }
+    if (!appended || queueId != _queueId) return;
+    _queuedNextIndex = next;
+  }
+
+  /// Crosses into the track the engine already holds next, without reloading.
+  Future<void> _crossIntoQueuedTrack() async {
+    final QueueAudioEngine? engine = _queueEngine;
+    if (engine == null) return;
+    try {
+      await engine.playQueuedNext();
+    } catch (_) {
+      if (_playing) unawaited(_startAudio());
+      return;
+    }
+    if (!_playing) return;
+    unawaited(_prefetchNext());
+  }
+
+  /// The platform moved to the queued track on its own — the gapless hand-off.
+  ///
+  /// Everything the load path would have done still has to happen (index,
+  /// persistence, lyrics, artwork), only the audio is already playing.
+  void _onEngineAdvanced(int _) {
+    final int? target = _queuedNextIndex;
+    if (!_realActive || !_playing || target == null) return;
+    _queuedNextIndex = null;
+    trackChangeDirection = 1;
+    playbackError = null;
+    _queueIndex = target.clamp(0, _queue.length - 1);
+    _position = Duration.zero;
+    unawaited(_saveQueue());
+    unawaited(_loadLyrics());
+    unawaited(_loadCurrentArtwork());
+    unawaited(_recordCurrentLocally());
+    unawaited(_ensureStationBuffer());
+    _ensureTicker();
+    _tickNotifier.pulse();
+    notifyListeners();
+    unawaited(_prefetchNext());
   }
 
   Future<void> _loadCurrentArtwork() async {
@@ -1153,6 +1473,8 @@ class AppState extends ChangeNotifier {
       }).toList();
       if (changed) {
         unawaited(_saveQueue());
+        final Track? hydrated = current;
+        if (hydrated != null) unawaited(_replaceRecentMetadata(hydrated));
         notifyListeners();
       }
     } catch (_) {
@@ -1201,6 +1523,56 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       // Corrupt or inaccessible local state leaves an empty queue.
     }
+  }
+
+  Future<void> _restoreRecentTracks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_recentTracksKey);
+      if (raw == null) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      _recentTracks = decoded
+          .whereType<Map<String, dynamic>>()
+          .map(Track.fromJson)
+          .where((track) => track.id.isNotEmpty)
+          .take(_recentTracksLimit)
+          .toList();
+      notifyListeners();
+    } catch (_) {
+      _recentTracks = <Track>[];
+    }
+  }
+
+  Future<void> _recordCurrentLocally() async {
+    final Track? track = current;
+    if (track == null || track.id.isEmpty) return;
+    _recentTracks = <Track>[
+      track,
+      ..._recentTracks.where((entry) => entry.id != track.id),
+    ].take(_recentTracksLimit).toList();
+    notifyListeners();
+    await _saveRecentTracks();
+  }
+
+  Future<void> _replaceRecentMetadata(Track track) async {
+    bool changed = false;
+    _recentTracks = _recentTracks.map((entry) {
+      if (entry.id != track.id) return entry;
+      changed = true;
+      return track;
+    }).toList();
+    if (changed) await _saveRecentTracks();
+  }
+
+  Future<void> _saveRecentTracks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _recentTracksKey,
+        jsonEncode(_recentTracks.map((track) => track.toJson()).toList()),
+      );
+    } catch (_) {}
   }
 
   Future<void> _saveQueue() async {
@@ -1320,6 +1692,7 @@ class AppState extends ChangeNotifier {
   void _failPlayback(String message) {
     _realActive = false;
     _playing = false;
+    _queuedNextIndex = null;
     _ticker?.cancel();
     playbackError = message;
     unawaited(audioEngine?.stop() ?? Future<void>.value());
@@ -1331,6 +1704,9 @@ class AppState extends ChangeNotifier {
     // Consume the terminal state before seeking/loading; some backends emit
     // both a completed event and a final position update for the same source.
     _realActive = false;
+    // A queued track would have been crossed into by the platform; reaching
+    // here means the queue really did run out on this source.
+    _queuedNextIndex = null;
     final AudioEngine engine = audioEngine!;
     if (_repeat == LoopMode.one) {
       _position = Duration.zero;
@@ -1348,10 +1724,13 @@ class AppState extends ChangeNotifier {
       _tickNotifier.pulse();
       return;
     }
-    if (_repeat == LoopMode.all ||
-        _shuffle && _queue.length > 1 ||
-        _queueIndex < _queue.length - 1) {
-      next();
+    final int? next = _autoAdvanceIndex();
+    if (next != null) {
+      _moveTo(next, direction: 1);
+      return;
+    }
+    if (_stationLoader != null) {
+      unawaited(_continueStationAfterEnd());
       return;
     }
     _position = current?.duration ?? Duration.zero;
@@ -1360,6 +1739,21 @@ class AppState extends ChangeNotifier {
     _ticker?.cancel();
     engine.stop();
     notifyListeners();
+  }
+
+  Future<void> _continueStationAfterEnd() async {
+    final int before = _queue.length;
+    await _waitForStationLoad();
+    final bool added =
+        _queue.length > before || await _ensureStationBuffer(force: true);
+    if (!_playing || !added || _queue.length <= before) {
+      _playing = false;
+      _ticker?.cancel();
+      await audioEngine?.stop();
+      notifyListeners();
+      return;
+    }
+    _moveTo(before, direction: 1);
   }
 
   void _ensureTicker() {
@@ -1378,7 +1772,10 @@ class AppState extends ChangeNotifier {
       final duration = audioEngine!.duration;
       if (duration != null &&
           duration > Duration.zero &&
-          _position >= duration) {
+          _position >= duration &&
+          // A queued track is crossed into by the platform; ending this source
+          // there is the hand-off, not the end of the queue.
+          _queuedNextIndex == null) {
         _onEngineCompleted();
         return;
       }
@@ -1431,6 +1828,7 @@ class AppState extends ChangeNotifier {
     ++_generation;
     ++_lyricGeneration;
     _completionSubscription?.cancel();
+    _indexSubscription?.cancel();
     _ticker?.cancel();
     _tickNotifier.dispose();
     super.dispose();
