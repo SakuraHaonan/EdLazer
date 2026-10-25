@@ -2051,6 +2051,7 @@ class LegacyChartPage extends StatefulWidget {
 class _LegacyChartPageState extends State<LegacyChartPage> {
   MusicChart? _chart;
   bool _loading = true;
+  bool _matching = false;
   int _requestSerial = 0;
 
   @override
@@ -2066,6 +2067,7 @@ class _LegacyChartPageState extends State<LegacyChartPage> {
       setState(() {
         _chart = source;
         _loading = false;
+        _matching = source.entries.any((entry) => entry.track == null);
       });
     }
     if (source.entries.any((entry) => entry.track == null)) {
@@ -2073,27 +2075,53 @@ class _LegacyChartPageState extends State<LegacyChartPage> {
     }
   }
 
-  Future<void> _matchInBackground(MusicChart source, int serial) async {
+  Future<void> _matchInBackground(
+    MusicChart source,
+    int serial, {
+    bool force = false,
+  }) async {
     try {
-      final matched = await widget.state.catalog.prepareChart(source);
+      final matched = await widget.state.catalog.prepareChart(
+        source,
+        force: force,
+      );
       if (!mounted || serial != _requestSerial) return;
-      setState(() => _chart = matched);
+      setState(() {
+        _chart = matched;
+        _matching = false;
+      });
     } catch (_) {
       // Covers, ranks and source links remain usable without a NetEase match.
+      if (mounted && serial == _requestSerial) {
+        setState(() => _matching = false);
+      }
     }
+  }
+
+  /// Re-runs the match after a board came back without a single playable row.
+  Future<void> _retryMatching() async {
+    if (_matching) return;
+    final source = _chart ?? widget.chart;
+    final serial = ++_requestSerial;
+    setState(() => _matching = true);
+    await _matchInBackground(source, serial, force: true);
   }
 
   Future<void> _selectIssue(ChartIssue issue) async {
     final current = _chart ?? widget.chart;
     if (issue.id == current.selectedIssueId || _loading) return;
     final serial = ++_requestSerial;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _matching = false;
+    });
     try {
       final raw = await widget.state.catalog.chartIssue(current, issue);
       if (!mounted || serial != _requestSerial) return;
       setState(() {
         _chart = raw;
         _loading = false;
+        _matching = raw.entries.any((entry) => entry.track == null);
       });
       unawaited(_matchInBackground(raw, serial));
     } catch (_) {
@@ -2155,6 +2183,20 @@ class _LegacyChartPageState extends State<LegacyChartPage> {
                   child: Center(child: CircularProgressIndicator()),
                 ),
               ),
+            if (!_loading &&
+                !_matching &&
+                chart.entries.isNotEmpty &&
+                chart.entries.every((entry) => entry.track == null))
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(inset, 0, inset, 16),
+                  child: _ChartLoadCard(
+                    loading: false,
+                    message: '这些歌曲暂时匹配不到网易云，可以重新匹配',
+                    onRetry: () => unawaited(_retryMatching()),
+                  ),
+                ),
+              ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(inset, 0, inset, 40),
               sliver: SliverList.separated(
@@ -2162,6 +2204,7 @@ class _LegacyChartPageState extends State<LegacyChartPage> {
                 separatorBuilder: (_, _) => const SizedBox(height: 2),
                 itemBuilder: (context, index) => _ChartTrackRow(
                   entry: chart.entries[index],
+                  matching: _matching && chart.entries[index].track == null,
                   onTap: chart.entries[index].track == null
                       ? null
                       : () => widget.state.playQueue(
@@ -2430,8 +2473,13 @@ class _ChartIssuePicker extends StatelessWidget {
 }
 
 class _ChartTrackRow extends StatelessWidget {
-  const _ChartTrackRow({required this.entry, this.onTap});
+  const _ChartTrackRow({
+    required this.entry,
+    this.matching = false,
+    this.onTap,
+  });
   final ChartEntry entry;
+  final bool matching;
   final VoidCallback? onTap;
 
   @override
@@ -2537,10 +2585,16 @@ class _ChartTrackRow extends StatelessWidget {
           ],
           if (trend != null || entry.changeLabel != null)
             const SizedBox(width: 10),
-          Icon(
-            onTap == null ? Icons.link_off_rounded : Icons.play_arrow_rounded,
-            color: onTap == null ? apple.tertiaryLabel : apple.accent,
-          ),
+          if (matching)
+            const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 1.7),
+            )
+          else
+            Icon(
+              onTap == null ? Icons.link_off_rounded : Icons.play_arrow_rounded,
+              color: onTap == null ? apple.tertiaryLabel : apple.accent,
+            ),
         ],
       ),
     );

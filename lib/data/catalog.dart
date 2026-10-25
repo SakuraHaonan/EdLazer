@@ -553,7 +553,7 @@ class Catalog {
     return station;
   }
 
-  Future<MusicChart> prepareChart(MusicChart chart) async {
+  Future<MusicChart> prepareChart(MusicChart chart, {bool force = false}) async {
     var prepared = chart;
     if (chart.providerKey == 'billboard:hot-100') {
       try {
@@ -568,10 +568,10 @@ class Catalog {
         // Playback matching still works when the optional history host is down.
       }
     }
-    return matchChart(prepared);
+    return matchChart(prepared, force: force);
   }
 
-  Future<MusicChart> matchChart(MusicChart chart) async {
+  Future<MusicChart> matchChart(MusicChart chart, {bool force = false}) async {
     final List<ChartEntry> entries = <ChartEntry>[];
     final relaxedTitleMatch = (chart.providerKey ?? '').startsWith(
       'biliboard:',
@@ -586,6 +586,7 @@ class Catalog {
                 (entry) => _matchChartEntry(
                   entry,
                   relaxedTitleMatch: relaxedTitleMatch,
+                  force: force,
                 ),
               ),
         ),
@@ -605,31 +606,69 @@ class Catalog {
     );
   }
 
+  /// How long a resolved row keeps its NetEase id. Song ids do not move.
+  static const Duration _chartMatchTtl = Duration(days: 14);
+
+  /// A row the search host does not know is remembered only briefly. A board
+  /// with dozens of misses used to re-search every one of them on each visit,
+  /// which is what pushed the search host into rejecting the whole board.
+  static const Duration _chartMatchMissTtl = Duration(minutes: 15);
+
   Future<ChartEntry> _matchChartEntry(
     ChartEntry entry, {
     required bool relaxedTitleMatch,
+    required bool force,
   }) async {
-    final identity = sha256.convert(
-      utf8.encode(
-        '${relaxedTitleMatch ? 'relaxed' : 'strict'}|'
-        '${_normaliseMusicText(entry.title)}|'
-        '${_normaliseMusicText(entry.translatedTitle ?? '')}|'
-        '${_normaliseMusicText(entry.artist)}',
-      ),
-    );
+    final String identity = sha256
+        .convert(
+          utf8.encode(
+            '${relaxedTitleMatch ? 'relaxed' : 'strict'}|'
+            '${_normaliseMusicText(entry.title)}|'
+            '${_normaliseMusicText(entry.translatedTitle ?? '')}|'
+            '${_normaliseMusicText(entry.artist)}',
+          ),
+        )
+        .toString();
+    final String matchKey = 'chart-entry-match-v2:$identity';
+    final Track? remembered = await _rememberedChartTrack(matchKey);
+    if (remembered != null) return entry.copyWith(track: remembered);
+    if (!force && await _recentlyMissed(identity)) return entry;
     try {
-      final cached = await _cached(
-        'chart-entry-match-v1:$identity',
-        const Duration(days: 14),
-        ChartEntry.fromJson,
-        (value) => value.toJson(),
-        () => _resolveChartEntry(entry, relaxedTitleMatch: relaxedTitleMatch),
+      final ChartEntry resolved = await _resolveChartEntry(
+        entry,
+        relaxedTitleMatch: relaxedTitleMatch,
       );
-      return entry.copyWith(track: cached.track);
+      await cache.writeJson(matchKey, resolved.toJson());
+      return resolved;
+    } on _NoChartMatch {
+      await cache.writeJson(
+        'chart-entry-miss-v1:$identity',
+        <String, dynamic>{'title': entry.title},
+      );
+      return entry;
     } catch (_) {
-      // Do not cache a failed/empty match. A later board or retry may succeed.
+      // A search that failed for transport reasons stays retryable: writing a
+      // negative entry here is what turned one bad minute into days of a board
+      // with no playable rows at all.
       return entry;
     }
+  }
+
+  Future<Track?> _rememberedChartTrack(String key) async {
+    final CachedJson? saved = await cache.readJson(key);
+    if (saved == null || !saved.fresh(_chartMatchTtl)) return null;
+    try {
+      return ChartEntry.fromJson(saved.data).track;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> _recentlyMissed(String identity) async {
+    final CachedJson? saved = await cache.readJson(
+      'chart-entry-miss-v1:$identity',
+    );
+    return saved != null && saved.fresh(_chartMatchMissTtl);
   }
 
   Future<ChartEntry> _resolveChartEntry(
@@ -651,9 +690,20 @@ class Catalog {
     double bestScore = 0;
 
     Future<void> search(String value) async {
-      final candidates = await gateway
-          .search(value, limit: 8, useCloudSearch: true)
-          .timeout(const Duration(seconds: 5));
+      List<GatewaySong> candidates = const <GatewaySong>[];
+      try {
+        candidates = await gateway
+            .search(value, limit: 8, useCloudSearch: true)
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // The authenticated cloud-search route is intermittently rejected;
+        // the classic search route remains usable on the same session.
+      }
+      if (candidates.isEmpty) {
+        candidates = await gateway
+            .search(value, limit: 8)
+            .timeout(const Duration(seconds: 5));
+      }
       for (final candidate in candidates) {
         final double score = _chartMatchScore(entry, candidate);
         if (score > bestScore) {
@@ -676,7 +726,7 @@ class Catalog {
     if (bestScore < requiredScore ||
         (sourceArtist.isEmpty && sourceTitle.runes.length < 4) ||
         match == null) {
-      throw StateError('No trustworthy playable match.');
+      throw const _NoChartMatch();
     }
     return entry.copyWith(track: match);
   }
@@ -1185,4 +1235,11 @@ class Catalog {
     coverUrl: playlist.coverUrl,
     trackCount: playlist.trackCount,
   );
+}
+
+/// Raised when the search host answered but nothing scored high enough to be
+/// trusted as the song behind a chart row. It is not a transport failure, so a
+/// caller can tell "not on NetEase" apart from "the network just failed".
+class _NoChartMatch implements Exception {
+  const _NoChartMatch();
 }
