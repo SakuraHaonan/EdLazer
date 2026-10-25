@@ -206,7 +206,11 @@ class _LazerAppState extends State<LazerApp> {
         // The shell is always home: the guest session boots straight into
         // it, and sign-in happens in a popup card that closes over this —
         // no gate, no home swap to churn the accessibility tree.
-        home: LegacyShell(key: const ValueKey('legacy'), state: _state),
+        home: LegacyShell(
+          key: const ValueKey('legacy'),
+          state: _state,
+          autoCheckUpdates: true,
+        ),
       ),
     );
   }

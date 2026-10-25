@@ -40,6 +40,15 @@ bool detectCarDisplay(BuildContext context) {
 bool carSurfaceOf(BuildContext context, AppSurface surface) =>
     carSurfaceActive(surface, detected: detectCarDisplay(context));
 
+/// The maximum width of a page's content column.
+///
+/// Desktop pages use a reading measure so lines do not run too wide. A
+/// television is viewed from across a room and has the pixels to spare, so the
+/// browse grids use a wider column and fit more artwork per row without
+/// touching the interface scale.
+double adaptiveContentMaxWidth(BuildContext context, double standard) =>
+    TvScope.isActive(context) ? 1560 : standard;
+
 /// Clamps a scale to the profile floor and the slider ceiling.
 double profileDpiScale(double value, {required double floor}) =>
     normalizeDpiScale(value.clamp(floor, kDpiScaleMax));
@@ -147,13 +156,15 @@ class UiScaling extends StatelessWidget {
       // Remote navigation follows the input device, not the density choice: a
       // television told to use standard density still has no touch screen.
       active: tv || state.deviceIsTelevision || state.surface == AppSurface.tv,
-      child: UiMetrics(
-        scale: scale,
-        autoScale: autoScale,
-        minScale: floor,
-        car: car,
-        tv: tv,
-        child: scaled,
+      child: TvTraversalScope(
+        child: UiMetrics(
+          scale: scale,
+          autoScale: autoScale,
+          minScale: floor,
+          car: car,
+          tv: tv,
+          child: scaled,
+        ),
       ),
     );
   }

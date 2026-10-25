@@ -29,8 +29,25 @@ Architecture checks run before packaging. IPA builds explicitly disable code sig
 
 Every platform build receives the commit it was cut from through
 `--dart-define=LAZER_COMMIT=<sha>`, and **Settings → About** shows its short
-form. A local `flutter run` that omits the define falls back to the checked-in
-stamp in `lib/diagnostics/build_info.dart`.
+form. Tag builds also receive `--dart-define=LAZER_VERSION=<tag>`; the update
+checker compares that version with GitHub Releases, so the tag and
+`pubspec.yaml` must agree. A local `flutter run` that omits the defines falls
+back to the checked-in values in `lib/diagnostics/build_info.dart`.
+
+## Publishing an update
+
+1. Set `version:` in `pubspec.yaml` to the tag without its `v` prefix and bump
+   the build number (for example `2.0.0-beta.2+2`).
+2. Commit, then push an annotated tag with the same version (`v2.0.0-beta.2`).
+3. The build workflow runs every platform job. Only when all of them pass does
+   the release job attach the artifacts; a tag containing `-` becomes a
+   pre-release.
+4. An installed build checks `api.github.com` at most once a day, and offers
+   the newest release newer than its own `LAZER_VERSION`. Stable builds ignore
+   pre-releases; a beta build sees later betas.
+
+See [updates.md](updates.md) for the client-side rules.
+
 
 ## Runners and SDKs
 

@@ -11,6 +11,8 @@ import '../state/detail_requests.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
 import '../tv/tv_mode.dart';
+import '../updates/update_checker.dart';
+import '../updates/update_dialog.dart';
 import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/artwork_image.dart';
@@ -31,9 +33,19 @@ import 'legacy_widgets.dart';
 /// search page and one set of playback controls, so switching layouts never
 /// loses context.
 class LegacyShell extends StatefulWidget {
-  const LegacyShell({super.key, required this.state});
+  const LegacyShell({
+    super.key,
+    required this.state,
+    this.autoCheckUpdates = false,
+  });
 
   final AppState state;
+
+  /// Whether to look for a newer release shortly after startup.
+  ///
+  /// Only production enables this: widget tests pump the shell directly and
+  /// must not spawn network work or a pending timer.
+  final bool autoCheckUpdates;
 
   @override
   State<LegacyShell> createState() => _LegacyShellState();
@@ -81,6 +93,26 @@ class _LegacyShellState extends State<LegacyShell>
     albumDetailRequest.addListener(_onAlbumRequest);
     artistDetailRequest.addListener(_onArtistRequest);
     TvOverlayStack.instance.addListener(_onTvOverlayChanged);
+    if (widget.autoCheckUpdates) {
+      _updateTimer = Timer(
+        const Duration(seconds: 4),
+        () => unawaited(_checkForUpdates()),
+      );
+    }
+  }
+
+  Timer? _updateTimer;
+
+  /// Gives the catalogue time to land before talking to GitHub. A failure is
+  /// already silent inside [AppState]; a found release opens the same prompt
+  /// the settings button uses.
+  Future<void> _checkForUpdates() async {
+    final AppRelease? release = await state.checkForUpdates();
+    if (!mounted || release == null) return;
+    // A dialog the user already opened (login, update, …) keeps the stage.
+    final ModalRoute<dynamic>? route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    await showUpdateDialog(context, state, release);
   }
 
   bool _overlayRefreshScheduled = false;
@@ -107,6 +139,7 @@ class _LegacyShellState extends State<LegacyShell>
 
   @override
   void dispose() {
+    _updateTimer?.cancel();
     _nowPlayingMotion
       ..removeStatusListener(_onNowPlayingStatus)
       ..dispose();

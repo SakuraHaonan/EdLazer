@@ -252,10 +252,7 @@ void main() {
                     onPressed: () {},
                     child: const Text('above'),
                   ),
-                  SizedBox(
-                    width: 320,
-                    child: HapticSeekSlider(state: state),
-                  ),
+                  SizedBox(width: 320, child: HapticSeekSlider(state: state)),
                   TextButton(
                     focusNode: below,
                     onPressed: () {},
@@ -311,6 +308,127 @@ void main() {
       expect(state.progress, closeTo(.5, 1e-9));
       state.pause();
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a focus region claims the first control after late content', (
+      tester,
+    ) async {
+      final ValueNotifier<bool> ready = ValueNotifier<bool>(false);
+      addTearDown(ready.dispose);
+      await tester.pumpWidget(
+        TvScope(
+          active: true,
+          child: MaterialApp(
+            home: Scaffold(
+              body: ValueListenableBuilder<bool>(
+                valueListenable: ready,
+                builder: (BuildContext context, bool loaded, _) =>
+                    TvFocusRegion(
+                      child: Center(
+                        child: loaded
+                            ? TextButton(
+                                onPressed: () {},
+                                child: const Text('播放'),
+                              )
+                            : const Text('载入中'),
+                      ),
+                    ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus,
+        anyOf(isNull, isA<FocusScopeNode>()),
+        reason: 'the route scope may hold an empty primary focus',
+      );
+
+      // A page that opened on a loading notice swaps in its content without a
+      // focus token change; the region must retry once the control exists.
+      ready.value = true;
+      await tester.pump();
+      await tester.pump();
+      final FocusNode primary = FocusManager.instance.primaryFocus!;
+      expect(primary.hasFocus, isTrue);
+      expect(
+        primary.context!.findAncestorWidgetOfExactType<TextButton>(),
+        isNotNull,
+        reason: 'focus landed on the page control, not the empty region',
+      );
+    });
+
+    testWidgets('d-pad movement only scrolls when the target is off-screen', (
+      tester,
+    ) async {
+      final List<FocusNode> nodes = <FocusNode>[
+        for (int i = 0; i < 12; i++) FocusNode(debugLabel: 'row$i'),
+      ];
+      addTearDown(() {
+        for (final FocusNode node in nodes) {
+          node.dispose();
+        }
+      });
+      final ScrollController controller = ScrollController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        TvScope(
+          active: true,
+          child: TvTraversalScope(
+            child: MaterialApp(
+              home: Scaffold(
+                body: Center(
+                  child: SizedBox(
+                    width: 300,
+                    height: 160,
+                    child: ListView(
+                      controller: controller,
+                      children: <Widget>[
+                        for (int i = 0; i < nodes.length; i++)
+                          SizedBox(
+                            height: 56,
+                            child: TextButton(
+                              focusNode: nodes[i],
+                              onPressed: () {},
+                              child: Text('row$i'),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      nodes[0].requestFocus();
+      await tester.pump();
+      expect(controller.offset, 0);
+
+      // row1 is already visible: revealing it must not shift the page.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(nodes[1].hasFocus, isTrue);
+      expect(controller.offset, 0);
+
+      // row5 is below the viewport: the reveal scrolls just enough to show it.
+      for (int i = 0; i < 4; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
+      expect(nodes[5].hasFocus, isTrue);
+      expect(controller.offset, greaterThan(0));
+      final Rect row = tester.getRect(
+        find
+            .ancestor(of: find.text('row5'), matching: find.byType(SizedBox))
+            .first,
+      );
+      final Rect viewport = tester.getRect(find.byType(ListView));
+      expect(row.top, greaterThanOrEqualTo(viewport.top - .5));
+      expect(row.bottom, lessThanOrEqualTo(viewport.bottom + .5));
     });
 
     test('overlay panels close in stack order', () {

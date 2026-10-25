@@ -67,7 +67,7 @@ class LegacyPlayerBar extends StatelessWidget {
                     Expanded(
                       child: _NowPlayingTile(
                         track: track,
-                        onTap: onOpen,
+                        onTap: track == null ? null : onOpen,
                         artworkSize: 42,
                       ),
                     ),
@@ -108,7 +108,7 @@ class LegacyPlayerBar extends StatelessWidget {
                     width: 250,
                     child: _NowPlayingTile(
                       track: track,
-                      onTap: onOpen,
+                      onTap: track == null ? null : onOpen,
                       artworkSize: 50,
                     ),
                   ),
@@ -224,12 +224,15 @@ String _playModeLabel(BuildContext context, AppState state) {
 class _NowPlayingTile extends StatefulWidget {
   const _NowPlayingTile({
     required this.track,
-    required this.onTap,
+    this.onTap,
     required this.artworkSize,
   });
 
   final Track? track;
-  final VoidCallback onTap;
+
+  /// Null when nothing is loaded: the empty tile is not a control, so a
+  /// remote should skip it instead of parking focus on a dead target.
+  final VoidCallback? onTap;
   final double artworkSize;
 
   @override
@@ -249,7 +252,9 @@ class _NowPlayingTileState extends State<_NowPlayingTile> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
-      cursor: SystemMouseCursors.click,
+      cursor: widget.onTap == null
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
       child: TvTapTarget(
         onTap: widget.onTap,
         onFocusChange: (bool value) => setState(() => _focused = value),

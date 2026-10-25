@@ -435,5 +435,19 @@
   "预算 {value}": "Budget {value}",
   "预计占用 {size}（按 {quality} 估算）": "About {size} (estimated at {quality})",
   "饱和度": "Saturation",
-  "默认": "Default"
+  "默认": "Default",
+  "检查更新": "Check for updates",
+  "从 GitHub 获取最新版本": "Fetch the latest release from GitHub",
+  "发现新版本": "New version available",
+  "预发布版本": "Pre-release",
+  "当前版本 {current}，最新版本 {latest}": "Current version {current}, latest version {latest}",
+  "稍后": "Later",
+  "跳过此版本": "Skip this version",
+  "前往下载": "Download",
+  "已跳过 {version}": "Skipped {version}",
+  "自动提醒不再提示这个版本": "Automatic reminders will not offer this version again",
+  "恢复提醒": "Resume reminders",
+  "已是最新版本": "You're up to date",
+  "检查更新失败，请稍后重试": "Couldn't check for updates. Try again later.",
+  "无法打开浏览器，请手动访问 {url}": "Couldn't open a browser. Visit {url} manually."
 }

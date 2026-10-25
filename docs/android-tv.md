@@ -59,6 +59,10 @@ television profile:
   panel is already large and viewed at a distance; forcing a density floor
   would make the interface unnecessarily huge. The DPI slider and the
   automatic estimate still apply when the user wants a larger interface;
+- uses a **wider browse column** (`adaptiveContentMaxWidth`, 1560 dp instead of
+  the desktop reading measure). The home shortcuts share that width instead of
+  huddling at the left, and the library grid fits more artwork per row without
+  changing any font size;
 - resolves before the car heuristic: both are large, low-density landscape
   panels, but only a television is driven by a remote
   (`resolveDeviceProfile`);
@@ -75,7 +79,8 @@ remote can never reach those. `lib/tv/tv_mode.dart` adds three pieces:
 | --- | --- |
 | `TvScope` | Publishes whether the remote model is active. Off a TV every helper below collapses to its child. |
 | `TvTapTarget` | Adds a focus stop, `ActivateIntent` (Select/Enter) handling, a slight focus lift and the white-on-black focus ring. Used by rail rows, playlist/track cards, queue rows, transport glyphs and pane tabs. |
-| `TvFocusRegion` | A non-focusable `Focus` node per page. When a page appears or returns to the front (`focusToken`), it focuses the first actionable descendant, so the first D-pad press lands somewhere useful. It is not a `FocusScope`, so focus can still leave the content for the sidebar and transport bar. |
+| `TvFocusRegion` | A non-focusable `Focus` node per page. When a page appears or returns to the front (`focusToken`), it focuses the first actionable descendant, so the first D-pad press lands somewhere useful. It retries when a page swaps a loading notice for real controls, and it does not steal focus once the user has moved somewhere. It is not a `FocusScope`, so focus can still leave the content for the sidebar and transport bar. |
+| `TvTraversalScope` | Replaces the default traversal callback with `revealTvFocus`: the new target is focused and its ancestor viewports are asked to `showOnScreen` for 160 ms. Flutter's stock callback aligns every target to the viewport edge, which makes rows jump even when they are already visible; the TV version scrolls only when the target is actually outside. |
 
 The ring is white with a black halo (`TvFocusOutline`): white alone disappears
 over light artwork and black alone disappears over the dark player.
@@ -100,10 +105,11 @@ Remote behaviour by surface:
 ## Verification
 
 `test/android_tv_test.dart` covers focus + Select activation, the inert
-off-TV path, safe insets, D-pad seek stepping, overlay close order, and a
-static check that the Leanback category, optional touch/leanback features and
-the banner ship in the manifest. The rest of the suite runs unchanged because
-every TV helper is a no-op outside `TvScope`.
+off-TV path, safe insets, D-pad seek stepping, late-content focus anchoring,
+minimal scroll reveal, overlay close order, and a static check that the
+Leanback category, optional touch/leanback features and the banner ship in the
+manifest. The rest of the suite runs unchanged because every TV helper is a
+no-op outside `TvScope`.
 
 ## Tuning
 
@@ -111,6 +117,8 @@ every TV helper is a no-op outside `TvScope`.
   `kCarScaleMin` only for the car profile, or use the DPI slider for a TV.
 - `tvSafeInsets` — overscan breathing room.
 - `TvFocusRegion.focusToken` — what re-anchors focus when a page changes.
+- `revealTvFocus` — the scroll-into-view duration and curve for every D-pad
+  move.
 - `TvTapTarget.focusScale` / `borderRadius` — per-surface focus lift and ring
   shape.
 

@@ -56,6 +56,53 @@ EdgeInsets tvSafeInsets(BuildContext context) => TvScope.isActive(context)
     ? const EdgeInsets.fromLTRB(24, 16, 24, 16)
     : EdgeInsets.zero;
 
+/// Focuses [node] and scrolls its ancestors just enough to show it.
+///
+/// Flutter's default traversal callback aligns the target to the edge of the
+/// viewport every time, so a row that is already visible still jumps. A remote
+/// moves constantly; the television wants minimal, animated scrolling instead.
+/// [RenderObject.showOnScreen] walks every ancestor scroll viewport (the page
+/// and the horizontal shelf around a card) and reveals both axes only when the
+/// control is actually outside them.
+void revealTvFocus(
+  FocusNode node, {
+  Duration duration = const Duration(milliseconds: 160),
+  Curve curve = Curves.easeOutCubic,
+}) {
+  final BuildContext? target = node.context;
+  node.requestFocus();
+  if (target == null) return;
+  target.findRenderObject()?.showOnScreen(duration: duration, curve: curve);
+}
+
+/// Replaces the app's reading-order traversal callback on a television.
+///
+/// The order itself is unchanged — Flutter's default reading order is what
+/// makes the D-pad predictable — but every move now reveals the new focus
+/// minimally and with a short animation.
+class TvTraversalScope extends StatelessWidget {
+  const TvTraversalScope({super.key, required this.child});
+
+  final Widget child;
+
+  static void _requestFocus(
+    FocusNode node, {
+    ScrollPositionAlignmentPolicy? alignmentPolicy,
+    double? alignment,
+    Duration? duration,
+    Curve? curve,
+  }) => revealTvFocus(node);
+
+  static final FocusTraversalPolicy _policy = ReadingOrderTraversalPolicy(
+    requestFocusCallback: _requestFocus,
+  );
+
+  @override
+  Widget build(BuildContext context) => TvScope.isActive(context)
+      ? FocusTraversalGroup(policy: _policy, child: child)
+      : child;
+}
+
 /// Registry of player panels drawn through [OverlayPortal].
 ///
 /// Overlay entries are siblings of the route, so a remote Back press never
@@ -273,12 +320,39 @@ class _TvFocusRegionState extends State<TvFocusRegion> {
       // Focus already lives in this page (for example after a rebuild): don't
       // yank it back to the top.
       if (primary != null && _isInside(primary)) return;
-      final FocusNode? first = _region.traversalDescendants
-          .where((FocusNode node) => node.context != null)
-          .firstOrNull;
-      first?.requestFocus();
+      final FocusNode? first = _firstControl();
+      if (first != null) revealTvFocus(first);
     });
   }
+
+  /// Claims focus when a page has just produced its first control.
+  ///
+  /// A page often starts on a loading notice with nothing focusable and only
+  /// swaps in its content when the network answers. That swap does not change
+  /// [TvFocusRegion.focusToken], so without this retry a television would sit
+  /// at the root with no focused control and the first D-pad press would land
+  /// on whatever happens to be first in the reading order. Only an empty
+  /// primary focus is filled: once the user has moved somewhere, rebuilds
+  /// never pull focus back.
+  void _scheduleInitial() {
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      if (!mounted || !TvScope.isActive(context)) return;
+      // An empty route scope is the primary focus on every new page even
+      // though nothing is focused inside it. Only a real control counts as
+      // already anchored.
+      final FocusNode? primary = FocusManager.instance.primaryFocus;
+      if (primary != null && primary is! FocusScopeNode) return;
+      final FocusNode? first = _firstControl();
+      if (first != null) revealTvFocus(first);
+    });
+  }
+
+  FocusNode? _firstControl() => _region.traversalDescendants
+      .where((FocusNode node) => node.context != null && node.canRequestFocus)
+      .firstOrNull;
 
   bool _isInside(FocusNode node) {
     for (FocusNode? current = node; current != null; current = current.parent) {
@@ -290,6 +364,7 @@ class _TvFocusRegionState extends State<TvFocusRegion> {
   @override
   Widget build(BuildContext context) {
     if (!TvScope.isActive(context)) return widget.child;
+    _scheduleInitial();
     return Focus(
       focusNode: _region,
       canRequestFocus: false,

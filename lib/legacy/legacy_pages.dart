@@ -28,6 +28,7 @@ import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
 import '../state/detail_requests.dart';
 import '../tv/tv_mode.dart';
+import '../updates/update_dialog.dart';
 import '../utils/background_image.dart';
 import '../utils/byte_format.dart';
 import '../widgets/ui_scaling.dart';
@@ -871,7 +872,9 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
     final bool compact = MediaQuery.sizeOf(context).width < 720;
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1180),
+        constraints: BoxConstraints(
+          maxWidth: adaptiveContentMaxWidth(context, 1180),
+        ),
         child: CustomScrollView(
           key: const PageStorageKey<String>('discovery-scroll'),
           slivers: <Widget>[
@@ -1069,24 +1072,36 @@ class _HomeActionShelf extends StatelessWidget {
             tap: onReplay,
           ),
         ];
-    return _PagedHorizontalShelf(
-      key: const ValueKey<String>('home-actions'),
-      height: 164,
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return _HomeActionCard(
-          title: item.title,
-          subtitle: item.subtitle,
-          icon: item.icon,
-          colors: item.colors,
-          covers: covers.isEmpty
-              ? const <String?>[]
-              : <String?>[
-                  for (var offset = 0; offset < covers.length; offset++)
-                    covers[(index * 2 + offset) % covers.length],
-                ],
-          onTap: busy ? null : item.tap,
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // On a television the four shortcuts share the full browse width
+        // instead of huddling at the left of a wide row. The clamp keeps the
+        // cards from becoming billboards on an ultrawide panel.
+        final double cardWidth =
+            TvScope.isActive(context) && constraints.maxWidth.isFinite
+            ? ((constraints.maxWidth - 3 * 14) / 4).clamp(228.0, 372.0)
+            : 228.0;
+        return _PagedHorizontalShelf(
+          key: const ValueKey<String>('home-actions'),
+          height: 164,
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return _HomeActionCard(
+              width: cardWidth,
+              title: item.title,
+              subtitle: item.subtitle,
+              icon: item.icon,
+              colors: item.colors,
+              covers: covers.isEmpty
+                  ? const <String?>[]
+                  : <String?>[
+                      for (var offset = 0; offset < covers.length; offset++)
+                        covers[(index * 2 + offset) % covers.length],
+                    ],
+              onTap: busy ? null : item.tap,
+            );
+          },
         );
       },
     );
@@ -1095,6 +1110,7 @@ class _HomeActionShelf extends StatelessWidget {
 
 class _HomeActionCard extends StatefulWidget {
   const _HomeActionCard({
+    required this.width,
     required this.title,
     required this.subtitle,
     required this.icon,
@@ -1102,6 +1118,7 @@ class _HomeActionCard extends StatefulWidget {
     required this.covers,
     this.onTap,
   });
+  final double width;
   final String title;
   final String subtitle;
   final IconData icon;
@@ -1144,7 +1161,7 @@ class _HomeActionCardState extends State<_HomeActionCard> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(18),
               child: Container(
-                width: 228,
+                width: widget.width,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -2893,7 +2910,9 @@ class LegacyLibraryPage extends StatelessWidget {
     final double inset = _pageInset(context);
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1180),
+        constraints: BoxConstraints(
+          maxWidth: adaptiveContentMaxWidth(context, 1180),
+        ),
         child: ListView(
           padding: EdgeInsets.fromLTRB(inset, 8, inset, 28),
           children: <Widget>[
@@ -4446,19 +4465,55 @@ class LegacySettingsPage extends StatelessWidget {
             const _LegacySectionLabel('关于'),
             AppleGroupedCard(
               margin: EdgeInsets.zero,
-              child: AppleListTile(
-                title: 'Lazer',
-                subtitle: context.tr('提交 ${BuildInfo.shortCommit}'),
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(7),
-                  child: Image.asset(
-                    'assets/app_icon.png',
-                    width: 30,
-                    height: 30,
-                    fit: BoxFit.cover,
+              child: Column(
+                children: <Widget>[
+                  AppleListTile(
+                    title: 'Lazer',
+                    subtitle: context.tr('提交 ${BuildInfo.shortCommit}'),
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Image.asset(
+                        'assets/app_icon.png',
+                        width: 30,
+                        height: 30,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    trailing: Text(
+                      BuildInfo.displayVersion,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: apple.secondaryLabel,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                trailing: const Text('2.0'),
+                  _LegacySettingRow(
+                    label: '检查更新',
+                    subtitle: '从 GitHub 获取最新版本',
+                    trailing: state.updateChecking
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : OutlinedButton(
+                            onPressed: () => unawaited(
+                              checkUpdatesFromSettings(context, state),
+                            ),
+                            child: const TrText('检查更新'),
+                          ),
+                  ),
+                  if (state.skippedUpdateVersion != null)
+                    _LegacySettingRow(
+                      label: context.tr('已跳过 v${state.skippedUpdateVersion}'),
+                      subtitle: '自动提醒不再提示这个版本',
+                      trailing: TextButton(
+                        onPressed: () => unawaited(state.clearSkippedUpdate()),
+                        child: const TrText('恢复提醒'),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],

@@ -4,6 +4,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var hapticsChannel: FlutterMethodChannel?
+  private var updatesChannel: FlutterMethodChannel?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -36,6 +37,31 @@ import UIKit
         generator.impactOccurred(intensity: CGFloat(intensity))
       }
       result(nil)
+    }
+
+    // Release pages open in Safari; the app has no `url_launcher` dependency
+    // and only needs this one call.
+    guard let updatesRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "LazerUpdates") else { return }
+    let updates = FlutterMethodChannel(
+      name: "dev.naominet.lazer/updates",
+      binaryMessenger: updatesRegistrar.messenger()
+    )
+    updatesChannel = updates
+    updates.setMethodCallHandler { call, result in
+      guard call.method == "openUrl" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let args = call.arguments as? [String: Any] ?? [:]
+      guard let raw = args["url"] as? String,
+            let url = URL(string: raw),
+            url.scheme == "https" || url.scheme == "http" else {
+        result(false)
+        return
+      }
+      UIApplication.shared.open(url, options: [:]) { opened in
+        result(opened)
+      }
     }
   }
 }
