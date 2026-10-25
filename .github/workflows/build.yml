@@ -53,7 +53,7 @@ jobs:
           cache: true
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build windows --release --no-pub
+      - run: flutter build windows --release --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }}
       - name: Package EXE, DLLs, resources and Visual C++ runtime
         shell: pwsh
         run: ./ci/package-windows.ps1
@@ -101,7 +101,7 @@ jobs:
       - run: xcodebuild -version
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build macos --release --no-pub
+      - run: flutter build macos --release --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }}
       - name: Package App with executable permissions and framework symlinks
         shell: bash
         run: |
@@ -167,7 +167,7 @@ jobs:
           "$sdk/bin/flutter" precache --linux
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build linux --release --no-pub --target-platform ${{ matrix.flutter_target }}
+      - run: flutter build linux --release --no-pub --target-platform ${{ matrix.flutter_target }} --dart-define=LAZER_COMMIT=${{ github.sha }}
       - name: Bundle GTK, libmpv and Flutter into AppImage
         run: bash ci/package-appimage.sh ${{ matrix.arch }}
       - name: Check AppImage starts with a display and session bus
@@ -211,7 +211,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build apk --release --no-pub
+      - run: flutter build apk --release --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }}
       - name: Package universal APK
         run: |
           mkdir -p dist
@@ -241,7 +241,7 @@ jobs:
           cache: true
       - run: xcodebuild -version
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build ios --release --no-codesign --no-pub
+      - run: flutter build ios --release --no-codesign --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }}
       - name: Create unsigned IPA with the required Payload directory
         shell: bash
         run: |

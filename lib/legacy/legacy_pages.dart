@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../data/catalog.dart';
 import '../data/catalog_details.dart';
 import '../data/models.dart';
+import '../diagnostics/build_info.dart';
 import '../l10n/app_language.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
@@ -3317,9 +3318,10 @@ class _PlaylistHeader extends StatelessWidget {
           : CrossAxisAlignment.start,
       mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: <Widget>[
-        // Albums stack the title, artist and summary against the transport row
-        // instead of the cover's top edge.
-        if (!compact && artistWidget != null) const Spacer(),
+        // Desktop stacks the title block against the transport row, so the
+        // row sits on the cover's bottom edge and the leftover height opens
+        // above the title. Compact layouts have no bounded height to spend.
+        if (!compact) const Spacer(),
         Text(
           playlist.name,
           maxLines: 2,
@@ -3364,9 +3366,8 @@ class _PlaylistHeader extends StatelessWidget {
             ),
           ),
         ],
-        // Desktop spends the leftover height on the summary, which is what
-        // pins the transport row to the cover's bottom edge. Compact layouts
-        // have no bounded height, so they keep a plain three-line block.
+        // The summary rides just above the transport row; compact layouts
+        // keep a plain three-line block with no leftover height to spend.
         if (summary != null)
           Padding(padding: const EdgeInsets.only(top: 8), child: summary),
         Row(
@@ -4147,7 +4148,7 @@ class LegacySettingsPage extends StatelessWidget {
               margin: EdgeInsets.zero,
               child: AppleListTile(
                 title: 'Lazer',
-                subtitle: 'Apple Music 风格界面 · 自适应桌面与移动端',
+                subtitle: '提交 ${BuildInfo.shortCommit}',
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(7),
                   child: Image.asset(

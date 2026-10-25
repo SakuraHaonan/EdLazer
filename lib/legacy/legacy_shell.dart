@@ -535,6 +535,17 @@ class _LegacyShellState extends State<LegacyShell>
                 ],
               ),
             ),
+            // A direct way into settings, right under the account block; the
+            // account menu keeps its own entry for touch-sized screens.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 8, 10),
+              child: LegacyRailItem(
+                icon: Icons.settings_rounded,
+                label: '设置',
+                selected: _section == _LegacySection.settings,
+                onTap: () => _select(_LegacySection.settings),
+              ),
+            ),
           ],
         ),
       ),

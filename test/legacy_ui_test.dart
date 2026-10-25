@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/catalog_details.dart';
 import 'package:lazer_nextgen/data/models.dart';
+import 'package:lazer_nextgen/diagnostics/build_info.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_pages.dart';
@@ -227,6 +228,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('the rail opens settings from the entry under the account block', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final AppState state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    await tester.pumpWidget(_legacyApp(state));
+    await tester.pumpAndSettle();
+
+    // The entry sits under the account row, so settings opens without the
+    // account menu having to be expanded first.
+    expect(find.text('设置'), findsOneWidget);
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('配色'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('artist links open an Apple-style detail in the content pane', (
     tester,
   ) async {
@@ -355,8 +376,17 @@ void main() {
     // DPI 100% and the default scroll acceleration both read 100%.
     expect(find.text('100%'), findsWidgets);
     final Finder aboutTile = find.ancestor(
-      of: find.text('Apple Music 风格界面 · 自适应桌面与移动端'),
+      of: find.text('Lazer'),
       matching: find.byType(AppleListTile),
+    );
+    expect(aboutTile, findsOneWidget);
+    expect(
+      find.descendant(
+        of: aboutTile,
+        matching: find.text('提交 ${BuildInfo.shortCommit}'),
+      ),
+      findsOneWidget,
+      reason: 'the About row names the build commit',
     );
     expect(
       find.descendant(

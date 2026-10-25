@@ -25,6 +25,13 @@ All artifact names follow `Lazer-<OS>-<Arch>`. `universal` denotes a multi-archi
 package. The macOS archives preserve executable permissions and framework symlinks.
 Architecture checks run before packaging. IPA builds explicitly disable code signing.
 
+## Build stamp
+
+Every platform build receives the commit it was cut from through
+`--dart-define=LAZER_COMMIT=<sha>`, and **Settings → About** shows its short
+form. A local `flutter run` that omits the define falls back to the checked-in
+stamp in `lib/diagnostics/build_info.dart`.
+
 ## Runners and SDKs
 
 - Windows uses `windows-2022`.
