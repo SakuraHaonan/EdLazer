@@ -83,6 +83,22 @@ class InertiaScrollPhysics extends ClampingScrollPhysics {
   }
 }
 
+/// The active scroll behavior with mouse dragging enabled.
+///
+/// Material accepts touch-like pointers on Android and iOS, so a phone-sized
+/// emulator, a tablet with a mouse or a head unit can tap a card but cannot
+/// drag a horizontal shelf. The shelf has no competing mouse gesture, and the
+/// rest of the behavior (wheel momentum, physics) stays as configured.
+ScrollBehavior shelfScrollBehavior(BuildContext context) {
+  final ScrollBehavior behavior = ScrollConfiguration.of(context);
+  return behavior.copyWith(
+    dragDevices: <PointerDeviceKind>{
+      ...behavior.dragDevices,
+      PointerDeviceKind.mouse,
+    },
+  );
+}
+
 class _WheelMomentum extends StatefulWidget {
   const _WheelMomentum({
     required this.details,

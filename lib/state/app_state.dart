@@ -144,8 +144,8 @@ class AppState extends ChangeNotifier {
   /// Whether the Android device under this app is a television.
   ///
   /// Detected natively before the first frame (Leanback / `UI_MODE_TYPE_
-  /// TELEVISION` / no touch screen). It selects the ten-foot density profile
-  /// in automatic mode and turns every tap target into a D-pad focus stop.
+  /// TELEVISION` / no touch screen). It selects the television profile in
+  /// automatic mode and turns every tap target into a D-pad focus stop.
   final bool deviceIsTelevision;
 
   /// Downloaded and scanned files, shared by playback, downloads and the

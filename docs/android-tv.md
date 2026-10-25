@@ -1,7 +1,7 @@
 # Android TV
 
 The same APK runs on phones, tablets, car head units and Android TV. On a
-television the app switches to a ten-foot layout and makes every control
+television the app keeps the standard interface scale and makes every control
 reachable with a D-pad remote; everywhere else nothing changes.
 
 ## Packaging
@@ -50,14 +50,15 @@ model (`active`), while `UiMetrics` publishes the density profile. A TV told to
 use standard density keeps its remote navigation; a touch device can force the
 television surface for testing.
 
-## Ten-foot interface
+## Television interface
 
 `设置 → 界面 → 设备形态` offers `自动选择 / 标准 / 车机 / 电视`. The
 television profile:
 
-- floors the interface scale at **150%** (`kTvScaleMin`), so the scaling
-  mechanism used by the DPI slider enlarges rows, artwork, hit targets and
-  chrome together;
+- keeps the **standard interface scale**. Unlike a car head unit, a television
+  panel is already large and viewed at a distance; forcing a density floor
+  would make the interface unnecessarily huge. The DPI slider and the
+  automatic estimate still apply when the user wants a larger interface;
 - resolves before the car heuristic: both are large, low-density landscape
   panels, but only a television is driven by a remote
   (`resolveDeviceProfile`);
@@ -106,7 +107,8 @@ every TV helper is a no-op outside `TvScope`.
 
 ## Tuning
 
-- `kTvScaleMin` — the television density floor (default 1.5).
+- The television profile has no density floor of its own; adjust
+  `kCarScaleMin` only for the car profile, or use the DPI slider for a TV.
 - `tvSafeInsets` — overscan breathing room.
 - `TvFocusRegion.focusToken` — what re-anchors focus when a page changes.
 - `TvTapTarget.focusScale` / `borderRadius` — per-surface focus lift and ring
@@ -119,5 +121,5 @@ every TV helper is a no-op outside `TvScope`.
 - Remote media keys are handled by the existing `audio_service` integration,
   not by the TV layer; play/pause/next/previous work while the screen is off,
   exactly as on a phone.
-- The ten-foot layout is selected by the Android TV signal only. Other
+- The television profile is selected by the Android TV signal only. Other
   television platforms keep the standard layout until they report one.

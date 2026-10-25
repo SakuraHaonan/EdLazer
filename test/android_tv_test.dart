@@ -1,13 +1,76 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:lazer_nextgen/audio/audio_engine.dart';
+import 'package:lazer_nextgen/data/audio_quality.dart';
+import 'package:lazer_nextgen/data/catalog.dart';
+import 'package:lazer_nextgen/data/models.dart';
+import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
+import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/tv/tv_mode.dart';
+import 'package:lazer_nextgen/widgets/haptic_seek_slider.dart';
+
+const Track _seekTrack = Track(
+  id: 'tv-seek',
+  title: 'Song',
+  artist: 'Artist',
+  album: 'Album',
+  duration: Duration(minutes: 1),
+  coverSeed: 1,
+);
+
+class _SeekCatalog extends Catalog {
+  @override
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => 'fixture';
+  @override
+  Future<GatewayLyrics?> lyricsFor(Track track) async =>
+      const GatewayLyrics(lrc: '');
+}
+
+class _SeekEngine implements AudioEngine {
+  @override
+  bool active = false;
+  @override
+  Duration position = Duration.zero;
+  @override
+  Duration? get duration => _seekTrack.duration;
+  @override
+  Stream<void> get completed => const Stream<void>.empty();
+  @override
+  Future<void> setUrl(String url) async {
+    active = true;
+    position = Duration.zero;
+  }
+
+  @override
+  Future<void> setVolume(double value) async {}
+  @override
+  Future<void> play() async {}
+  @override
+  Future<void> pause() async {}
+  @override
+  Future<void> seek(Duration value) async {
+    position = value;
+  }
+
+  @override
+  Future<void> stop() async => active = false;
+  @override
+  void dispose() {}
+}
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
   group('tv input', () {
     testWidgets('a tap target takes focus and activates with Select', (
       tester,
@@ -157,6 +220,96 @@ void main() {
 
       // The pinned preview releases after the short commit window.
       await tester.pump(const Duration(seconds: 1));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('up and down leave the seek rail instead of scrubbing', (
+      tester,
+    ) async {
+      final AppState state = AppState(
+        catalog: _SeekCatalog(),
+        audioEngine: _SeekEngine(),
+      );
+      addTearDown(state.dispose);
+      state.playQueue(const <Track>[_seekTrack]);
+      await tester.pump();
+      state.seek(.5);
+      expect(state.progress, closeTo(.5, 1e-9));
+
+      final FocusNode above = FocusNode();
+      final FocusNode below = FocusNode();
+      addTearDown(above.dispose);
+      addTearDown(below.dispose);
+      await tester.pumpWidget(
+        TvScope(
+          active: true,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: <Widget>[
+                  TextButton(
+                    focusNode: above,
+                    onPressed: () {},
+                    child: const Text('above'),
+                  ),
+                  SizedBox(
+                    width: 320,
+                    child: HapticSeekSlider(state: state),
+                  ),
+                  TextButton(
+                    focusNode: below,
+                    onPressed: () {},
+                    child: const Text('below'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final FocusNode rail = Focus.of(
+        tester.element(
+          find
+              .descendant(
+                of: find.byType(HapticSeekSlider),
+                matching: find.byType(Stack),
+              )
+              .first,
+        ),
+      );
+      rail.requestFocus();
+      await tester.pump();
+      expect(rail.hasFocus, isTrue);
+
+      // Down and up move the remote's focus out of the rail. The Material
+      // slider would otherwise spend them on the value.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(below.hasFocus, isTrue);
+      expect(state.progress, closeTo(.5, 1e-9));
+
+      // Up first returns to the rail (Flutter remembers the down traversal),
+      // then leaves it for the row above.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(rail.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(above.hasFocus, isTrue);
+      expect(state.progress, closeTo(.5, 1e-9));
+
+      // Left and right still scrub the song.
+      rail.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(state.progress, closeTo(.48, 1e-9));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(state.progress, closeTo(.5, 1e-9));
+      state.pause();
       expect(tester.takeException(), isNull);
     });
 

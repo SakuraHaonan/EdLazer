@@ -82,9 +82,9 @@ flow for the current song, and the browse backdrop setting never removes it.
 
 Android TV gets the same composition at ten feet. `设置 → 界面 → 设备形态` can
 force the `电视` profile; otherwise a Leanback or touch-less Android device
-selects it automatically. The profile floors the interface at 150%, insets
-chrome for overscan, and turns every custom card, row and transport glyph into
-a D-pad focus stop with a white-on-black focus ring. Back closes the queue or
+selects it automatically. The profile keeps the standard interface scale,
+insets chrome for overscan, and turns every custom card, row and transport
+glyph into a D-pad focus stop with a white-on-black focus ring. Back closes the queue or
 volume panel first, then the player, then detail pages. See
 [android-tv.md](android-tv.md) for the manifest, detection and navigation
 details.
@@ -116,7 +116,7 @@ Everything above the pixels remains shared with the existing app:
   export, plus all persisted lyric preferences.
 - Queue (`PlaybackQueueView`) and comments (`SongCommentsView`) are reused in
   modal glass panels/sheets rather than forked.
-- DPI scaling, car-display mode, the Android TV ten-foot profile, safe areas,
+- DPI scaling, car-display mode, the Android TV profile, safe areas,
   window frame, system media integration and localisation continue to work.
 
 ## Settings and persistence

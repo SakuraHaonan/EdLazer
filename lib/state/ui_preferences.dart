@@ -187,9 +187,9 @@ double dpiScaleForWorkspace(Size workspace) {
 /// motion, and its pixels are not dense (a 1280×720 or 1920×720 panel reports a
 /// 100% density, so the same logical pixels are physically big but far away).
 /// The car profile answers that with a larger interface floor and roomier
-/// controls. A television goes further: it is read from across the room and
-/// managed with a D-pad, so the TV profile also turns every tap target into a
-/// directional focus stop.
+/// controls. A television keeps the standard interface scale — its panel is
+/// already large — and instead adds remote navigation: the TV profile turns
+/// every tap target into a directional focus stop.
 enum AppSurface {
   /// Recognise a head unit or television from the platform and switch by
   /// itself.
@@ -218,7 +218,7 @@ extension AppSurfaceLabels on AppSurface {
     AppSurface.auto => '在 Android 车机或电视上自动放大；其余设备保持标准密度',
     AppSurface.standard => '按平台上报的密度显示，桌面与手机默认如此',
     AppSurface.car => '放大界面与控件，适合远距离、行进中的触控',
-    AppSurface.tv => '放大十英尺界面，并用遥控器方向键浏览',
+    AppSurface.tv => '保持标准缩放，并用遥控器方向键浏览',
   };
 
   /// Parses a persisted [name]; unknown or missing values fall back to
@@ -235,13 +235,6 @@ extension AppSurfaceLabels on AppSurface {
 /// 1× desktop density is what made the interface look tiny there. The floor is
 /// a starting point the DPI slider can still raise.
 const double kCarScaleMin = 1.35;
-
-/// Smallest interface scale the television profile allows.
-///
-/// A television is read from across a room, and its remote has no pointer to
-/// aim with. 1.5× keeps 15 px body text around ten arcminutes at three metres,
-/// and grows the 30–38 px transport glyphs into comfortable D-pad targets.
-const double kTvScaleMin = 1.5;
 
 /// Physical pixels below which a display is never a head unit.
 const Size kCarMinPhysicalSize = Size(960, 540);
@@ -319,8 +312,9 @@ DeviceProfile resolveDeviceProfile(
 };
 
 /// The smallest interface scale the active profile allows.
-double dpiScaleFloor({required bool car, bool tv = false}) => tv
-    ? kTvScaleMin
-    : car
-    ? kCarScaleMin
-    : kDpiScaleMin;
+///
+/// Only the car profile raises the floor. A television keeps the standard
+/// scale: its panel is already large, and the user can still enlarge it with
+/// the DPI slider.
+double dpiScaleFloor({required bool car}) =>
+    car ? kCarScaleMin : kDpiScaleMin;

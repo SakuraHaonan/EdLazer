@@ -70,7 +70,7 @@ class UiMetrics extends InheritedWidget {
   /// Whether the car head-unit profile is in effect.
   final bool car;
 
-  /// Whether the television (ten-foot, D-pad) profile is in effect.
+  /// Whether the television (D-pad) profile is in effect.
   final bool tv;
 
   static UiMetrics? maybeOf(BuildContext context) =>
@@ -114,6 +114,8 @@ class UiMetrics extends InheritedWidget {
 ///
 /// The car profile raises the floor: on a head unit the interface never drops
 /// to desktop density, whether the automatic mode or the slider is in charge.
+/// A television keeps the standard density — its panel is already large — and
+/// only adds the remote input model on top.
 class UiScaling extends StatelessWidget {
   const UiScaling({super.key, required this.state, required this.child});
 
@@ -129,7 +131,7 @@ class UiScaling extends StatelessWidget {
     );
     final bool car = profile == DeviceProfile.car;
     final bool tv = profile == DeviceProfile.tv;
-    final double floor = dpiScaleFloor(car: car, tv: tv);
+    final double floor = dpiScaleFloor(car: car);
     final double autoScale = profileDpiScale(
       automaticDpiScale(context),
       floor: floor,

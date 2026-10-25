@@ -120,7 +120,7 @@ void main() {
       expect(profileDpiScale(1, floor: kDpiScaleMin), 1);
     });
 
-    test('a television overrides the car heuristic and raises the floor', () {
+    test('a television overrides the car heuristic and keeps the standard floor', () {
       // The television profile is explicit or detected from Leanback.
       expect(tvSurfaceActive(AppSurface.tv, detected: false), isTrue);
       expect(tvSurfaceActive(AppSurface.auto, detected: true), isTrue);
@@ -152,10 +152,9 @@ void main() {
         resolveDeviceProfile(AppSurface.standard, television: true, car: false),
         DeviceProfile.standard,
       );
-      expect(dpiScaleFloor(car: false, tv: true), kTvScaleMin);
-      expect(dpiScaleFloor(car: true, tv: true), kTvScaleMin);
+      // Density keeps the standard floor; only the input model is TV-specific.
       expect(dpiScaleFloor(car: false), kDpiScaleMin);
-      expect(profileDpiScale(1, floor: kTvScaleMin), kTvScaleMin);
+      expect(profileDpiScale(1, floor: kDpiScaleMin), 1);
     });
 
     test('layout and dpi choices persist and reset together', () async {
@@ -365,6 +364,23 @@ void main() {
     );
     expect(tester.widget<Slider>(dpiSlider).value, kCarScaleMin);
     expect(find.text('135%'), findsWidgets);
+
+    // Television keeps the standard density: no car-style floor is applied,
+    // while the remote input model is layered on top.
+    await tester.tap(surfaceDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('电视').last);
+    await tester.pumpAndSettle();
+    expect(state.surface, AppSurface.tv);
+    expect(UiMetrics.tvOf(tester.element(surfaceDropdown)), isTrue);
+    expect(find.textContaining('车机形态已把界面放大到'), findsNothing);
+    expect(tester.widget<Slider>(dpiSlider).min, kDpiScaleMin);
+    settingsContext = tester.element(surfaceDropdown);
+    expect(
+      UiMetrics.scaleOf(settingsContext),
+      0.9,
+      reason: 'the manual scale survives; television adds no floor',
+    );
 
     // Reset returns to the shipped 100% default, and standard restores 80%.
     await tester.tap(find.byKey(const ValueKey('dpi-scale-reset')));

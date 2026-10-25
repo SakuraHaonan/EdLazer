@@ -22,6 +22,7 @@ import '../state/app_state.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
 import '../widgets/accessible_controls.dart';
+import '../widgets/app_scroll_behavior.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
@@ -411,50 +412,53 @@ class _ArtistReleaseShelf extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     height: 220,
-    child: ListView.separated(
-      scrollDirection: Axis.horizontal,
-      clipBehavior: Clip.none,
-      itemCount: albums.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 16),
-      itemBuilder: (BuildContext context, int index) {
-        final Album album = albums[index];
-        return SizedBox(
-          width: 160,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: feedbackAction(
-              context,
-              () => unawaited(openAlbumDetails(context, state, album)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                LegacyCover(url: album.coverUrl, size: 160, radius: 9),
-                const SizedBox(height: 8),
-                Text(
-                  album.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  <String>[
-                    if (album.year.isNotEmpty) album.year,
-                    if (album.releaseType.isNotEmpty) album.releaseType,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppleSemanticColors.of(context).secondaryLabel,
+    child: ScrollConfiguration(
+      behavior: shelfScrollBehavior(context),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
+        itemCount: albums.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 16),
+        itemBuilder: (BuildContext context, int index) {
+          final Album album = albums[index];
+          return SizedBox(
+            width: 160,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: feedbackAction(
+                context,
+                () => unawaited(openAlbumDetails(context, state, album)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  LegacyCover(url: album.coverUrl, size: 160, radius: 9),
+                  const SizedBox(height: 8),
+                  Text(
+                    album.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                  Text(
+                    <String>[
+                      if (album.year.isNotEmpty) album.year,
+                      if (album.releaseType.isNotEmpty) album.releaseType,
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppleSemanticColors.of(context).secondaryLabel,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     ),
   );
 }
@@ -1292,14 +1296,17 @@ class _PagedHorizontalShelfState extends State<_PagedHorizontalShelf> {
       child: Stack(
         clipBehavior: Clip.none,
         children: <Widget>[
-          ListView.separated(
-            controller: _controller,
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            physics: const BouncingScrollPhysics(),
-            itemCount: widget.itemCount,
-            separatorBuilder: (_, _) => SizedBox(width: widget.gap),
-            itemBuilder: widget.itemBuilder,
+          ScrollConfiguration(
+            behavior: shelfScrollBehavior(context),
+            child: ListView.separated(
+              controller: _controller,
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              physics: const BouncingScrollPhysics(),
+              itemCount: widget.itemCount,
+              separatorBuilder: (_, _) => SizedBox(width: widget.gap),
+              itemBuilder: widget.itemBuilder,
+            ),
           ),
           if (desktop)
             Positioned.fill(
@@ -3215,6 +3222,7 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
                                   fallback: widget.album!.artist,
                                 ),
                           note: _note ?? widget.album?.note,
+                          noteIsData: _note != null,
                           onPlay: tracks == null || tracks.isEmpty
                               ? null
                               : () => widget.state.playQueue(tracks),
@@ -3317,6 +3325,7 @@ class _PlaylistHeader extends StatelessWidget {
     this.artist,
     this.artistWidget,
     this.note,
+    this.noteIsData = false,
   });
 
   final Playlist playlist;
@@ -3329,16 +3338,27 @@ class _PlaylistHeader extends StatelessWidget {
 
   /// Replaces the plain artist line when the caller can make it a link.
   final Widget? artistWidget;
+
+  /// Either the catalogue's album description or the generated track count.
   final String? note;
 
-  static Future<void> _showNote(BuildContext context, String note) =>
+  /// True when [note] came from the catalogue and must stay untranslated.
+  final bool noteIsData;
+
+  static Future<void> _showNote(
+    BuildContext context,
+    String note, {
+    required bool isData,
+  }) =>
       showDialog<void>(
         context: context,
         builder: (BuildContext context) => AlertDialog(
           title: const TrText('专辑简介'),
           content: SizedBox(
             width: 460,
-            child: SingleChildScrollView(child: TrText(note)),
+            child: SingleChildScrollView(
+              child: isData ? Text(note) : TrText(note),
+            ),
           ),
           actions: <Widget>[
             TextButton(
@@ -3363,14 +3383,14 @@ class _PlaylistHeader extends StatelessWidget {
     final Widget? summary = note == null || note!.trim().isEmpty
         ? null
         : TvTapTarget(
-            onTap: () => _showNote(context, note!),
+            onTap: () => _showNote(context, note!, isData: noteIsData),
             borderRadius: BorderRadius.circular(6),
             child: GestureDetector(
-              onTap: () => _showNote(context, note!),
+              onTap: () => _showNote(context, note!, isData: noteIsData),
               child: MouseRegion(
                 cursor: SystemMouseCursors.click,
                 child: Text(
-                  context.tr(note!),
+                  noteIsData ? note! : context.tr(note!),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: compact ? TextAlign.center : TextAlign.start,
@@ -3819,7 +3839,6 @@ class LegacySettingsPage extends StatelessWidget {
     final double minScale = UiMetrics.minScaleOf(context);
     final double shownScale = UiMetrics.scaleOf(context);
     final bool car = UiMetrics.carOf(context);
-    final bool tv = UiMetrics.tvOf(context);
     final double inset = _pageInset(context);
     return Center(
       child: ConstrainedBox(
@@ -3935,8 +3954,6 @@ class LegacySettingsPage extends StatelessWidget {
                     valueText: '${(shownScale * 100).round()}%',
                     subtitle: state.autoDpiScale
                         ? '自动推算 · 拖动拉杆即改为手动'
-                        : tv
-                        ? '电视形态已把界面放大到 ${(minScale * 100).round()}% 起'
                         : car
                         ? '车机形态已把界面放大到 ${(minScale * 100).round()}% 起'
                         : '按比例放大整块界面，适合高分屏',

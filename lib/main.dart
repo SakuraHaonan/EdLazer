@@ -76,7 +76,7 @@ Future<void> main() async {
       // runner decides to show the window.
       await initWindowFrame();
       final prefs = await SharedPreferences.getInstance();
-      // The ten-foot layout and D-pad focus model need this before the first
+      // The television input model (D-pad focus) needs this before the first
       // frame: a television with no pointer would otherwise boot into a screen
       // where nothing can be operated.
       final bool television = await detectTelevision();

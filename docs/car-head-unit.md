@@ -38,7 +38,7 @@ looksLikeCarDisplay(
 That is the shape every embedded Android display has: a low-density landscape
 panel. Android TV boxes match too and want the same large, far-viewed
 interface; a real Leanback television is detected first and takes the
-television profile instead (150% floor plus D-pad navigation — see
+television profile instead (standard density plus D-pad navigation — see
 [android-tv.md](android-tv.md)). Phones (high density) and portrait tablets
 never match, and desktop platforms are excluded on purpose — a window's size
 says nothing about the display behind it, so there the choice stays manual.
