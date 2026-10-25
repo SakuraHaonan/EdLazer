@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart'
@@ -19,7 +18,6 @@ import '../widgets/accessible_controls.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
-import '../state/artwork_prefs.dart';
 import '../state/detail_requests.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
@@ -3654,12 +3652,7 @@ class _SearchTabButton extends StatelessWidget {
   }
 }
 
-/// Persists the animated-artwork toggle and applies it immediately.
-Future<void> _setMotionArtwork(BuildContext context, bool value) async {
-  motionArtworkEnabled.value = value;
-  final SharedPreferences prefs = await SharedPreferences.getInstance();
-  await prefs.setBool(kMotionArtworkPrefKey, value);
-}
+
 
 /// A single-column, inset-grouped Settings page, following the iOS Settings
 /// information architecture rather than a desktop form grid.
@@ -3781,18 +3774,6 @@ class LegacySettingsPage extends StatelessWidget {
                     value: state.autoDpiScale,
                     onChanged: (bool value) =>
                         unawaited(state.setAutoDpiScale(value)),
-                  ),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: motionArtworkEnabled,
-                    builder: (BuildContext context, bool enabled, _) =>
-                        _LegacySwitchRow(
-                          key: const ValueKey('motion-artwork-switch'),
-                          label: '动态封面',
-                          subtitle: '有动画封面的专辑在详情页和播放页循环播放',
-                          value: enabled,
-                          onChanged: (bool value) =>
-                              unawaited(_setMotionArtwork(context, value)),
-                        ),
                   ),
                   _LegacySettingRow(
                     label: '背景',

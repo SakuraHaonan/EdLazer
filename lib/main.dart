@@ -16,7 +16,6 @@ import 'diagnostics/frame_stats.dart';
 import 'legacy/legacy_shell.dart';
 import 'theme/apple_design.dart';
 import 'state/app_state.dart';
-import 'state/artwork_prefs.dart';
 import 'state/ui_preferences.dart';
 import 'widgets/window_frame.dart';
 import 'widgets/interaction_feedback.dart';
@@ -77,7 +76,6 @@ Future<void> main() async {
       // runner decides to show the window.
       await initWindowFrame();
       final prefs = await SharedPreferences.getInstance();
-      motionArtworkEnabled.value = prefs.getBool(kMotionArtworkPrefKey) ?? true;
       final audio = JustAudioEngine();
       final state = AppState(
         audioEngine: audio,
