@@ -327,6 +327,66 @@ void main() {
       expect(gateway.sessionCookie, 'MUSIC_U=abc; __csrf=t');
     });
   });
+
+  group('sms sign-in matches api-enhanced payloads', () {
+    test('a captcha login posts the weapi cellphone form', () {
+      final NeteaseRequest route = buildNeteaseRequest(
+        '/login/cellphone',
+        const <String, String>{
+          'phone': '13800000000',
+          'captcha': '123456',
+          'countrycode': '86',
+        },
+      );
+      expect(route.path, '/api/w/login/cellphone');
+      expect(route.encoding, NeteaseEncoding.weapi);
+      expect(route.payload['type'], '1');
+      expect(route.payload['https'], 'true');
+      expect(route.payload['phone'], '13800000000');
+      expect(route.payload['countrycode'], '86');
+      expect(route.payload['captcha'], '123456');
+      expect(route.payload['remember'], 'true');
+      expect(route.payload['secureCaptcha'], '');
+      // The captcha form must never carry a password alongside it.
+      expect(route.payload.containsKey('password'), isFalse);
+    });
+
+    test('sending a code posts the middle captcha form', () {
+      final NeteaseRequest route = buildNeteaseRequest(
+        '/captcha/sent/v1',
+        const <String, String>{'phone': '13800000000', 'ctcode': '86'},
+      );
+      expect(route.path, '/api/middle/captcha/sent/v1');
+      expect(route.encoding, NeteaseEncoding.eapi);
+      expect(route.payload, <String, Object?>{
+        'ctcode': '86',
+        'secrete': 'music_middleuser_pclogin',
+        'cellphone': '13800000000',
+        'scene': '0',
+      });
+    });
+
+    test('the code send keeps the device cookies it mints', () async {
+      final NeteaseGateway gateway = NeteaseGateway(
+        transport: _CaptchaSentTransport(),
+      );
+      await gateway.sendCaptcha('13800000000');
+      expect(gateway.sessionCookie, 'NMTID=n1; _ntes_nuid=u1');
+    });
+
+    test('a successful captcha login installs the session cookie', () async {
+      final NeteaseGateway gateway = NeteaseGateway(
+        transport: _CaptchaLoginTransport(),
+      );
+      final GatewayLoginResult result = await gateway.loginWithPhoneCaptcha(
+        '13800000000',
+        '123456',
+      );
+      expect(result.ok, isTrue);
+      expect(result.profile?.userId, 7);
+      expect(gateway.sessionCookie, 'MUSIC_U=abc; __csrf=t');
+    });
+  });
 }
 
 /// Poll transport that answers a confirmed scan with the fresh session.
@@ -342,6 +402,43 @@ class _ConfirmedTransport extends NeteaseTransport {
       'code': 803,
       'message': '授权登陆成功',
       'cookie': 'MUSIC_U=abc; __csrf=t',
+    };
+  }
+}
+
+/// Captcha login transport: the account plus the rotated session cookie.
+class _CaptchaLoginTransport extends NeteaseTransport {
+  @override
+  Future<Map<String, dynamic>> request(
+    String alias,
+    Map<String, String> parameters,
+  ) async {
+    expect(alias, '/login/cellphone');
+    expect(parameters['phone'], '13800000000');
+    expect(parameters['captcha'], '123456');
+    expect(parameters['sca'], '');
+    return <String, dynamic>{
+      'code': 200,
+      'cookie': 'MUSIC_U=abc; __csrf=t',
+      'profile': <String, dynamic>{'userId': 7, 'nickname': '测试账户'},
+      'account': <String, dynamic>{'id': 7},
+    };
+  }
+}
+
+/// SMS send transport: the anonymous device cookies the server mints.
+class _CaptchaSentTransport extends NeteaseTransport {
+  @override
+  Future<Map<String, dynamic>> request(
+    String alias,
+    Map<String, String> parameters,
+  ) async {
+    expect(alias, '/captcha/sent/v1');
+    expect(parameters['phone'], '13800000000');
+    return <String, dynamic>{
+      'code': 200,
+      'data': true,
+      'cookie': 'NMTID=n1; _ntes_nuid=u1',
     };
   }
 }

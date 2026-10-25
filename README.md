@@ -102,7 +102,7 @@ flutter run
 Windows 请完整解压后运行；AppImage 下载后先 `chmod +x`；
 macOS 包使用 ad-hoc 签名，IPA 需要自行签名后安装。
 
-更多说明书：[构建说明](docs/builds.md) · [系统媒体控件](docs/system-media.md) · [正在播放](docs/now-playing.md) · [车机形态](docs/car-head-unit.md) · [Android TV](docs/android-tv.md) · [扫码登录](docs/login-qr.md) · [旧版界面](docs/legacy-ui.md)
+更多说明书：[构建说明](docs/builds.md) · [系统媒体控件](docs/system-media.md) · [正在播放](docs/now-playing.md) · [车机形态](docs/car-head-unit.md) · [Android TV](docs/android-tv.md) · [扫码登录](docs/login-qr.md) · [验证码登录](docs/login-sms.md) · [旧版界面](docs/legacy-ui.md)
 
 ## 参考与致谢
 

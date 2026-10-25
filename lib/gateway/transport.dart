@@ -234,6 +234,14 @@ class NeteaseTransport {
           return <String, dynamic>{...body, 'cookie': result.cookie};
         }
         return body;
+      case '/captcha/sent/v1':
+        // The SMS endpoint issues the anonymous device cookies (NMTID and
+        // friends) that api-enhanced's jar keeps; the login half of the flow
+        // must replay them so the code belongs to the same visitor.
+        if (result.cookie != null) {
+          return <String, dynamic>{...body, 'cookie': result.cookie};
+        }
+        return body;
       case '/check/music':
         final dynamic first =
             body['data'] is List && (body['data'] as List).isNotEmpty

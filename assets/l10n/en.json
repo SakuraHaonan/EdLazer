@@ -409,7 +409,6 @@
   "跟随当前歌曲": "Follow current track",
   "车机形态已把界面放大到 {percent}% 起": "Car mode scales the interface from {percent}%",
   "较高": "Higher",
-  "返回扫码登录": "Back to QR sign-in",
   "还没有播放中的歌曲。": "No song is playing yet.",
   "还没有最近播放记录": "No recently played tracks yet",
   "还没有本地音乐。\n选几首存在这台设备上的歌吧。": "No local music yet.\nPick a few songs stored on this device.",
@@ -449,5 +448,13 @@
   "恢复提醒": "Resume reminders",
   "已是最新版本": "You're up to date",
   "检查更新失败，请稍后重试": "Couldn't check for updates. Try again later.",
-  "无法打开浏览器，请手动访问 {url}": "Couldn't open a browser. Visit {url} manually."
+  "无法打开浏览器，请手动访问 {url}": "Couldn't open a browser. Visit {url} manually.",
+  "手机号": "Phone number",
+  "短信验证码": "SMS code",
+  "获取验证码": "Get code",
+  "验证码已发送，请注意查收。": "Code sent. Check your messages.",
+  "手机号格式不正确。": "Enter a valid phone number.",
+  "请输入短信验证码。": "Enter the SMS code.",
+  "验证码发送失败，请稍后重试。": "Could not send the code. Try again later.",
+  "使用手机号和短信验证码登录。": "Sign in with your phone number and an SMS code."
 }

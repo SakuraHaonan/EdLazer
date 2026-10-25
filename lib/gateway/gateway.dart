@@ -446,6 +446,7 @@ class NeteaseGateway {
     String phone,
     String captcha, {
     String countryCode = '86',
+    String? secureCaptcha,
   }) async {
     if (phone.trim().isEmpty) throw ArgumentError('phone cannot be blank.');
     if (captcha.trim().isEmpty) throw ArgumentError('captcha cannot be blank.');
@@ -455,6 +456,7 @@ class NeteaseGateway {
           'phone': phone,
           'captcha': captcha,
           'countrycode': countryCode,
+          'sca': secureCaptcha ?? '',
         }),
       ),
     );
@@ -551,10 +553,14 @@ class NeteaseGateway {
 
   Future<void> sendCaptcha(String phone, {String countryCode = '86'}) async {
     if (phone.trim().isEmpty) throw ArgumentError('phone cannot be blank.');
-    await _transport.request('/captcha/sent/v1', <String, String>{
-      'phone': phone,
-      'ctcode': countryCode,
-    });
+    final Map<String, dynamic> body = await _transport.request(
+      '/captcha/sent/v1',
+      <String, String>{'phone': phone, 'ctcode': countryCode},
+    );
+    // Keep the device cookies this anonymous call minted; the captcha login
+    // that follows has to present them (api-enhanced keeps the whole jar).
+    final String? cookie = body['cookie'] as String?;
+    if (cookie != null) sessionCookie = cookie;
   }
 
   Future<List<GatewaySong>> search(
