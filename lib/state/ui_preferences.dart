@@ -1,3 +1,4 @@
+// i18n:data — interface strings declared here are translated at their render sites.
 /// Interface preferences shared by the shell and the settings page: which
 /// presentation the app forces, how large the interface is drawn, and which
 /// device form the density is tuned for.
@@ -16,21 +17,21 @@ const double kCompactBreakpoint = 720;
 ///
 /// [fixed] is the Apple Music red accent. [nowPlaying] derives the accent and
 /// ambient tint from the current cover, matching the app's album-led chrome.
-enum LegacyPaletteMode {
-  fixed,
-  nowPlaying,
-}
+/// [custom] uses the colour the listener picked in Settings.
+enum LegacyPaletteMode { fixed, nowPlaying, custom }
 
 extension LegacyPaletteModeLabels on LegacyPaletteMode {
   /// Chinese source string, translated through `context.tr`.
   String get label => switch (this) {
     LegacyPaletteMode.fixed => '默认',
     LegacyPaletteMode.nowPlaying => '跟随当前歌曲',
+    LegacyPaletteMode.custom => '自定义',
   };
 
   String get detail => switch (this) {
     LegacyPaletteMode.fixed => 'Apple Music 红色强调色',
     LegacyPaletteMode.nowPlaying => '由当前封面主色生成强调色与浏览背景',
+    LegacyPaletteMode.custom => '使用你挑选的强调色',
   };
 
   /// Parses a persisted [name]; unknown or missing values keep the fixed
@@ -46,10 +47,12 @@ extension LegacyPaletteModeLabels on LegacyPaletteMode {
 ///
 /// The flowing album-colour canvas is ported from the Lazer project's
 /// `AlbumFlowBackground`; [nowPlayingDynamic] animates it, [nowPlayingStatic]
-/// freezes the palette to one flat base, and [off] leaves the theme surface.
+/// freezes the palette to one flat base, [customImage] paints a picture the
+/// listener chose, and [off] leaves the theme surface.
 enum LegacyBackgroundMode {
   nowPlayingDynamic,
   nowPlayingStatic,
+  customImage,
   off,
 }
 
@@ -58,7 +61,15 @@ extension LegacyBackgroundModeLabels on LegacyBackgroundMode {
   String get label => switch (this) {
     LegacyBackgroundMode.nowPlayingDynamic => '跟随当前歌曲（流动）',
     LegacyBackgroundMode.nowPlayingStatic => '当前歌曲纯色',
+    LegacyBackgroundMode.customImage => '自定义图片',
     LegacyBackgroundMode.off => '不使用',
+  };
+
+  String get detail => switch (this) {
+    LegacyBackgroundMode.nowPlayingDynamic => '使用当前歌曲封面主色渲染整页画布',
+    LegacyBackgroundMode.nowPlayingStatic => '以当前歌曲封面主色铺满整页',
+    LegacyBackgroundMode.customImage => '使用你选择的图片铺满整页',
+    LegacyBackgroundMode.off => '关闭画布，只保留主题底色',
   };
 
   /// Parses a persisted [name]; unknown or missing values keep the flowing
@@ -176,9 +187,12 @@ double dpiScaleForWorkspace(Size workspace) {
 /// motion, and its pixels are not dense (a 1280×720 or 1920×720 panel reports a
 /// 100% density, so the same logical pixels are physically big but far away).
 /// The car profile answers that with a larger interface floor and roomier
-/// controls.
+/// controls. A television goes further: it is read from across the room and
+/// managed with a D-pad, so the TV profile also turns every tap target into a
+/// directional focus stop.
 enum AppSurface {
-  /// Recognise a head unit from the platform and switch by itself.
+  /// Recognise a head unit or television from the platform and switch by
+  /// itself.
   auto,
 
   /// Whatever density the platform reports.
@@ -186,6 +200,9 @@ enum AppSurface {
 
   /// Large, arm's-length controls, whatever the platform reports.
   car,
+
+  /// Ten-foot interface for a television, driven by a D-pad remote.
+  tv,
 }
 
 extension AppSurfaceLabels on AppSurface {
@@ -194,12 +211,14 @@ extension AppSurfaceLabels on AppSurface {
     AppSurface.auto => '自动选择',
     AppSurface.standard => '标准',
     AppSurface.car => '车机',
+    AppSurface.tv => '电视',
   };
 
   String get detail => switch (this) {
-    AppSurface.auto => '在 Android 车机上自动放大；其余设备保持标准密度',
+    AppSurface.auto => '在 Android 车机或电视上自动放大；其余设备保持标准密度',
     AppSurface.standard => '按平台上报的密度显示，桌面与手机默认如此',
     AppSurface.car => '放大界面与控件，适合远距离、行进中的触控',
+    AppSurface.tv => '放大十英尺界面，并用遥控器方向键浏览',
   };
 
   /// Parses a persisted [name]; unknown or missing values fall back to
@@ -216,6 +235,13 @@ extension AppSurfaceLabels on AppSurface {
 /// 1× desktop density is what made the interface look tiny there. The floor is
 /// a starting point the DPI slider can still raise.
 const double kCarScaleMin = 1.35;
+
+/// Smallest interface scale the television profile allows.
+///
+/// A television is read from across a room, and its remote has no pointer to
+/// aim with. 1.5× keeps 15 px body text around ten arcminutes at three metres,
+/// and grows the 30–38 px transport glyphs into comfortable D-pad targets.
+const double kTvScaleMin = 1.5;
 
 /// Physical pixels below which a display is never a head unit.
 const Size kCarMinPhysicalSize = Size(960, 540);
@@ -254,9 +280,47 @@ bool looksLikeCarDisplay({
 bool carSurfaceActive(AppSurface surface, {required bool detected}) =>
     switch (surface) {
       AppSurface.car => true,
-      AppSurface.standard => false,
+      AppSurface.standard || AppSurface.tv => false,
       AppSurface.auto => detected,
     };
 
+/// Whether the television interaction profile is in effect for [surface].
+///
+/// [detected] is the platform's answer — a Leanback/television Android device.
+bool tvSurfaceActive(AppSurface surface, {required bool detected}) =>
+    switch (surface) {
+      AppSurface.tv => true,
+      AppSurface.standard || AppSurface.car => false,
+      AppSurface.auto => detected,
+    };
+
+/// The density profile the shell draws for.
+enum DeviceProfile { standard, car, tv }
+
+/// Resolves [surface] against what the platform reports.
+///
+/// An explicit choice always wins. In [AppSurface.auto] a television takes
+/// priority over the car heuristic: both have large, low-density landscape
+/// panels, but only the television is driven by a D-pad remote.
+DeviceProfile resolveDeviceProfile(
+  AppSurface surface, {
+  required bool television,
+  required bool car,
+}) => switch (surface) {
+  AppSurface.tv => DeviceProfile.tv,
+  AppSurface.car => DeviceProfile.car,
+  AppSurface.standard => DeviceProfile.standard,
+  AppSurface.auto =>
+    television
+        ? DeviceProfile.tv
+        : car
+        ? DeviceProfile.car
+        : DeviceProfile.standard,
+};
+
 /// The smallest interface scale the active profile allows.
-double dpiScaleFloor({required bool car}) => car ? kCarScaleMin : kDpiScaleMin;
+double dpiScaleFloor({required bool car, bool tv = false}) => tv
+    ? kTvScaleMin
+    : car
+    ? kCarScaleMin
+    : kDpiScaleMin;

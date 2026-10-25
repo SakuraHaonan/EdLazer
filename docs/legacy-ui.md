@@ -15,8 +15,9 @@ engines stay untouched.
   `fill`, `glass`, and the accent. Light and dark palettes are explicit, with no
   Material elevation tinting.
 - **Accent** — Apple Music red `#FA2D48` is the default. When Settings →
-  配色 is set to 跟随当前歌曲, the dominant cover colour is used as the accent
-  while neutral surfaces remain stable.
+  配色 is set to 跟随当前歌曲, the dominant cover colour is used as the accent;
+  自定义 opens an HSV swatch picker that seeds the accent with the listener's
+  own colour. Neutral surfaces remain stable either way.
 - **Typography** — the HIG ramp (large title 34, title 20, body 17, footnote
   13, caption 11) with tight tracking and semibold display weights. Apple
   platforms use their native SF face; Windows/Linux/Android use bundled MiSans
@@ -31,6 +32,18 @@ engines stay untouched.
 headers, section headers, grouped cards, list tiles, icon tiles, empty states,
 capsule search fields, and `AppleGlass` (blur + semantic tint + hairline) for
 navigation chrome and transient panels.
+
+## Browse backdrop
+
+Settings → 背景 picks how the browse shell paints its canvas: the flowing
+album-colour mesh, a flat album tone, the listener's own picture, or none.
+A custom picture is copied into the application support directory on import,
+so the backdrop keeps working after the source file moves or is deleted.
+With no backdrop, dark mode paints the deep warm `AppleColors.darkCanvas`
+rather than pure black, so the window still reads as a surface.
+
+The immersive player owns its own canvas: it always renders the album-colour
+flow for the current song, and the browse backdrop setting never removes it.
 
 ## Dual-end support
 
@@ -65,6 +78,17 @@ navigation chrome and transient panels.
   controls stay reachable at every height.
 - Login is an Apple-sheet card with QR sign-in and a Cookie escape hatch.
 
+### Television
+
+Android TV gets the same composition at ten feet. `设置 → 界面 → 设备形态` can
+force the `电视` profile; otherwise a Leanback or touch-less Android device
+selects it automatically. The profile floors the interface at 150%, insets
+chrome for overscan, and turns every custom card, row and transport glyph into
+a D-pad focus stop with a white-on-black focus ring. Back closes the queue or
+volume panel first, then the player, then detail pages. See
+[android-tv.md](android-tv.md) for the manifest, detection and navigation
+details.
+
 Breakpoints: mobile below 720 dp, immersive desktop player from 840 dp,
 compact desktop transport below 1000 dp. Settings and artwork grids reflow
 independently of those thresholds.
@@ -92,8 +116,8 @@ Everything above the pixels remains shared with the existing app:
   export, plus all persisted lyric preferences.
 - Queue (`PlaybackQueueView`) and comments (`SongCommentsView`) are reused in
   modal glass panels/sheets rather than forked.
-- DPI scaling, car-display mode, safe areas, window frame, system media
-  integration and localisation continue to work.
+- DPI scaling, car-display mode, the Android TV ten-foot profile, safe areas,
+  window frame, system media integration and localisation continue to work.
 
 ## Settings and persistence
 

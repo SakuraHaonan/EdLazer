@@ -153,6 +153,33 @@ void main() {
       expect(request.payload['br'], 128000);
     });
 
+    test('maps every quality tier onto its player-url bitrate', () {
+      const expected = <String, int>{
+        'standard': 128000,
+        'higher': 192000,
+        'exhigh': 320000,
+        'lossless': 999000,
+      };
+      for (final MapEntry<String, int> entry in expected.entries) {
+        final NeteaseRequest request = buildNeteaseRequest(
+          '/song/url/v1',
+          <String, String>{'id': '42', 'level': entry.key},
+        );
+        expect(request.path, '/api/song/enhance/player/url');
+        expect(request.payload['br'], entry.value, reason: entry.key);
+      }
+    });
+
+    test('refuses a level the gateway cannot request', () {
+      expect(
+        () => buildNeteaseRequest('/song/url/v1', <String, String>{
+          'id': '42',
+          'level': 'dolby',
+        }),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
+
     test('maps paged artist songs onto the native artist endpoint', () {
       final NeteaseRequest request = buildNeteaseRequest(
         '/artist/songs',

@@ -16,7 +16,7 @@ import 'diagnostics/frame_stats.dart';
 import 'legacy/legacy_shell.dart';
 import 'theme/apple_design.dart';
 import 'state/app_state.dart';
-import 'state/ui_preferences.dart';
+import 'tv/tv_mode.dart';
 import 'widgets/window_frame.dart';
 import 'widgets/interaction_feedback.dart';
 import 'widgets/app_scroll_behavior.dart';
@@ -76,10 +76,15 @@ Future<void> main() async {
       // runner decides to show the window.
       await initWindowFrame();
       final prefs = await SharedPreferences.getInstance();
+      // The ten-foot layout and D-pad focus model need this before the first
+      // frame: a television with no pointer would otherwise boot into a screen
+      // where nothing can be operated.
+      final bool television = await detectTelevision();
       final audio = JustAudioEngine();
       final state = AppState(
         audioEngine: audio,
         enableExternalCharts: true,
+        deviceIsTelevision: television,
         independentPlayback:
             prefs.getBool('lazer_independent_playback') ?? false,
       );
@@ -147,10 +152,9 @@ class _LazerAppState extends State<LazerApp> {
 
   @override
   Widget build(BuildContext context) {
-    // The 配色 setting can seed the whole scheme from the current cover.
-    final Color? seed = _state.legacyPalette == LegacyPaletteMode.nowPlaying
-        ? _state.legacySeed
-        : null;
+    // The 配色 setting can seed the whole scheme from the current cover or a
+    // colour the listener picked.
+    final Color? seed = _state.legacyAccentSeed;
     return InteractionFeedback(
       state: _state,
       child: MaterialApp(

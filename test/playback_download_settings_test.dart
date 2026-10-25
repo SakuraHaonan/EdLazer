@@ -1,0 +1,72 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lazer_nextgen/data/audio_quality.dart';
+import 'package:lazer_nextgen/legacy/legacy_pages.dart';
+import 'package:lazer_nextgen/legacy/legacy_theme.dart';
+import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
+  testWidgets('settings choose playback and download quality', (tester) async {
+    tester.view.physicalSize = const Size(1000, 3200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final AppState state = AppState();
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(brightness: Brightness.dark),
+        home: Scaffold(body: LegacySettingsPage(state: state)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('playback-quality')), findsOneWidget);
+    expect(find.byKey(const ValueKey('download-quality')), findsOneWidget);
+    expect(find.byKey(const ValueKey('open-download-queue')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('playback-quality')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AudioQuality.lossless.label).last);
+    await tester.pumpAndSettle();
+    expect(state.playbackQuality, AudioQuality.lossless);
+
+    await tester.tap(find.byKey(const ValueKey('download-quality')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AudioQuality.standard.label).last);
+    await tester.pumpAndSettle();
+    expect(state.downloadQuality, AudioQuality.standard);
+  });
+
+  testWidgets('the download group links to local music', (tester) async {
+    tester.view.physicalSize = const Size(1000, 3200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final AppState state = AppState();
+    addTearDown(state.dispose);
+    int opened = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(brightness: Brightness.dark),
+        home: Scaffold(
+          body: LegacySettingsPage(
+            state: state,
+            onOpenLocalMusic: () => opened++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder manage = find.byKey(
+      const ValueKey('open-local-music-settings'),
+    );
+    expect(manage, findsOneWidget);
+    await tester.tap(manage);
+    expect(opened, 1);
+  });
+}

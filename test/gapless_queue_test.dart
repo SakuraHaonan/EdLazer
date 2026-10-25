@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lazer_nextgen/audio/audio_engine.dart';
+import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
@@ -153,7 +154,7 @@ class _Catalog extends Catalog {
   _Catalog() : super(gateway: _Gateway());
 
   @override
-  Future<String?> audioUrlFor(Track track) async => 'url-${track.id}';
+  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => 'url-${track.id}';
 
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics();

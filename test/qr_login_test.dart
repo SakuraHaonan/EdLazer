@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
@@ -72,7 +73,7 @@ class _Catalog extends Catalog {
   Future<UserCollections> userCollections(int uid) async =>
       UserCollections.empty;
   @override
-  Future<String?> audioUrlFor(Track track) async => null;
+  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async =>
       const GatewayLyrics(lrc: '');

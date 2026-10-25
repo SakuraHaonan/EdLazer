@@ -1,9 +1,11 @@
+// i18n:data — interface strings declared here are translated at their render sites.
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../l10n/app_localizations.dart';
 import '../theme/tokens.dart';
 
 /// Rolling frame-time statistics from the engine's own timings callback.
@@ -219,14 +221,14 @@ class _FrameStatsOverlayState extends State<FrameStatsOverlay> {
                         Text(
                           stats.live && stats.fps > 0
                               ? '${stats.fps.toStringAsFixed(0)} fps'
-                              : '帧率 —',
+                              : context.tr('帧率 —'),
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           stats.live && lowFps > 0
-                              ? '低帧 ${lowFps.toStringAsFixed(0)}'
-                              : '低帧 —',
+                              ? context.tr('低帧 ${lowFps.toStringAsFixed(0)}')
+                              : context.tr('低帧 —'),
                           style: TextStyle(color: tone),
                         ),
                         const SizedBox(width: 12),
@@ -239,12 +241,14 @@ class _FrameStatsOverlayState extends State<FrameStatsOverlay> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '预算 ${FrameStats.formatMs(budget)}',
+                          context.tr('预算 ${FrameStats.formatMs(budget)}'),
                           style: TextStyle(color: tone),
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '峰值 ${FrameStats.formatMs(live ? stats.worstMs : 0)}',
+                          context.tr(
+                            '峰值 ${FrameStats.formatMs(live ? stats.worstMs : 0)}',
+                          ),
                         ),
                       ],
                     ),

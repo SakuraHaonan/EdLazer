@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/animation/lyric_spring.dart';
+import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
@@ -23,7 +24,7 @@ const _track = Track(
 
 class _Catalog extends Catalog {
   @override
-  Future<String?> audioUrlFor(Track track) async => null;
+  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => GatewayLyrics(
     lrc: [

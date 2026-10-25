@@ -2,7 +2,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../theme/apple_design.dart';
+import '../tv/tv_mode.dart';
 
 /// A translucent Apple material: blur plus a semantic glass tint and hairline.
 ///
@@ -85,7 +87,7 @@ class ApplePageTitle extends StatelessWidget {
                 Semantics(
                   header: true,
                   child: Text(
-                    title,
+                    context.tr(title),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: style,
@@ -94,7 +96,7 @@ class ApplePageTitle extends StatelessWidget {
                 if (subtitle != null && subtitle!.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 5),
                   Text(
-                    subtitle!,
+                    context.tr(subtitle!),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -145,7 +147,7 @@ class AppleSectionHeader extends StatelessWidget {
               children: <Widget>[
                 Flexible(
                   child: Text(
-                    title,
+                    context.tr(title),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleLarge?.copyWith(
@@ -160,7 +162,7 @@ class AppleSectionHeader extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 1),
                     child: Text(
-                      subtitle!,
+                      context.tr(subtitle!),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -213,7 +215,7 @@ class AppleGroupedCard extends StatelessWidget {
 }
 
 /// A single list row with Apple's vertical rhythm and press highlight.
-class AppleListTile extends StatelessWidget {
+class AppleListTile extends StatefulWidget {
   const AppleListTile({
     super.key,
     required this.title,
@@ -238,17 +240,24 @@ class AppleListTile extends StatelessWidget {
   final double minHeight;
 
   @override
+  State<AppleListTile> createState() => _AppleListTileState();
+}
+
+class _AppleListTileState extends State<AppleListTile> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final Widget row = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: minHeight),
+      constraints: BoxConstraints(minHeight: widget.minHeight),
       child: Padding(
-        padding: padding,
+        padding: widget.padding,
         child: Row(
           children: <Widget>[
-            if (leading != null) ...<Widget>[
-              leading!,
+            if (widget.leading != null) ...<Widget>[
+              widget.leading!,
               const SizedBox(width: 12),
             ],
             Expanded(
@@ -257,17 +266,18 @@ class AppleListTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    title,
+                    widget.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: apple.label,
                     ),
                   ),
-                  if (subtitle != null && subtitle!.isNotEmpty) ...<Widget>[
+                  if (widget.subtitle != null &&
+                      widget.subtitle!.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 1),
                     Text(
-                      subtitle!,
+                      widget.subtitle!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -278,11 +288,11 @@ class AppleListTile extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) ...<Widget>[
+            if (widget.trailing != null) ...<Widget>[
               const SizedBox(width: 12),
-              trailing!,
+              widget.trailing!,
             ],
-            if (showChevron) ...<Widget>[
+            if (widget.showChevron) ...<Widget>[
               const SizedBox(width: 8),
               Icon(
                 Icons.chevron_right_rounded,
@@ -294,15 +304,29 @@ class AppleListTile extends StatelessWidget {
         ),
       ),
     );
-    if (onTap == null && onLongPress == null) return row;
+    if (widget.onTap == null && widget.onLongPress == null) return row;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        onFocusChange: (bool value) => setState(() => _focused = value),
         highlightColor: apple.fill,
         splashFactory: NoSplash.splashFactory,
-        child: row,
+        child: Stack(
+          children: <Widget>[
+            row,
+            if (_focused && TvScope.isActive(context))
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: TvFocusOutline(
+                    borderRadius: BorderRadius.circular(10),
+                    width: 2,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -334,10 +358,7 @@ class AppleIconTile extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: <Color>[
-            Color.lerp(color, Colors.white, .15)!,
-            color,
-          ],
+          colors: <Color>[Color.lerp(color, Colors.white, .15)!, color],
         ),
         borderRadius: BorderRadius.circular(radius),
       ),
@@ -379,7 +400,7 @@ class AppleEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              message,
+              context.tr(message),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: apple.secondaryLabel,
@@ -407,7 +428,7 @@ class AppleSearchField extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onChanged,
-    this.hintText = '搜索歌曲、歌手或歌单',
+    this.hintText,
     this.onClear,
     this.autofocus = false,
     this.height = 56,
@@ -416,7 +437,7 @@ class AppleSearchField extends StatelessWidget {
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
-  final String hintText;
+  final String? hintText;
   final VoidCallback? onClear;
   final bool autofocus;
 
@@ -431,7 +452,7 @@ class AppleSearchField extends StatelessWidget {
       child: SearchBar(
         controller: controller,
         onChanged: onChanged,
-        hintText: hintText,
+        hintText: context.tr(hintText ?? '搜索歌曲、歌手或歌单'),
         autoFocus: autofocus,
         // A search field, not a button: no elevation, no shadow and no hover
         // wash. Users who want it will click it.
@@ -453,7 +474,7 @@ class AppleSearchField extends StatelessWidget {
         trailing: <Widget>[
           if (controller.text.isNotEmpty)
             IconButton(
-              tooltip: '清除',
+              tooltip: context.tr('清除'),
               onPressed: onClear,
               icon: const Icon(Icons.close),
             ),

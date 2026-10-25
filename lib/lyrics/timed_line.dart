@@ -202,7 +202,7 @@ class _WordPainter extends CustomPainter {
   final _WordLayout layout;
   final Duration Function() position;
   final double Function() emphasis;
-  static final cjk = RegExp(r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]');
+  static final cjk = RegExp(r'[぀-ヿ㐀-鿿가-힯]');
   @override
   void paint(Canvas canvas, Size size) {
     final focus = emphasis().clamp(0.0, 1.0);

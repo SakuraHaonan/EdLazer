@@ -211,9 +211,11 @@ class _SongCommentsViewState extends State<SongCommentsView> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                _comments.unsupported
-                                    ? '这首歌暂不支持查看评论'
-                                    : _comments.error ?? '这首歌还没有评论',
+                                context.tr(
+                                  _comments.unsupported
+                                      ? '这首歌暂不支持查看评论'
+                                      : _comments.error ?? '这首歌还没有评论',
+                                ),
                                 textAlign: TextAlign.center,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: scheme.onSurfaceVariant,
@@ -269,7 +271,7 @@ class _SongCommentsViewState extends State<SongCommentsView> {
                                     : _comments.error != null
                                     ? Column(
                                         children: <Widget>[
-                                          Text(
+                                          TrText(
                                             _comments.error!,
                                             style: theme.textTheme.bodySmall
                                                 ?.copyWith(
@@ -291,7 +293,7 @@ class _SongCommentsViewState extends State<SongCommentsView> {
                                         child: const TrText('加载更多评论'),
                                       )
                                     : Text(
-                                        '已显示全部评论',
+                                        context.tr('已显示全部评论'),
                                         style: theme.textTheme.labelMedium
                                             ?.copyWith(
                                               color: scheme.onSurfaceVariant,
@@ -377,7 +379,7 @@ class _CommentsSectionLabel extends StatelessWidget {
     return Row(
       children: <Widget>[
         Text(
-          label,
+          context.tr(label),
           style: theme.textTheme.titleSmall?.copyWith(color: scheme.onSurface),
         ),
         const SizedBox(width: 12),
@@ -564,7 +566,7 @@ class _CommentRow extends StatelessWidget {
                   borderRadius: AppShape.mdRadius,
                 ),
                 child: Text(
-                  '${reply.author}：${reply.content}',
+                  _replyLine(reply),
                   style: theme.textTheme.bodySmall?.copyWith(
                     height: 1.6,
                     color: scheme.onSurfaceVariant,
@@ -579,3 +581,7 @@ class _CommentRow extends StatelessWidget {
     );
   }
 }
+
+/// Author and content are user data; keep the full-width colon in the join
+/// instead of passing the line through the translation table.
+String _replyLine(CommentReply reply) => '${reply.author}：${reply.content}';

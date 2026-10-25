@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/animation/lyric_word_motion.dart';
 import 'package:lazer_nextgen/audio/audio_engine.dart';
+import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/lyrics.dart';
 import 'package:lazer_nextgen/data/models.dart';
@@ -37,7 +38,7 @@ class _Catalog extends Catalog {
   @override
   Future<HomeFeed?> loadHome({int? userId}) async => null;
   @override
-  Future<String?> audioUrlFor(Track track) async => null;
+  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics(
     lrc: '[00:00]First line\n[00:02]Second line\n[00:04]Third line',
@@ -54,7 +55,7 @@ const _delegates = <LocalizationsDelegate<dynamic>>[
 
 class _WordCatalog extends _Catalog {
   @override
-  Future<String?> audioUrlFor(Track track) async => 'fixture';
+  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => 'fixture';
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics(
     yrc: '[0,1000](0,500,0)最初(500,500,0)の行\n[1000,1500](1000,1500,0)次の行',
@@ -192,8 +193,8 @@ void main() {
         expect(catalogue.messages.values.every((s) => s.isNotEmpty), true);
       }
       expect(catalogues[1].text('搜索'), '搜尋');
-      expect(catalogues[2].text('播放队列 · 16 首'), '再生キュー · 16 曲');
-      expect(catalogues[3].text('播放队列 · 16 首'), 'Play queue · 16 songs');
+      expect(catalogues[2].text('16 首 · 120 MB'), '16 曲 · 120 MB');
+      expect(catalogues[3].text('16 首 · 120 MB'), '16 songs · 120 MB');
       expect(
         catalogues[3].text('将「設定」的封面保存在设备中。'),
         'Save the artwork for “設定” to this device.',
@@ -241,7 +242,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(state.language, AppLanguage.japanese);
     expect(find.text('表示言語'), findsNothing);
-    expect(find.text('语言'), findsOneWidget);
+    expect(find.text('言語'), findsOneWidget);
     expect(
       (await SharedPreferences.getInstance()).getString('lazer_language'),
       'ja',

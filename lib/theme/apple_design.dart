@@ -1,5 +1,8 @@
-﻿import 'package:flutter/cupertino.dart'
-    show CupertinoPageTransitionsBuilder, CupertinoTextThemeData, CupertinoThemeData;
+import 'package:flutter/cupertino.dart'
+    show
+        CupertinoPageTransitionsBuilder,
+        CupertinoTextThemeData,
+        CupertinoThemeData;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
@@ -31,6 +34,14 @@ abstract final class AppleColors {
   static const Color systemGray4 = Color(0xFFD1D1D6);
   static const Color systemGray5 = Color(0xFFE5E5EA);
   static const Color systemGray6 = Color(0xFFF2F2F7);
+
+  /// The empty canvas behind the shell when the artwork backdrop is off.
+  ///
+  /// The dark theme's system background is pure black, which reads as a hole
+  /// in a desktop window; with nothing painted behind the interface this deep
+  /// warm grey keeps the window visibly a surface while still sitting below
+  /// the grouped-card tone.
+  static const Color darkCanvas = Color(0xFF141413);
 }
 
 /// Dynamic semantic colours for the current brightness.
@@ -288,7 +299,9 @@ ThemeData buildAppleTheme({
   final Color accent = seedAccent ?? base.accent;
   final AppleSemanticColors apple = base.copyWith(
     accent: accent,
-    accentSoft: accent.withValues(alpha: brightness == Brightness.dark ? .18 : .12),
+    accentSoft: accent.withValues(
+      alpha: brightness == Brightness.dark ? .18 : .12,
+    ),
   );
   final ColorScheme scheme = ColorScheme(
     brightness: brightness,
@@ -342,14 +355,12 @@ ThemeData buildAppleTheme({
   // Apple platforms get their native SF face; everywhere else the bundled
   // MiSans keeps Latin and CJK visually consistent (and renders correctly in
   // widget tests, which otherwise fall back to Flutter's square Ahem face).
-  final String? uiFont = defaultTargetPlatform == TargetPlatform.iOS ||
+  final String? uiFont =
+      defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.macOS
       ? null
       : AppFonts.sans;
-  final TextTheme text = appleTextTheme(
-    color: apple.label,
-    fontFamily: uiFont,
-  );
+  final TextTheme text = appleTextTheme(color: apple.label, fontFamily: uiFont);
   final TextTheme hintText = appleTextTheme(
     color: apple.secondaryLabel,
     fontFamily: uiFont,
@@ -397,9 +408,7 @@ ThemeData buildAppleTheme({
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: apple.tertiaryBackground,

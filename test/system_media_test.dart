@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/audio/audio_engine.dart';
 import 'package:lazer_nextgen/audio/system_media_handler.dart';
 import 'package:lazer_nextgen/audio/windows_media_platform.dart';
+import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
@@ -48,7 +49,7 @@ class _Gateway extends NeteaseGateway {
 class _Catalog extends Catalog {
   _Catalog() : super(gateway: _Gateway());
   @override
-  Future<String?> audioUrlFor(Track track) async => track.id;
+  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => track.id;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics();
 }

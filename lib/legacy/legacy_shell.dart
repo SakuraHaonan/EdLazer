@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
+import '../l10n/app_localizations.dart';
+import '../local/local_music_page.dart';
 import '../state/app_state.dart';
 import '../state/song_comments_controller.dart';
 import '../state/detail_requests.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
+import '../tv/tv_mode.dart';
 import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/artwork_image.dart';
@@ -47,6 +50,7 @@ class _LegacyShellState extends State<LegacyShell>
   Album? _album;
   ArtistRef? _artist;
   MusicChart? _chart;
+  bool _localMusic = false;
   bool _artistSongs = false;
   AlbumReleaseGroup? _artistReleases;
   bool _comments = false;
@@ -76,6 +80,20 @@ class _LegacyShellState extends State<LegacyShell>
         );
     albumDetailRequest.addListener(_onAlbumRequest);
     artistDetailRequest.addListener(_onArtistRequest);
+    TvOverlayStack.instance.addListener(_onTvOverlayChanged);
+  }
+
+  bool _overlayRefreshScheduled = false;
+
+  /// The queue and volume cards live in the overlay rather than in this route,
+  /// so Back must consult their registry before its own navigation.
+  void _onTvOverlayChanged() {
+    if (!mounted || _overlayRefreshScheduled) return;
+    _overlayRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _overlayRefreshScheduled = false;
+      if (mounted) setState(() {});
+    });
   }
 
   void _onNowPlayingStatus(AnimationStatus status) {
@@ -95,6 +113,7 @@ class _LegacyShellState extends State<LegacyShell>
     _commentsController?.dispose();
     albumDetailRequest.removeListener(_onAlbumRequest);
     artistDetailRequest.removeListener(_onArtistRequest);
+    TvOverlayStack.instance.removeListener(_onTvOverlayChanged);
     super.dispose();
   }
 
@@ -107,12 +126,30 @@ class _LegacyShellState extends State<LegacyShell>
       _artistSongs = false;
       _artistReleases = null;
       _comments = false;
+      _localMusic = false;
     });
   }
 
   void _openPlaylist(Playlist playlist) {
     setState(() {
       _playlist = playlist;
+      _album = null;
+      _artist = null;
+      _chart = null;
+      _artistSongs = false;
+      _artistReleases = null;
+      _comments = false;
+      _localMusic = false;
+    });
+  }
+
+  /// 音乐库 → 本地音乐. It keeps the library section selected so the rail still
+  /// reads as the current place, while the content pane swaps to the page.
+  void _openLocalMusic() {
+    setState(() {
+      _section = _LegacySection.library;
+      _localMusic = true;
+      _playlist = null;
       _album = null;
       _artist = null;
       _chart = null;
@@ -136,6 +173,7 @@ class _LegacyShellState extends State<LegacyShell>
       _chart = null;
       _artistSongs = false;
       _artistReleases = null;
+      _localMusic = false;
       _playlist = Playlist(
         id: album.id,
         name: album.title,
@@ -162,6 +200,7 @@ class _LegacyShellState extends State<LegacyShell>
       _playlist = null;
       _album = null;
       _comments = false;
+      _localMusic = false;
     });
   }
 
@@ -175,6 +214,7 @@ class _LegacyShellState extends State<LegacyShell>
     _artistSongs = false;
     _artistReleases = null;
     _comments = false;
+    _localMusic = false;
   });
 
   void _openArtistReleases(AlbumReleaseGroup group) =>
@@ -192,6 +232,7 @@ class _LegacyShellState extends State<LegacyShell>
       _artist = null;
       _chart = null;
       _comments = false;
+      _localMusic = false;
     });
   }
 
@@ -219,16 +260,36 @@ class _LegacyShellState extends State<LegacyShell>
     _nowPlayingMotion.reverse();
   }
 
+  bool get _hasOpenDetail =>
+      _playlist != null ||
+      _album != null ||
+      _artist != null ||
+      _chart != null ||
+      _comments ||
+      _localMusic;
+
+  /// A remote's Back button is the only navigation affordance a television
+  /// has. It closes the player, then detail pages, then returns to 发现; only
+  /// at the browse root does it leave the app.
+  void _handleBack() {
+    if (TvOverlayStack.instance.closeTop()) return;
+    if (_nowPlayingOpen) {
+      _closeNowPlaying();
+      return;
+    }
+    if (_hasOpenDetail) {
+      _backToRoot();
+      return;
+    }
+    if (_section != _LegacySection.home) _select(_LegacySection.home);
+  }
+
   // -- build ----------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     final Brightness brightness = Theme.of(context).brightness;
-    final Color accent =
-        state.legacyPalette == LegacyPaletteMode.nowPlaying &&
-            state.legacySeed != null
-        ? state.legacySeed!
-        : AppleColors.musicRed;
+    final Color accent = state.legacyAccentSeed ?? AppleColors.musicRed;
     return Theme(
       data: buildAppleTheme(brightness: brightness, seedAccent: accent),
       child: AnimatedBuilder(
@@ -238,18 +299,28 @@ class _LegacyShellState extends State<LegacyShell>
           final Size window = MediaQuery.sizeOf(context);
           final bool compact = useCompactLayout(state.uiMode, window.width);
           final bool compactBar = window.width < 1_000;
-          final bool hasBackdrop =
-              state.legacyBackground != LegacyBackgroundMode.off ||
+          final bool paintedBackdrop =
+              state.legacyBackground != LegacyBackgroundMode.off;
+          // The "follow the song" palette still needs the artwork seed when
+          // the backdrop is off, so the widget stays mounted to extract it.
+          final bool needsSeed =
               state.legacyPalette == LegacyPaletteMode.nowPlaying;
+          // With no artwork behind it, pure black reads as a hole in the
+          // window; the dark theme lifts that empty canvas to a deep warm
+          // grey instead.
+          final Color canvas = brightness == Brightness.dark && !paintedBackdrop
+              ? AppleColors.darkCanvas
+              : apple.background;
           final Widget shell = Scaffold(
-            backgroundColor: apple.background,
+            backgroundColor: canvas,
             body: Stack(
               fit: StackFit.expand,
               children: <Widget>[
-                if (hasBackdrop)
+                if (paintedBackdrop || needsSeed)
                   LegacyAlbumBackdrop(
                     track: state.current,
                     mode: state.legacyBackground,
+                    imagePath: state.legacyBackgroundImagePath,
                     uiAlpha: state.legacyUiAlpha,
                     onSeed: state.setLegacySeed,
                   ),
@@ -259,15 +330,18 @@ class _LegacyShellState extends State<LegacyShell>
                 // remain readable over arbitrary artwork.
                 Positioned.fill(
                   child: ColoredBox(
-                    color: hasBackdrop
+                    color: paintedBackdrop
                         ? apple.background.withValues(
                             alpha: (state.legacyUiAlpha * .9).clamp(.56, .92),
                           )
-                        : apple.background,
+                        : canvas,
                   ),
                 ),
                 SafeArea(
                   bottom: false,
+                  // Televisions overscan: keep the chrome inside the panel's
+                  // visible box even though Android reports no safe insets.
+                  minimum: tvSafeInsets(context),
                   child: compact
                       ? _compactLayout(apple, compactBar: compactBar)
                       : _desktopLayout(apple, compactBar: compactBar),
@@ -275,47 +349,64 @@ class _LegacyShellState extends State<LegacyShell>
               ],
             ),
           );
-          return Semantics(
-            key: const ValueKey<String>('app-semantics-root'),
-            container: true,
-            label: 'Lazer',
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                ExcludeSemantics(
-                  excluding: _nowPlayingOpen,
-                  child: ExcludeFocus(
+          return PopScope<void>(
+            // Back is handled in-app while a page or the player is open; at
+            // the browse root it keeps the platform's default (leave the app).
+            canPop:
+                !TvOverlayStack.instance.hasOpen &&
+                !_nowPlayingOpen &&
+                !_hasOpenDetail &&
+                _section == _LegacySection.home,
+            onPopInvokedWithResult: (bool didPop, void _) {
+              if (!didPop) _handleBack();
+            },
+            child: Semantics(
+              key: const ValueKey<String>('app-semantics-root'),
+              container: true,
+              label: 'Lazer',
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  ExcludeSemantics(
                     excluding: _nowPlayingOpen,
-                    child: TickerMode(
-                      enabled: !_nowPlayingOpen,
-                      child: RepaintBoundary(child: shell),
+                    child: ExcludeFocus(
+                      excluding: _nowPlayingOpen,
+                      child: TickerMode(
+                        enabled: !_nowPlayingOpen,
+                        child: RepaintBoundary(child: shell),
+                      ),
                     ),
                   ),
-                ),
-                if (_nowPlayingOpen)
-                  Positioned.fill(
-                    child: SlideTransition(
-                      position: _nowPlayingSlide,
-                      child: Semantics(
-                        key: const ValueKey<String>('now-playing-semantics'),
-                        container: true,
-                        child: ExcludeSemantics(
-                          excluding: !_nowPlayingSettled,
-                          child: TickerMode(
-                            enabled: _nowPlayingSettled,
-                            child: RepaintBoundary(
-                              child: NowPlayingPage(
-                                state: state,
-                                onClose: _closeNowPlaying,
-                                entranceSettled: _nowPlayingSettled,
+                  if (_nowPlayingOpen)
+                    Positioned.fill(
+                      child: SlideTransition(
+                        position: _nowPlayingSlide,
+                        child: Semantics(
+                          key: const ValueKey<String>('now-playing-semantics'),
+                          container: true,
+                          child: ExcludeSemantics(
+                            excluding: !_nowPlayingSettled,
+                            child: TickerMode(
+                              enabled: _nowPlayingSettled,
+                              child: RepaintBoundary(
+                                // Focus starts on the first control of the
+                                // player so a remote can operate it at once.
+                                child: TvFocusRegion(
+                                  focusToken: _nowPlayingSettled,
+                                  child: NowPlayingPage(
+                                    state: state,
+                                    onClose: _closeNowPlaying,
+                                    entranceSettled: _nowPlayingSettled,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           );
         },
@@ -380,31 +471,31 @@ class _LegacyShellState extends State<LegacyShell>
             selectedIndex: _section.index,
             onDestinationSelected: (int index) =>
                 _select(_LegacySection.values[index]),
-            destinations: const <NavigationDestination>[
+            destinations: <NavigationDestination>[
               NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: '主页',
+                icon: const Icon(Icons.home_outlined),
+                selectedIcon: const Icon(Icons.home_rounded),
+                label: context.tr('主页'),
               ),
               NavigationDestination(
-                icon: Icon(Icons.search_outlined),
-                selectedIcon: Icon(Icons.search_rounded),
-                label: '搜索',
+                icon: const Icon(Icons.search_outlined),
+                selectedIcon: const Icon(Icons.search_rounded),
+                label: context.tr('搜索'),
               ),
               NavigationDestination(
-                icon: Icon(Icons.library_music_outlined),
-                selectedIcon: Icon(Icons.library_music_rounded),
-                label: '音乐库',
+                icon: const Icon(Icons.library_music_outlined),
+                selectedIcon: const Icon(Icons.library_music_rounded),
+                label: context.tr('音乐库'),
               ),
               NavigationDestination(
-                icon: Icon(Icons.favorite_border_rounded),
-                selectedIcon: Icon(Icons.favorite_rounded),
-                label: '我喜欢',
+                icon: const Icon(Icons.favorite_border_rounded),
+                selectedIcon: const Icon(Icons.favorite_rounded),
+                label: context.tr('我喜欢'),
               ),
               NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings_rounded),
-                label: '设置',
+                icon: const Icon(Icons.settings_outlined),
+                selectedIcon: const Icon(Icons.settings_rounded),
+                label: context.tr('设置'),
               ),
             ],
           ),
@@ -440,7 +531,7 @@ class _LegacyShellState extends State<LegacyShell>
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                 children: <Widget>[
-                  _sidebarLabel(apple, '浏览'),
+                  _sidebarLabel(apple, '浏览'), // i18n:key
                   LegacyRailItem(
                     icon: Icons.search_rounded,
                     label: '搜索',
@@ -497,7 +588,7 @@ class _LegacyShellState extends State<LegacyShell>
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: <Widget>[
                           Text(
-                            '资料库',
+                            context.tr('资料库'),
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: apple.secondaryLabel,
@@ -556,7 +647,7 @@ class _LegacyShellState extends State<LegacyShell>
     return Padding(
       padding: const EdgeInsets.fromLTRB(9, 12, 9, 5),
       child: Text(
-        label,
+        context.tr(label),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: apple.secondaryLabel,
           fontWeight: FontWeight.w600,
@@ -567,7 +658,11 @@ class _LegacyShellState extends State<LegacyShell>
 
   Widget _desktopToolbar(AppleSemanticColors apple) {
     final bool canGoBack =
-        _playlist != null || _artist != null || _chart != null || _comments;
+        _playlist != null ||
+        _artist != null ||
+        _chart != null ||
+        _comments ||
+        _localMusic;
     return SizedBox(
       height: 64,
       child: Padding(
@@ -584,7 +679,7 @@ class _LegacyShellState extends State<LegacyShell>
             ],
             Expanded(
               child: Text(
-                _pageTitle,
+                context.tr(_pageTitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -601,7 +696,11 @@ class _LegacyShellState extends State<LegacyShell>
 
   Widget _mobileToolbar(AppleSemanticColors apple) {
     final bool canGoBack =
-        _playlist != null || _artist != null || _chart != null || _comments;
+        _playlist != null ||
+        _artist != null ||
+        _chart != null ||
+        _comments ||
+        _localMusic;
     return SizedBox(
       height: 50,
       child: Padding(
@@ -619,7 +718,7 @@ class _LegacyShellState extends State<LegacyShell>
               const SizedBox(width: 8),
             Expanded(
               child: Text(
-                _pageTitle,
+                context.tr(_pageTitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -652,21 +751,24 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   String get _pageTitle {
-    if (_comments) return '评论';
+    if (_comments) return '评论'; // i18n:key
+    if (_localMusic) return '本地音乐'; // i18n:key
     if (_chart != null) return _chart!.title;
     if (_playlist != null) return _playlist!.name;
     if (_artist != null) {
-      if (_artistSongs) return '全部歌曲';
-      if (_artistReleases == AlbumReleaseGroup.album) return '全部专辑';
-      if (_artistReleases == AlbumReleaseGroup.singleEp) return '全部单曲 / EP';
+      if (_artistSongs) return '全部歌曲'; // i18n:key
+      if (_artistReleases == AlbumReleaseGroup.album) return '全部专辑'; // i18n:key
+      if (_artistReleases == AlbumReleaseGroup.singleEp) {
+        return '全部单曲 / EP'; // i18n:key
+      }
       return _artist!.name;
     }
     return switch (_section) {
-      _LegacySection.home => '发现',
-      _LegacySection.search => '搜索',
-      _LegacySection.library => '资料库',
-      _LegacySection.likes => '我喜欢的音乐',
-      _LegacySection.settings => '设置',
+      _LegacySection.home => '发现', // i18n:key
+      _LegacySection.search => '搜索', // i18n:key
+      _LegacySection.library => '资料库', // i18n:key
+      _LegacySection.likes => '我喜欢的音乐', // i18n:key
+      _LegacySection.settings => '设置', // i18n:key
     };
   }
 
@@ -680,7 +782,7 @@ class _LegacyShellState extends State<LegacyShell>
       return Padding(
         padding: const EdgeInsets.fromLTRB(9, 5, 9, 8),
         child: Text(
-          state.isGuest ? '登录后同步你的歌单' : '暂无歌单',
+          context.tr(state.isGuest ? '登录后同步你的歌单' : '暂无歌单'),
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: apple.tertiaryLabel),
@@ -700,9 +802,9 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   String get _accountInitial {
-    if (state.isGuest) return '访';
+    if (state.isGuest) return '访'; // i18n:key
     final String name = state.user.name.trim();
-    if (name.isEmpty) return '你';
+    if (name.isEmpty) return '你'; // i18n:key
     return name.characters.first;
   }
 
@@ -725,30 +827,30 @@ class _LegacyShellState extends State<LegacyShell>
       enabled: false,
       child: Text(
         state.isGuest
-            ? '游客模式'
-            : '${state.user.name} · ${state.user.vipLabel ?? '普通用户'}',
+            ? context.tr('游客模式')
+            : '${state.user.name} · ${context.tr(state.user.vipLabel ?? '普通用户')}',
         style: Theme.of(
           context,
         ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
       ),
     ),
     if (state.isGuest)
-      const PopupMenuItem<String>(value: 'login', child: Text('登录'))
+      PopupMenuItem<String>(value: 'login', child: TrText('登录'))
     else
-      const PopupMenuItem<String>(value: 'logout', child: Text('退出登录')),
-    const PopupMenuItem<String>(value: 'settings', child: Text('设置')),
+      PopupMenuItem<String>(value: 'logout', child: TrText('退出登录')),
+    PopupMenuItem<String>(value: 'settings', child: TrText('设置')),
   ];
 
   /// avatar + name on the left, the theme toggle on its right. Tapping the
   /// avatar opens the account menu; a guest gets the login flow instead.
   Widget _accountRow(AppleSemanticColors apple) {
-    final String name = state.isGuest ? '游客' : state.user.name;
+    final String name = state.isGuest ? context.tr('游客') : state.user.name;
     final String detail = state.isGuest
-        ? '登录以同步资料库'
-        : state.user.vipLabel ?? '普通用户';
+        ? context.tr('登录以同步资料库')
+        : context.tr(state.user.vipLabel ?? '普通用户');
     return PopupMenuButton<String>(
       key: const ValueKey('rail-account'),
-      tooltip: state.isGuest ? '登录' : state.user.name,
+      tooltip: context.tr(state.isGuest ? '登录' : state.user.name),
       offset: const Offset(0, -6),
       color: apple.tertiaryBackground,
       surfaceTintColor: Colors.transparent,
@@ -812,7 +914,7 @@ class _LegacyShellState extends State<LegacyShell>
 
   Widget _accountButton(AppleSemanticColors apple, {double radius = 15}) {
     return PopupMenuButton<String>(
-      tooltip: state.isGuest ? '登录' : state.user.name,
+      tooltip: context.tr(state.isGuest ? '登录' : state.user.name),
       offset: const Offset(0, 42),
       color: apple.tertiaryBackground,
       surfaceTintColor: Colors.transparent,
@@ -860,12 +962,19 @@ class _LegacyShellState extends State<LegacyShell>
           ),
         );
       },
-      child: KeyedSubtree(key: ValueKey<String>(_contentKey), child: page),
+      child: KeyedSubtree(
+        key: ValueKey<String>(_contentKey),
+        // Each page gets its own focus region. Opening a section, a playlist
+        // or an album therefore puts the remote on that page's first control
+        // instead of leaving focus behind on the element that opened it.
+        child: TvFocusRegion(focusToken: _nowPlayingOpen, child: page),
+      ),
     );
   }
 
   String get _contentKey {
     if (_comments) return 'comments';
+    if (_localMusic) return 'local-music';
     if (_chart != null) return 'chart:${_chart!.id}';
     if (_artist != null) {
       final String view = _artistSongs
@@ -907,6 +1016,9 @@ class _LegacyShellState extends State<LegacyShell>
     final MusicChart? chart = _chart;
     if (chart != null) {
       return LegacyChartPage(state: state, chart: chart);
+    }
+    if (_localMusic) {
+      return LocalMusicPage(state: state);
     }
     final ArtistRef? artist = _artist;
     if (artist != null) {
@@ -952,9 +1064,13 @@ class _LegacyShellState extends State<LegacyShell>
       _LegacySection.library => LegacyLibraryPage(
         state: state,
         onOpenPlaylist: _openPlaylist,
+        onOpenLocalMusic: _openLocalMusic,
       ),
       _LegacySection.likes => LegacyLikesPage(state: state),
-      _LegacySection.settings => LegacySettingsPage(state: state),
+      _LegacySection.settings => LegacySettingsPage(
+        state: state,
+        onOpenLocalMusic: _openLocalMusic,
+      ),
     };
   }
 }
@@ -985,19 +1101,24 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: Tooltip(
-        message: widget.tooltip,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        message: context.tr(widget.tooltip),
+        child: TvTapTarget(
           onTap: feedbackAction(context, widget.onPressed),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: _hovering ? apple.tertiaryFill : Colors.transparent,
-              shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(17),
+          focusScale: 1.08,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: feedbackAction(context, widget.onPressed),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: _hovering ? apple.tertiaryFill : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(widget.icon, size: 20, color: apple.secondaryLabel),
             ),
-            child: Icon(widget.icon, size: 20, color: apple.secondaryLabel),
           ),
         ),
       ),
@@ -1040,19 +1161,27 @@ class _LibraryRefreshButtonState extends State<_LibraryRefreshButton>
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: '同步歌单',
+    label: context.tr('同步歌单'),
     button: true,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    child: TvTapTarget(
       onTap: () => unawaited(_refresh()),
-      child: SizedBox.square(
-        dimension: 16,
-        child: RotationTransition(
-          turns: CurvedAnimation(parent: _rotation, curve: Curves.easeOutCubic),
-          child: Icon(
-            Icons.sync_rounded,
-            size: 12,
-            color: AppleSemanticColors.of(context).secondaryLabel,
+      borderRadius: BorderRadius.circular(9),
+      focusScale: 1.15,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => unawaited(_refresh()),
+        child: SizedBox.square(
+          dimension: 16,
+          child: RotationTransition(
+            turns: CurvedAnimation(
+              parent: _rotation,
+              curve: Curves.easeOutCubic,
+            ),
+            child: Icon(
+              Icons.sync_rounded,
+              size: 12,
+              color: AppleSemanticColors.of(context).secondaryLabel,
+            ),
           ),
         ),
       ),
@@ -1082,7 +1211,7 @@ class _Avatar extends StatelessWidget {
       child: signedIn
           ? Icon(Icons.person_rounded, size: radius * 1.15, color: Colors.white)
           : Text(
-              label,
+              context.tr(label),
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -1150,6 +1279,7 @@ class _RailPlaylist extends StatefulWidget {
 
 class _RailPlaylistState extends State<_RailPlaylist> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1158,45 +1288,53 @@ class _RailPlaylistState extends State<_RailPlaylist> {
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+      child: TvTapTarget(
         onTap: feedbackAction(context, widget.onTap),
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: 34,
-          margin: const EdgeInsets.only(bottom: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 7),
-          decoration: BoxDecoration(
-            color: widget.selected
-                ? apple.fill
-                : _hovering
-                ? apple.tertiaryFill
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
-          ),
-          child: Row(
-            children: <Widget>[
-              LegacyCover(
-                url: widget.playlist.coverUrl,
-                size: 24,
-                radius: 5,
-                iconSize: 12,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  widget.playlist.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: widget.selected ? apple.label : apple.secondaryLabel,
-                    fontWeight: widget.selected
-                        ? FontWeight.w600
-                        : FontWeight.w400,
+        onFocusChange: (bool value) => setState(() => _focused = value),
+        borderRadius: BorderRadius.circular(7),
+        focusScale: 1.01,
+        child: GestureDetector(
+          onTap: feedbackAction(context, widget.onTap),
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 34,
+            margin: const EdgeInsets.only(bottom: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 7),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? apple.fill
+                  : _hovering || _focused
+                  ? apple.tertiaryFill
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Row(
+              children: <Widget>[
+                LegacyCover(
+                  url: widget.playlist.coverUrl,
+                  size: 24,
+                  radius: 5,
+                  iconSize: 12,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    widget.playlist.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: widget.selected || _focused
+                          ? apple.label
+                          : apple.secondaryLabel,
+                      fontWeight: widget.selected
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

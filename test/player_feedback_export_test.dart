@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lazer_nextgen/audio/audio_engine.dart';
+import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
@@ -40,7 +41,7 @@ class _Catalog extends Catalog {
   @override
   Future<HomeFeed?> loadHome({int? userId}) async => null;
   @override
-  Future<String?> audioUrlFor(Track track) async => 'fixture';
+  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => 'fixture';
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics(
     lrc: '[00:00]First line\n[00:01]Second line\n[00:02]Third line',
@@ -425,6 +426,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(state.lyrics.map((line) => line.text), <String>[
+        'First line',
+        'Second line',
+        'Third line',
+      ]);
       await tester.longPress(find.text('First line'));
       await tester.pumpAndSettle();
       expect(

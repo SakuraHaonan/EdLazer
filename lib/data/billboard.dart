@@ -214,7 +214,7 @@ class BillboardClient {
       if (latest.subtract(Duration(days: offset * 7)) case final date)
         ChartIssue(
           id: _dateId(date),
-          label: '${date.year} · ${date.month}月${date.day}日',
+          label: '${date.year} · ${date.month}月${date.day}日',  // i18n:key
         ),
   ];
 

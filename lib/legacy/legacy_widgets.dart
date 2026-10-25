@@ -1,7 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../data/models.dart';
+import '../l10n/app_localizations.dart';
 import '../theme/apple_design.dart';
+import '../tv/tv_mode.dart';
 import '../widgets/interaction_feedback.dart';
 import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
@@ -53,10 +55,7 @@ class LegacyCover extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: <Color>[
-            apple.tertiaryFill,
-            apple.secondaryFill,
-          ],
+          colors: <Color>[apple.tertiaryFill, apple.secondaryFill],
         ),
         borderRadius: BorderRadius.circular(radius),
       ),
@@ -87,7 +86,10 @@ class LegacyCover extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: apple.separator.withValues(alpha: .35), width: .5),
+        border: Border.all(
+          color: apple.separator.withValues(alpha: .35),
+          width: .5,
+        ),
       ),
       child: clipped,
     );
@@ -116,16 +118,18 @@ class LegacyPlaylistCard extends StatefulWidget {
 
 class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final bool raised = _hovering || _focused;
     final String detail =
         widget.subtitle ??
         <String>[
           if (widget.playlist.trackCount > 0)
-            '${widget.playlist.trackCount} 首',
+            context.tr('${widget.playlist.trackCount} 首'),
           if (widget.playlist.description.isNotEmpty)
             widget.playlist.description,
         ].join(' · ');
@@ -133,78 +137,83 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+      child: TvTapTarget(
         onTap: feedbackAction(context, widget.onTap),
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: widget.width,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              AnimatedScale(
-                scale: _hovering ? 1.018 : 1,
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                child: Stack(
-                  children: <Widget>[
-                    RepaintBoundary(
-                      child: LegacyCover(
-                        url: widget.playlist.coverUrl,
-                        size: widget.width,
-                        radius: 12,
+        onFocusChange: (bool value) => setState(() => _focused = value),
+        borderRadius: BorderRadius.circular(12),
+        child: GestureDetector(
+          onTap: feedbackAction(context, widget.onTap),
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: widget.width,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                AnimatedScale(
+                  scale: raised ? 1.018 : 1,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  child: Stack(
+                    children: <Widget>[
+                      RepaintBoundary(
+                        child: LegacyCover(
+                          url: widget.playlist.coverUrl,
+                          size: widget.width,
+                          radius: 12,
+                        ),
                       ),
-                    ),
-                    if (_hovering)
-                      Positioned(
-                        right: 8,
-                        bottom: 8,
-                        child: AnimatedOpacity(
-                          opacity: 1,
-                          duration: const Duration(milliseconds: 140),
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: .72),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: .18),
+                      if (raised)
+                        Positioned(
+                          right: 8,
+                          bottom: 8,
+                          child: AnimatedOpacity(
+                            opacity: 1,
+                            duration: const Duration(milliseconds: 140),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: .72),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: .18),
+                                ),
                               ),
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              size: 21,
-                              color: Colors.white,
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                size: 21,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                widget.playlist.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: apple.label,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              if (detail.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 1),
-                Text(
-                  detail,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: apple.secondaryLabel,
+                    ],
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.playlist.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: apple.label,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (detail.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 1),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: apple.secondaryLabel,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -223,6 +232,7 @@ class LegacyTrackRow extends StatefulWidget {
     required this.onTap,
     this.current = false,
     this.playing = false,
+    this.onMenuRequested,
   });
 
   final Track track;
@@ -231,132 +241,160 @@ class LegacyTrackRow extends StatefulWidget {
   final bool current;
   final bool playing;
 
+  /// Right-click or long-press position, in global coordinates.
+  final ValueChanged<Offset>? onMenuRequested;
+
   @override
   State<LegacyTrackRow> createState() => _LegacyTrackRowState();
 }
 
 class _LegacyTrackRowState extends State<LegacyTrackRow> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final bool wide = MediaQuery.sizeOf(context).width >= 940;
+    final bool highlighted = _hovering || _focused;
     final String? translated = widget.track.translatedTitle?.trim();
     final Color titleColor = widget.current ? apple.accent : apple.label;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: TvTapTarget(
         onTap: feedbackAction(context, widget.onTap),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-          decoration: BoxDecoration(
-            color: widget.current
-                ? apple.accentSoft
-                : _hovering
-                ? apple.fill
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: <Widget>[
-              SizedBox(
-                width: 28,
-                child: widget.current
-                    ? Icon(
-                        widget.playing
-                            ? Icons.graphic_eq_rounded
-                            : Icons.pause_rounded,
-                        size: 16,
-                        color: apple.accent,
-                      )
-                    : Text(
-                        '${widget.index + 1}',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: _hovering ? apple.secondaryLabel : apple.tertiaryLabel,
-                          fontFeatures: const <FontFeature>[
-                            FontFeature.tabularFigures(),
-                          ],
+        onFocusChange: (bool value) => setState(() => _focused = value),
+        focusScale: 1.006,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: feedbackAction(context, widget.onTap),
+          onSecondaryTapDown: widget.onMenuRequested == null
+              ? null
+              : (TapDownDetails details) =>
+                    widget.onMenuRequested!(details.globalPosition),
+          onLongPress: widget.onMenuRequested == null
+              ? null
+              : () {
+                  final RenderBox? box =
+                      context.findRenderObject() as RenderBox?;
+                  widget.onMenuRequested!(
+                    box?.localToGlobal(box.size.center(Offset.zero)) ??
+                        Offset.zero,
+                  );
+                },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            decoration: BoxDecoration(
+              color: widget.current
+                  ? apple.accentSoft
+                  : highlighted
+                  ? apple.fill
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 28,
+                  child: widget.current
+                      ? Icon(
+                          widget.playing
+                              ? Icons.graphic_eq_rounded
+                              : Icons.pause_rounded,
+                          size: 16,
+                          color: apple.accent,
+                        )
+                      : Text(
+                          '${widget.index + 1}',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: highlighted
+                                ? apple.secondaryLabel
+                                : apple.tertiaryLabel,
+                            fontFeatures: const <FontFeature>[
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 8),
+                LegacyCover(
+                  url: widget.track.coverUrl,
+                  size: 44,
+                  radius: 6,
+                  iconSize: 16,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 12,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        widget.track.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: titleColor,
+                          fontWeight: widget.current
+                              ? FontWeight.w600
+                              : FontWeight.w500,
                         ),
                       ),
-              ),
-              const SizedBox(width: 8),
-              LegacyCover(
-                url: widget.track.coverUrl,
-                size: 44,
-                radius: 6,
-                iconSize: 16,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 12,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      widget.track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: titleColor,
-                        fontWeight: widget.current ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                    ),
-                    if (translated != null && translated.isNotEmpty)
+                      if (translated != null && translated.isNotEmpty)
+                        Text(
+                          translated,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: apple.secondaryLabel,
+                          ),
+                        ),
                       Text(
-                        translated,
+                        widget.track.artist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: apple.secondaryLabel,
                         ),
                       ),
-                    Text(
-                      widget.track.artist,
+                    ],
+                  ),
+                ),
+                if (wide)
+                  Expanded(
+                    flex: 7,
+                    child: Text(
+                      widget.track.album,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: apple.secondaryLabel,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              if (wide)
-                Expanded(
-                  flex: 7,
-                  child: Text(
-                    widget.track.album,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: apple.secondaryLabel,
+                  ),
+                if (wide || highlighted)
+                  SizedBox(
+                    width: 46,
+                    child: Text(
+                      legacyDuration(widget.track.duration),
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: apple.secondaryLabel,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              if (wide || _hovering)
-                SizedBox(
-                  width: 46,
-                  child: Text(
-                    legacyDuration(widget.track.duration),
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: apple.secondaryLabel,
-                      fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -389,7 +427,7 @@ class LegacySectionHeader extends StatelessWidget {
             children: <Widget>[
               Flexible(
                 child: Text(
-                  title,
+                  context.tr(title),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleLarge?.copyWith(
@@ -404,7 +442,7 @@ class LegacySectionHeader extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 1),
                   child: Text(
-                    subtitle!,
+                    context.tr(subtitle!),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -443,57 +481,63 @@ class LegacyRailItem extends StatefulWidget {
 
 class _LegacyRailItemState extends State<LegacyRailItem> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    final Color labelColor = widget.selected
-        ? apple.label
-        : _hovering
+    final bool highlighted = _hovering || _focused;
+    final Color labelColor = widget.selected || highlighted
         ? apple.label
         : apple.secondaryLabel;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+      child: TvTapTarget(
         onTap: feedbackAction(context, widget.onTap),
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          height: 30,
-          padding: const EdgeInsets.symmetric(horizontal: 9),
-          decoration: BoxDecoration(
-            color: widget.selected
-                ? apple.fill
-                : _hovering
-                ? apple.tertiaryFill
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
-          ),
-          child: Row(
-            children: <Widget>[
-              Icon(
-                widget.icon,
-                size: 18,
-                color: widget.selected ? apple.accent : labelColor,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: labelColor,
-                    fontWeight: widget.selected
-                        ? FontWeight.w600
-                        : FontWeight.w400,
+        onFocusChange: (bool value) => setState(() => _focused = value),
+        borderRadius: BorderRadius.circular(7),
+        focusScale: 1.02,
+        child: GestureDetector(
+          onTap: feedbackAction(context, widget.onTap),
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? apple.fill
+                  : highlighted
+                  ? apple.tertiaryFill
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  widget.icon,
+                  size: 18,
+                  color: widget.selected ? apple.accent : labelColor,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    context.tr(widget.label),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: labelColor,
+                      fontWeight: widget.selected
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

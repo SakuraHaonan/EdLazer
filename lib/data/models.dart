@@ -37,6 +37,7 @@ class Track {
     this.albumId = 0,
     this.translatedTitle,
     this.artists = const [],
+    this.localPath,
   });
 
   final String id;
@@ -55,6 +56,26 @@ class Track {
   final String? translatedTitle;
   final List<ArtistRef> artists;
 
+  /// Absolute path of a downloaded or scanned file. When set the player reads
+  /// this file directly instead of resolving a stream from the service.
+  final String? localPath;
+
+  Track copyWith({String? localPath, int? coverSeed, String? coverUrl}) =>
+      Track(
+        id: id,
+        title: title,
+        artist: artist,
+        album: album,
+        duration: duration,
+        coverSeed: coverSeed ?? this.coverSeed,
+        accent: accent,
+        coverUrl: coverUrl ?? this.coverUrl,
+        albumId: albumId,
+        translatedTitle: translatedTitle,
+        artists: artists,
+        localPath: localPath ?? this.localPath,
+      );
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,
@@ -67,6 +88,7 @@ class Track {
     'albumId': albumId,
     'translatedTitle': translatedTitle,
     'artists': artists.map((artist) => artist.toJson()).toList(),
+    'localPath': localPath,
   };
 
   factory Track.fromJson(Map<String, dynamic> json) => Track(
@@ -81,6 +103,7 @@ class Track {
     albumId: json['albumId'] as int? ?? 0,
     translatedTitle: json['translatedTitle'] as String?,
     artists: ArtistRef.list(json['artists']),
+    localPath: json['localPath'] as String?,
   );
 }
 
@@ -311,7 +334,7 @@ class Album {
   final String? coverUrl;
   final List<ArtistRef> artists;
 
-  /// NetEase exposes values such as `\u4e13\u8f91` and `EP/Single` here.
+  /// NetEase exposes values such as `专辑` and `EP/Single` here.
   final String releaseType;
   final String subType;
 
@@ -319,10 +342,10 @@ class Album {
     final String value = '$releaseType $subType'.toLowerCase();
     if (value.contains('single') ||
         value.contains('ep') ||
-        value.contains('\u5355\u66f2')) {
+        value.contains('单曲')) {
       return AlbumReleaseGroup.singleEp;
     }
-    if (value.contains('album') || value.contains('\u4e13\u8f91')) {
+    if (value.contains('album') || value.contains('专辑')) {
       return AlbumReleaseGroup.album;
     }
     final int? count = trackCount;

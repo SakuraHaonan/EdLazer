@@ -231,9 +231,9 @@ class BiliboardClient {
   }
 
   String _issueLabel(int year, int week) {
-    if (year > 0 && week > 0) return '$year · 第 $week 周';
-    if (week > 0) return '第 $week 期';
-    return '历史期数';
+    if (year > 0 && week > 0) return '$year · 第 $week 周';  // i18n:key
+    if (week > 0) return '第 $week 期';  // i18n:key
+    return '历史期数';  // i18n:key
   }
 
   ChartEntry _entryFromJson(Map<String, dynamic> json) {
@@ -264,11 +264,11 @@ class BiliboardClient {
       final diff = (change['diff'] as num?)?.toInt();
       changeLabel = switch (kind) {
         'new' => 'NEW',
-        'up' => diff == null ? '上升' : '↑$diff',
-        'down' => diff == null ? '下降' : '↓$diff',
+        'up' => diff == null ? '上升' : '↑$diff',  // i18n:key
+        'down' => diff == null ? '下降' : '↓$diff',  // i18n:key
         'same' => '—',
-        'reentry' => '重返',
-        'revote' => '重投',
+        'reentry' => '重返',  // i18n:key
+        'revote' => '重投',  // i18n:key
         _ => null,
       };
     }

@@ -66,7 +66,8 @@ abstract class AudioEngine {
 }
 
 /// just_audio-backed engine used by the real app.
-class JustAudioEngine implements AudioEngine, BufferedAudioEngine, QueueAudioEngine {
+class JustAudioEngine
+    implements AudioEngine, BufferedAudioEngine, QueueAudioEngine {
   JustAudioEngine({AudioPlayer? player, this.activateSession})
     : _player =
           player ??
@@ -155,22 +156,33 @@ class JustAudioEngine implements AudioEngine, BufferedAudioEngine, QueueAudioEng
   Stream<int> get indexStream => _advanced.stream;
 
   @override
-  Future<void> setUrl(String url) async {
+  Future<void> setUrl(String url) {
     final generation = ++_generation;
     _hadSource = false;
     _completionSent = false;
     _queue = null;
     _commandedIndex = null;
-    final uri = Uri.parse(url);
-    if (uri.scheme == 'file') {
-      await _player.setFilePath(uri.toFilePath());
-    } else {
-      await _player.setUrl(url);
-    }
-    if (generation != _generation) return;
-    _commandedIndex = 0;
-    _hadSource = true;
-    if (_player.processingState == ProcessingState.completed) _emitCompletion();
+    // The single-source fallback has to take its turn with the queue loads:
+    // otherwise a `setQueue` that failed while another track was already
+    // loading let two platform loads run at once, which media_kit turns into
+    // a native crash.
+    return _serialize(() async {
+      // A newer load or a stop superseded this one before its turn; opening it
+      // now would tear down whatever the newer call is opening.
+      if (generation != _generation) return;
+      final uri = Uri.parse(url);
+      if (uri.scheme == 'file') {
+        await _player.setFilePath(uri.toFilePath());
+      } else {
+        await _player.setUrl(url);
+      }
+      if (generation != _generation) return;
+      _commandedIndex = 0;
+      _hadSource = true;
+      if (_player.processingState == ProcessingState.completed) {
+        _emitCompletion();
+      }
+    });
   }
 
   @override
@@ -182,6 +194,10 @@ class JustAudioEngine implements AudioEngine, BufferedAudioEngine, QueueAudioEng
     final int queueId = ++_queueId;
     _queue = null;
     return _serialize(() async {
+      // Rapid next/previous presses queue several of these; only the newest
+      // should reach the platform. The older ones return their queue id so the
+      // caller's generation check rejects them without another native load.
+      if (generation != _generation) return queueId;
       _indexSubscription ??= _player.currentIndexStream.listen(
         _onPlatformIndex,
       );
@@ -258,11 +274,18 @@ class JustAudioEngine implements AudioEngine, BufferedAudioEngine, QueueAudioEng
       _player.setVolume(volume.clamp(0, 1));
 
   @override
-  Future<void> stop() async {
+  Future<void> stop() {
     ++_playGeneration;
     ++_generation;
     _hadSource = false;
-    await _player.stop();
+    _completionSent = false;
+    _queue = null;
+    _commandedIndex = null;
+    // `AudioPlayer.stop()` deactivates the platform, which for media_kit means
+    // releasing the native mpv player. Ordered behind the source mutations so
+    // it can never release a player that is still opening a stream — the
+    // native crash a rapid switch burst (or a failed track) used to cause.
+    return _serialize(() => _player.stop());
   }
 
   @override

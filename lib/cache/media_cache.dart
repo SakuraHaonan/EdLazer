@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/painting.dart';
 
+import '../data/audio_quality.dart';
 import '../utils/artwork.dart';
 import 'disk_cache.dart';
 
@@ -110,11 +111,35 @@ class AudioCache {
   final _pending = <String, Future<File?>>{};
   static const _formats = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'wav', 'mp4'];
 
-  Future<File?> find(String trackId) async {
+  /// Playback caches are quality-specific: a lossless request must not be
+  /// silently served the 320 kbps file an earlier session downloaded.
+  static String cacheKey(String trackId, AudioQuality quality) =>
+      '$trackId:${quality.name}';
+
+  Future<File?> find(
+    String trackId, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async {
+    final file = await _findKey(cacheKey(trackId, quality));
+    if (file != null) return file;
+    // Releases before quality selection keyed the cache by track id alone.
+    // Those files were all exhigh, so only the exhigh lookup adopts them.
+    return quality == AudioQuality.exhigh ? _findKey(trackId) : null;
+  }
+
+  Future<File?> findAny(String trackId) async {
+    for (final AudioQuality quality in AudioQuality.values.reversed) {
+      final file = await _findKey(cacheKey(trackId, quality));
+      if (file != null) return file;
+    }
+    return _findKey(trackId);
+  }
+
+  Future<File?> _findKey(String key) async {
     for (final extension in _formats) {
       final file = await disk.find(
         CacheBucket.audio,
-        trackId,
+        key,
         extension: extension,
       );
       if (file != null) return file;
@@ -122,17 +147,24 @@ class AudioCache {
     return null;
   }
 
-  Future<File?> store(String trackId, String url, {String? format}) =>
-      _pending.putIfAbsent(trackId, () async {
-        try {
-          return await _download(trackId, url, format);
-        } finally {
-          _pending.remove(trackId);
-        }
-      });
+  Future<File?> store(
+    String trackId,
+    String url, {
+    AudioQuality quality = AudioQuality.exhigh,
+    String? format,
+  }) {
+    final key = cacheKey(trackId, quality);
+    return _pending.putIfAbsent(key, () async {
+      try {
+        return await _download(key, url, format);
+      } finally {
+        _pending.remove(key);
+      }
+    });
+  }
 
-  Future<File?> _download(String trackId, String url, String? format) async {
-    final cached = await find(trackId);
+  Future<File?> _download(String key, String url, String? format) async {
+    final cached = await _findKey(key);
     if (cached != null) return cached;
     final client = HttpClient()..autoUncompress = false;
     try {
@@ -159,7 +191,7 @@ class AudioCache {
           : 'mp3';
       return await disk.put(
         CacheBucket.audio,
-        trackId,
+        key,
         () => response.timeout(const Duration(seconds: 30)),
         extension: extension,
         expectedLength: response.contentLength,

@@ -6,11 +6,17 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, listEquals;
 import 'package:flutter/material.dart';
 
+import '../data/audio_quality.dart';
 import '../data/catalog.dart';
 import '../data/catalog_details.dart';
 import '../data/models.dart';
 import '../diagnostics/build_info.dart';
+import '../downloads/download_dialog.dart';
+import '../downloads/download_queue_sheet.dart';
 import '../l10n/app_language.dart';
+import '../l10n/app_localizations.dart';
+import '../local/local_music_import.dart';
+import '../local/local_music_page.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
 import '../state/ui_preferences.dart';
@@ -20,6 +26,9 @@ import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
 import '../state/detail_requests.dart';
+import '../tv/tv_mode.dart';
+import '../utils/background_image.dart';
+import '../utils/byte_format.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
 import 'legacy_widgets.dart';
@@ -101,8 +110,7 @@ class _LegacyArtistPageState extends State<LegacyArtistPage> {
     } catch (_) {
       if (mounted && generation == _generation) {
         setState(
-          () => _error =
-              '\u6b4c\u624b\u8d44\u6599\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+          () => _error = '歌手资料加载失败，请重试。', // i18n:key
         );
       }
     } finally {
@@ -148,29 +156,25 @@ class _LegacyArtistPageState extends State<LegacyArtistPage> {
                 message: _error!,
                 action: FilledButton(
                   onPressed: () => unawaited(_load(force: true)),
-                  child: const Text('\u91cd\u8bd5'),
+                  child: const TrText('重试'),
                 ),
               )
             else ...<Widget>[
               const SizedBox(height: 38),
               LegacySectionHeader(
-                title: '\u6b4c\u66f2\u6392\u884c',
-                subtitle: popular.isEmpty
-                    ? null
-                    : '\u70ed\u95e8 ${popular.length} \u9996',
+                title: '歌曲排行',
+                subtitle: popular.isEmpty ? null : '热门 ${popular.length} 首',
                 trailing: TextButton.icon(
                   key: const ValueKey<String>('artist-all-songs'),
                   onPressed: widget.onOpenAllSongs,
                   iconAlignment: IconAlignment.end,
                   icon: const Icon(Icons.chevron_right_rounded, size: 18),
-                  label: const Text('\u67e5\u770b\u5168\u90e8'),
+                  label: const TrText('查看全部'),
                 ),
               ),
               const SizedBox(height: 10),
               if (popular.isEmpty)
-                const LegacyNotice(
-                  message: '\u6682\u65e0\u70ed\u95e8\u6b4c\u66f2',
-                )
+                const LegacyNotice(message: '暂无热门歌曲')
               else
                 LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints box) {
@@ -205,15 +209,14 @@ class _LegacyArtistPageState extends State<LegacyArtistPage> {
               if (fullAlbums.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 36),
                 LegacySectionHeader(
-                  title: '\u4e13\u8f91',
-                  subtitle:
-                      '${fullAlbums.length} \u5f20\u5168\u957f\u4e13\u8f91',
+                  title: '专辑',
+                  subtitle: '${fullAlbums.length} 张全长专辑',
                   trailing: TextButton.icon(
                     key: const ValueKey<String>('artist-all-albums'),
                     onPressed: widget.onOpenAlbums,
                     iconAlignment: IconAlignment.end,
                     icon: const Icon(Icons.chevron_right_rounded, size: 18),
-                    label: const Text('\u67e5\u770b\u5168\u90e8'),
+                    label: const TrText('查看全部'),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -222,14 +225,14 @@ class _LegacyArtistPageState extends State<LegacyArtistPage> {
               if (singles.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 36),
                 LegacySectionHeader(
-                  title: '\u5355\u66f2 / EP',
-                  subtitle: '${singles.length} \u5f20',
+                  title: '单曲 / EP',
+                  subtitle: '${singles.length} 张',
                   trailing: TextButton.icon(
                     key: const ValueKey<String>('artist-all-singles'),
                     onPressed: widget.onOpenSingles,
                     iconAlignment: IconAlignment.end,
                     icon: const Icon(Icons.chevron_right_rounded, size: 18),
-                    label: const Text('\u67e5\u770b\u5168\u90e8'),
+                    label: const TrText('查看全部'),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -237,7 +240,7 @@ class _LegacyArtistPageState extends State<LegacyArtistPage> {
               ],
               if ((_details?.description ?? '').trim().isNotEmpty) ...<Widget>[
                 const SizedBox(height: 38),
-                const LegacySectionHeader(title: '\u5173\u4e8e'),
+                const LegacySectionHeader(title: '关于'),
                 const SizedBox(height: 12),
                 Text(
                   _details!.description,
@@ -293,9 +296,9 @@ class _ArtistHero extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             <String>[
-              if (songCount > 0) '$songCount \u9996\u6b4c\u66f2',
-              if (albumCount > 0) '$albumCount \u5f20\u53d1\u884c',
-            ].join(' \u00b7 '),
+              if (songCount > 0) context.tr('$songCount 首歌曲'),
+              if (albumCount > 0) context.tr('$albumCount 张发行'),
+            ].join(' · '),
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
@@ -305,7 +308,7 @@ class _ArtistHero extends StatelessWidget {
         FilledButton.icon(
           onPressed: onPlay,
           icon: const Icon(Icons.play_arrow_rounded, size: 23),
-          label: const Text('\u64ad\u653e'),
+          label: const TrText('播放'),
           style: FilledButton.styleFrom(
             shape: const StadiumBorder(),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
@@ -380,7 +383,7 @@ class _ArtistTrackCardState extends State<_ArtistTrackCard> {
                           widget.track.album,
                           if (widget.track.duration > Duration.zero)
                             legacyDuration(widget.track.duration),
-                        ].join(' \u00b7 '),
+                        ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -440,7 +443,7 @@ class _ArtistReleaseShelf extends StatelessWidget {
                   <String>[
                     if (album.year.isNotEmpty) album.year,
                     if (album.releaseType.isNotEmpty) album.releaseType,
-                  ].join(' \u00b7 '),
+                  ].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -478,8 +481,8 @@ class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
   String? _error;
 
   String get _title => widget.group == AlbumReleaseGroup.album
-      ? '\u5168\u90e8\u4e13\u8f91'
-      : '\u5168\u90e8\u5355\u66f2 / EP';
+      ? '全部专辑' // i18n:key
+      : '全部单曲 / EP'; // i18n:key
 
   @override
   void initState() {
@@ -516,8 +519,7 @@ class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
     } catch (_) {
       if (mounted) {
         setState(
-          () => _error =
-              '\u53d1\u884c\u4f5c\u54c1\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+          () => _error = '发行作品加载失败，请重试。', // i18n:key
         );
       }
     }
@@ -540,7 +542,7 @@ class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
                   title: _title,
                   subtitle: albums == null
                       ? widget.artist.name
-                      : '${widget.artist.name} \u00b7 ${albums.length} \u5f20',
+                      : '${widget.artist.name} · ${albums.length} 张',
                   padding: EdgeInsets.zero,
                 ),
               ),
@@ -551,7 +553,7 @@ class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
                   message: _error!,
                   action: FilledButton(
                     onPressed: () => unawaited(_load(force: true)),
-                    child: const Text('\u91cd\u8bd5'),
+                    child: const TrText('重试'),
                   ),
                 ),
               )
@@ -563,7 +565,11 @@ class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
             else if (albums.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: LegacyNotice(message: '\u6682\u65e0$_title'),
+                child: LegacyNotice(
+                  message: widget.group == AlbumReleaseGroup.album
+                      ? '暂无专辑'
+                      : '暂无单曲 / EP',
+                ),
               )
             else
               SliverPadding(
@@ -578,8 +584,8 @@ class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
                       if (album.year.isNotEmpty) album.year,
                       if (album.releaseType.isNotEmpty) album.releaseType,
                       if (album.trackCount != null)
-                        '${album.trackCount} \u9996',
-                    ].join(' \u00b7 ');
+                        context.tr('${album.trackCount} 首'),
+                    ].join(' · ');
                     return Material(
                       color: Colors.transparent,
                       child: InkWell(
@@ -700,8 +706,7 @@ class _LegacyArtistSongsPageState extends State<LegacyArtistSongsPage> {
       } catch (_) {}
       if (mounted) {
         setState(
-          () => _error =
-              '\u5168\u90e8\u6b4c\u66f2\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+          () => _error = '全部歌曲加载失败，请重试。', // i18n:key
         );
       }
     }
@@ -720,17 +725,17 @@ class _LegacyArtistSongsPageState extends State<LegacyArtistSongsPage> {
               padding: EdgeInsets.fromLTRB(inset, 12, inset, 8),
               sliver: SliverToBoxAdapter(
                 child: ApplePageTitle(
-                  title: '\u5168\u90e8\u6b4c\u66f2',
+                  title: '全部歌曲',
                   subtitle: tracks == null
                       ? widget.artist.name
-                      : '${widget.artist.name} \u00b7 ${tracks.length} \u9996',
+                      : '${widget.artist.name} · ${tracks.length} 首',
                   padding: EdgeInsets.zero,
                   trailing: tracks == null || tracks.isEmpty
                       ? null
                       : FilledButton.icon(
                           onPressed: () => widget.state.playQueue(tracks),
                           icon: const Icon(Icons.play_arrow_rounded),
-                          label: const Text('\u64ad\u653e'),
+                          label: const TrText('播放'),
                         ),
                 ),
               ),
@@ -741,7 +746,7 @@ class _LegacyArtistSongsPageState extends State<LegacyArtistSongsPage> {
                   message: _error!,
                   action: FilledButton(
                     onPressed: () => unawaited(_load(force: true)),
-                    child: const Text('\u91cd\u8bd5'),
+                    child: const TrText('重试'),
                   ),
                 ),
               )
@@ -753,9 +758,7 @@ class _LegacyArtistSongsPageState extends State<LegacyArtistSongsPage> {
             else if (tracks.isEmpty)
               const SliverFillRemaining(
                 hasScrollBody: false,
-                child: LegacyNotice(
-                  message: '\u6682\u65e0\u53ef\u64ad\u653e\u6b4c\u66f2',
-                ),
+                child: LegacyNotice(message: '暂无可播放歌曲'),
               )
             else
               SliverPadding(
@@ -770,6 +773,12 @@ class _LegacyArtistSongsPageState extends State<LegacyArtistSongsPage> {
                         playing: widget.state.playing,
                         onTap: () =>
                             widget.state.playQueue(tracks, startIndex: index),
+                        onMenuRequested: (Offset position) => showTrackActions(
+                          context,
+                          widget.state,
+                          tracks[index],
+                          position,
+                        ),
                       ),
                 ),
               ),
@@ -818,7 +827,7 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
       if (tracks.isEmpty) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('暂时没有可播放的歌曲')));
+        ).showSnackBar(SnackBar(content: Text(context.tr('暂时没有可播放的歌曲'))));
       } else {
         widget.state.playStationQueue(tracks, loadMore: load);
       }
@@ -826,7 +835,7 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('播放队列加载失败，请稍后重试')));
+        ).showSnackBar(SnackBar(content: Text(context.tr('播放队列加载失败，请稍后重试'))));
       }
     } finally {
       if (mounted) setState(() => _startingStation = false);
@@ -844,7 +853,7 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
             : FilledButton(
                 onPressed: () =>
                     unawaited(widget.state.refreshHome(force: true)),
-                child: const Text('重试'),
+                child: const TrText('重试'),
               ),
       );
     }
@@ -1028,29 +1037,29 @@ class _HomeActionShelf extends StatelessWidget {
           })
         >[
           (
-            title: '每日推荐',
-            subtitle: '今日限定好歌',
+            title: '每日推荐', // i18n:key
+            subtitle: '今日限定好歌', // i18n:key
             icon: Icons.calendar_today_rounded,
             colors: const <Color>[Color(0xFFFF375F), Color(0xFFFF7A45)],
             tap: onDaily,
           ),
           (
-            title: '私人漫游',
-            subtitle: '发现没听过的音乐',
+            title: '私人漫游', // i18n:key
+            subtitle: '发现没听过的音乐', // i18n:key
             icon: Icons.waves_rounded,
             colors: const <Color>[Color(0xFF7357FF), Color(0xFF35A7FF)],
             tap: onFm,
           ),
           (
-            title: '心动模式',
-            subtitle: '红心与相似推荐',
+            title: '心动模式', // i18n:key
+            subtitle: '红心与相似推荐', // i18n:key
             icon: Icons.favorite_rounded,
             colors: const <Color>[Color(0xFFE5488A), Color(0xFF8C52FF)],
             tap: onHeart,
           ),
           (
-            title: '反复聆听',
-            subtitle: '回到你爱的歌',
+            title: '反复聆听', // i18n:key
+            subtitle: '回到你爱的歌', // i18n:key
             icon: Icons.replay_rounded,
             colors: const <Color>[Color(0xFF087E8B), Color(0xFF42C98B)],
             tap: onReplay,
@@ -1102,97 +1111,109 @@ class _HomeActionCard extends StatefulWidget {
 
 class _HomeActionCardState extends State<_HomeActionCard> {
   bool _hover = false;
+  bool _focused = false;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: widget.onTap == null
-        ? SystemMouseCursors.basic
-        : SystemMouseCursors.click,
-    onEnter: (_) => setState(() => _hover = true),
-    onExit: (_) => setState(() => _hover = false),
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.onTap == null
-          ? null
-          : feedbackAction(context, widget.onTap!),
-      child: AnimatedScale(
-        scale: _hover && widget.onTap != null ? 1.015 : 1,
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Container(
-            width: 228,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: widget.onTap == null
-                    ? widget.colors
-                          .map((color) => color.withValues(alpha: .42))
-                          .toList()
-                    : widget.colors,
-              ),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: widget.colors.last.withValues(
-                    alpha: _hover ? .28 : .16,
+  Widget build(BuildContext context) {
+    final bool raised = (_hover || _focused) && widget.onTap != null;
+    return MouseRegion(
+      cursor: widget.onTap == null
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: TvTapTarget(
+        onTap: widget.onTap == null
+            ? null
+            : feedbackAction(context, widget.onTap!),
+        onFocusChange: (bool value) => setState(() => _focused = value),
+        borderRadius: BorderRadius.circular(18),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap == null
+              ? null
+              : feedbackAction(context, widget.onTap!),
+          child: AnimatedScale(
+            scale: raised ? 1.015 : 1,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                width: 228,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: widget.onTap == null
+                        ? widget.colors
+                              .map((color) => color.withValues(alpha: .42))
+                              .toList()
+                        : widget.colors,
                   ),
-                  blurRadius: _hover ? 24 : 16,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                Opacity(
-                  opacity: widget.onTap == null ? .28 : .52,
-                  child: _MovingCoverMosaic(covers: widget.covers),
-                ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: <Color>[Color(0x18000000), Color(0xD9000000)],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Icon(widget.icon, color: Colors.white, size: 26),
-                      const Spacer(),
-                      Text(
-                        widget.title,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -.35,
-                            ),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: widget.colors.last.withValues(
+                        alpha: raised ? .28 : .16,
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        widget.subtitle,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white.withValues(alpha: .78),
-                          fontWeight: FontWeight.w500,
+                      blurRadius: raised ? 24 : 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    Opacity(
+                      opacity: widget.onTap == null ? .28 : .52,
+                      child: _MovingCoverMosaic(covers: widget.covers),
+                    ),
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: <Color>[Color(0x18000000), Color(0xD9000000)],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Icon(widget.icon, color: Colors.white, size: 26),
+                          const Spacer(),
+                          Text(
+                            context.tr(widget.title),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -.35,
+                                ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            context.tr(widget.subtitle),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: .78),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _PagedHorizontalShelf extends StatefulWidget {
@@ -1592,7 +1613,7 @@ class _EditorialPlaylistShelf extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        '网易云编辑精选',
+                        context.tr('网易云编辑精选'),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: Colors.white70,
                           fontWeight: FontWeight.w700,
@@ -1693,7 +1714,7 @@ class _ChartShelf extends StatelessWidget {
                               letterSpacing: -.6,
                             ),
                       ),
-                      Text(
+                      TrText(
                         chart.issueLabel,
                         style: Theme.of(
                           context,
@@ -1874,27 +1895,27 @@ class _StationStrip extends StatelessWidget {
     final stations =
         <({String title, String detail, IconData icon, VoidCallback? tap})>[
           (
-            title: '私人漫游',
-            detail: '算法探索',
+            title: '私人漫游', // i18n:key
+            detail: '算法探索', // i18n:key
             icon: Icons.radar_rounded,
             tap: enabled ? onFm : null,
           ),
           (
-            title: '红心随机',
-            detail: '只播放收藏',
+            title: '红心随机', // i18n:key
+            detail: '只播放收藏', // i18n:key
             icon: Icons.shuffle_rounded,
             tap: onLiked,
           ),
           (
-            title: '心动模式',
-            detail: '熟悉与新鲜',
+            title: '心动模式', // i18n:key
+            detail: '熟悉与新鲜', // i18n:key
             icon: Icons.favorite_rounded,
             tap: onHeart,
           ),
           if (artistName != null)
             (
-              title: '$artistName 电台',
-              detail: '相似歌手与曲风',
+              title: '$artistName 电台', // i18n:key
+              detail: '相似歌手与曲风', // i18n:key
               icon: Icons.graphic_eq_rounded,
               tap: onArtist,
             ),
@@ -1981,7 +2002,7 @@ class _StationCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    title,
+                    context.tr(title),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -1990,7 +2011,7 @@ class _StationCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    detail,
+                    context.tr(detail),
                     style: Theme.of(
                       context,
                     ).textTheme.bodySmall?.copyWith(color: Colors.white70),
@@ -2033,8 +2054,10 @@ class _ChartLoadCard extends StatelessWidget {
         else
           const Icon(Icons.leaderboard_rounded),
         const SizedBox(width: 13),
-        Expanded(child: Text(loading ? '正在载入排行榜…' : message ?? '暂无榜单数据')),
-        if (!loading) TextButton(onPressed: onRetry, child: const Text('重试')),
+        Expanded(
+          child: Text(context.tr(loading ? '正在载入排行榜…' : message ?? '暂无榜单数据')),
+        ),
+        if (!loading) TextButton(onPressed: onRetry, child: TrText('重试')),
       ],
     ),
   );
@@ -2129,7 +2152,7 @@ class _LegacyChartPageState extends State<LegacyChartPage> {
       if (mounted && serial == _requestSerial) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('这一期暂时载入失败，请稍后重试。')));
+        ).showSnackBar(SnackBar(content: Text(context.tr('这一期暂时载入失败，请稍后重试。'))));
       }
     } finally {
       if (mounted && serial == _requestSerial && _loading) {
@@ -2267,7 +2290,7 @@ class _ChartHero extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            '${chart.entries.length} 首',
+            context.tr('${chart.entries.length} 首'),
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
@@ -2414,11 +2437,11 @@ class _ChartIssuePicker extends StatelessWidget {
       fontWeight: FontWeight.w700,
     );
     if (chart.issues.length < 2) {
-      return Text(chart.issueLabel, style: textStyle);
+      return TrText(chart.issueLabel, style: textStyle);
     }
     return PopupMenuButton<ChartIssue>(
       enabled: !loading,
-      tooltip: '选择榜单期数',
+      tooltip: context.tr('选择榜单期数'),
       onSelected: onSelected,
       itemBuilder: (context) => <PopupMenuEntry<ChartIssue>>[
         for (final issue in chart.issues)
@@ -2433,7 +2456,7 @@ class _ChartIssuePicker extends StatelessWidget {
                       : null,
                 ),
                 const SizedBox(width: 8),
-                Text(issue.label),
+                TrText(issue.label),
               ],
             ),
           ),
@@ -2449,7 +2472,7 @@ class _ChartIssuePicker extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text(chart.issueLabel, style: textStyle),
+              TrText(chart.issueLabel, style: textStyle),
               const SizedBox(width: 4),
               if (loading)
                 const SizedBox.square(
@@ -2490,7 +2513,7 @@ class _ChartTrackRow extends StatelessWidget {
     final int? previous = entry.previousRank;
     final IconData? trend = switch (entry.changeLabel) {
       'NEW' => Icons.fiber_new_rounded,
-      '重返' || '重投' => Icons.replay_rounded,
+      '重返' || '重投' => Icons.replay_rounded, // i18n:key
       _ when previous != null && previous > entry.rank =>
         Icons.arrow_upward_rounded,
       _ when previous != null && previous < entry.rank =>
@@ -2539,10 +2562,10 @@ class _ChartTrackRow extends StatelessWidget {
       subtitle: Text(
         <String>[
           entry.artist.isNotEmpty ? entry.artist : entry.track?.artist ?? '',
-          if (entry.peakRank != null) '最高 #${entry.peakRank}',
-          if (entry.weeksOnChart != null) '${entry.weeksOnChart} 周',
+          if (entry.peakRank != null) context.tr('最高 #${entry.peakRank}'),
+          if (entry.weeksOnChart != null) context.tr('${entry.weeksOnChart} 周'),
           if (!roomy && entry.score != null)
-            '${_formatChartScore(entry.score!)} 点',
+            context.tr('${_formatChartScore(entry.score!)} 点'),
         ].where((value) => value.isNotEmpty).join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -2551,7 +2574,7 @@ class _ChartTrackRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (roomy && entry.score != null) ...<Widget>[
-            Text(
+            TrText(
               '${_formatChartScore(entry.score!)} 点',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: apple.secondaryLabel,
@@ -2576,7 +2599,7 @@ class _ChartTrackRow extends StatelessWidget {
           if (trend != null) Icon(trend, size: 16, color: apple.secondaryLabel),
           if (entry.changeLabel != null) ...<Widget>[
             if (trend != null) const SizedBox(width: 3),
-            Text(
+            TrText(
               entry.changeLabel!,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: apple.secondaryLabel,
@@ -2603,11 +2626,13 @@ class _ChartTrackRow extends StatelessWidget {
 }
 
 String _formatChartScore(int score) {
-  if (score >= 100000000) {
-    return '${(score / 100000000).toStringAsFixed(1)}亿';
+  final String digits = score.toString();
+  final StringBuffer grouped = StringBuffer();
+  for (int i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
+    grouped.write(digits[i]);
   }
-  if (score >= 10000) return '${(score / 10000).toStringAsFixed(1)}万';
-  return '$score';
+  return grouped.toString();
 }
 
 class _ChartSparklinePainter extends CustomPainter {
@@ -2667,148 +2692,159 @@ class _FeaturedPlaylistCard extends StatefulWidget {
 
 class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final bool raised = _hovering || _focused;
     final String subtitle = <String>[
-      if (widget.playlist.trackCount > 0) '${widget.playlist.trackCount} 首歌曲',
+      if (widget.playlist.trackCount > 0)
+        context.tr('${widget.playlist.trackCount} 首歌曲'),
       if (widget.playlist.description.isNotEmpty) widget.playlist.description,
     ].join(' · ');
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: TvTapTarget(
         onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _hovering ? 1.004 : 1,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          child: Container(
-            height: widget.compact ? 190 : 248,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: apple.separator.withValues(alpha: .4),
-                width: .5,
-              ),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: .16),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
+        onFocusChange: (bool value) => setState(() => _focused = value),
+        borderRadius: BorderRadius.circular(18),
+        focusScale: 1.006,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: raised ? 1.004 : 1,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            child: Container(
+              height: widget.compact ? 190 : 248,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: apple.separator.withValues(alpha: .4),
+                  width: .5,
                 ),
-              ],
-            ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                if (widget.playlist.coverUrl?.isNotEmpty ?? false)
-                  LegacyCover(url: widget.playlist.coverUrl, radius: 0)
-                else
-                  DecoratedBox(
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: .16),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  if (widget.playlist.coverUrl?.isNotEmpty ?? false)
+                    LegacyCover(url: widget.playlist.coverUrl, radius: 0)
+                  else
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: <Color>[
+                            apple.accent,
+                            Color.lerp(
+                              apple.accent,
+                              AppleColors.systemPurple,
+                              .38,
+                            )!,
+                          ],
+                        ),
+                      ),
+                    ),
+                  const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                         colors: <Color>[
-                          apple.accent,
-                          Color.lerp(
-                            apple.accent,
-                            AppleColors.systemPurple,
-                            .38,
-                          )!,
+                          Color(0x00000000),
+                          Color(0x33000000),
+                          Color(0xD9000000),
                         ],
+                        stops: <double>[.2, .54, 1],
                       ),
                     ),
                   ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: <Color>[
-                        Color(0x00000000),
-                        Color(0x33000000),
-                        Color(0xD9000000),
-                      ],
-                      stops: <double>[.2, .54, 1],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: widget.compact ? 18 : 24,
-                  right: widget.compact ? 18 : 24,
-                  bottom: widget.compact ? 16 : 22,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: <Widget>[
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Text(
-                              '为你精选',
-                              style: Theme.of(context).textTheme.labelMedium
-                                  ?.copyWith(
-                                    color: Colors.white.withValues(alpha: .72),
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: .4,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              widget.playlist.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.headlineSmall
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -.4,
-                                  ),
-                            ),
-                            if (subtitle.isNotEmpty) ...<Widget>[
-                              const SizedBox(height: 4),
+                  Positioned(
+                    left: widget.compact ? 18 : 24,
+                    right: widget.compact ? 18 : 24,
+                    bottom: widget.compact ? 16 : 22,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: <Widget>[
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
                               Text(
-                                subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
+                                context.tr('为你精选'),
+                                style: Theme.of(context).textTheme.labelMedium
                                     ?.copyWith(
                                       color: Colors.white.withValues(
                                         alpha: .72,
                                       ),
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: .4,
                                     ),
                               ),
+                              const SizedBox(height: 4),
+                              Text(
+                                widget.playlist.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -.4,
+                                    ),
+                              ),
+                              if (subtitle.isNotEmpty) ...<Widget>[
+                                const SizedBox(height: 4),
+                                Text(
+                                  subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: .72,
+                                        ),
+                                      ),
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(
-                            alpha: _hovering ? 1 : .86,
                           ),
-                          shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          size: 27,
-                          color: Colors.black,
+                        const SizedBox(width: 16),
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(
+                              alpha: raised ? 1 : .86,
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            size: 27,
+                            color: Colors.black,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -2817,16 +2853,24 @@ class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
   }
 }
 
-/// Library: owned playlists followed by public recommendations.
+/// Library: local files first, then owned playlists and public
+/// recommendations. Local music sits above the playlists so a guest can import
+/// files without signing in.
 class LegacyLibraryPage extends StatelessWidget {
   const LegacyLibraryPage({
     super.key,
     required this.state,
     required this.onOpenPlaylist,
+    required this.onOpenLocalMusic,
+    this.localImporter = const LocalMusicImporter(),
   });
 
   final AppState state;
   final ValueChanged<Playlist> onOpenPlaylist;
+  final VoidCallback onOpenLocalMusic;
+
+  /// Lets tests hand in a fake chooser; production uses the system picker.
+  final LocalMusicImporter localImporter;
 
   @override
   Widget build(BuildContext context) {
@@ -2839,18 +2883,6 @@ class LegacyLibraryPage extends StatelessWidget {
     final List<Playlist> publicLists = _uniquePlaylists(
       state.home?.playlists ?? const <Playlist>[],
     );
-    if (mine.isEmpty && publicLists.isEmpty) {
-      return LegacyNotice(
-        message: state.isGuest ? '登录后同步你的歌单' : '还没有歌单。',
-        action: state.isGuest
-            ? FilledButton(
-                onPressed: () =>
-                    unawaited(showLegacyLoginDialog(context, state)),
-                child: const Text('登录'),
-              )
-            : null,
-      );
-    }
     final double inset = _pageInset(context);
     return Center(
       child: ConstrainedBox(
@@ -2863,13 +2895,19 @@ class LegacyLibraryPage extends StatelessWidget {
               subtitle: state.isGuest ? '登录后同步你的歌单' : '${state.user.name} 的音乐',
               padding: const EdgeInsets.fromLTRB(0, 12, 0, 18),
             ),
+            LocalMusicCard(
+              state: state,
+              onOpen: onOpenLocalMusic,
+              importer: localImporter,
+            ),
             if (mine.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 30),
               LegacySectionHeader(
                 title: '我的音乐',
                 subtitle: state.isGuest ? '游客模式' : null,
                 trailing: state.signedIn
                     ? IconButton(
-                        tooltip: '刷新歌单',
+                        tooltip: context.tr('刷新歌单'),
                         onPressed: () =>
                             unawaited(state.refreshCollections(force: true)),
                         icon: const Icon(Icons.sync_rounded, size: 19),
@@ -2878,9 +2916,9 @@ class LegacyLibraryPage extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               LegacyPlaylistGrid(playlists: mine, onOpen: onOpenPlaylist),
-              const SizedBox(height: 34),
             ],
             if (publicLists.isNotEmpty) ...<Widget>[
+              SizedBox(height: mine.isEmpty ? 30 : 34),
               const LegacySectionHeader(title: '推荐歌单'),
               const SizedBox(height: 14),
               LegacyPlaylistGrid(
@@ -2888,6 +2926,17 @@ class LegacyLibraryPage extends StatelessWidget {
                 onOpen: onOpenPlaylist,
               ),
             ],
+            if (mine.isEmpty && publicLists.isEmpty)
+              LegacyNotice(
+                message: state.isGuest ? '登录后同步你的歌单' : '还没有歌单。',
+                action: state.isGuest
+                    ? FilledButton(
+                        onPressed: () =>
+                            unawaited(showLegacyLoginDialog(context, state)),
+                        child: const TrText('登录'),
+                      )
+                    : null,
+              ),
           ],
         ),
       ),
@@ -2909,7 +2958,7 @@ class LegacyLikesPage extends StatelessWidget {
         icon: Icons.favorite_border_rounded,
         action: FilledButton(
           onPressed: () => unawaited(showLegacyLoginDialog(context, state)),
-          child: const Text('登录'),
+          child: const TrText('登录'),
         ),
       );
     }
@@ -3006,7 +3055,7 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
       _scheduleLocateRefresh();
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = '歌单读取失败，请重试。');
+      setState(() => _error = '歌单读取失败，请重试。'); // i18n:key
     }
   }
 
@@ -3111,7 +3160,7 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     if (index < 0) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('当前歌曲不在这个歌单中')));
+      ).showSnackBar(SnackBar(content: Text(context.tr('当前歌曲不在这个歌单中'))));
       return;
     }
     _ensureRowMetrics();
@@ -3169,6 +3218,14 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
                           onPlay: tracks == null || tracks.isEmpty
                               ? null
                               : () => widget.state.playQueue(tracks),
+                          onDownload: tracks == null || tracks.isEmpty
+                              ? null
+                              : () => downloadTracks(
+                                  context,
+                                  widget.state,
+                                  tracks,
+                                  folderName: widget.playlist.name,
+                                ),
                         ),
                         const SizedBox(height: 22),
                         if (_error != null)
@@ -3176,7 +3233,7 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
                             message: _error!,
                             action: FilledButton(
                               onPressed: () => unawaited(_load()),
-                              child: const Text('重试'),
+                              child: const TrText('重试'),
                             ),
                           )
                         else if (tracks == null)
@@ -3210,6 +3267,13 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
                             playing: widget.state.playing,
                             onTap: () =>
                                 widget.state.playQueue(tracks, startIndex: i),
+                            onMenuRequested: (Offset position) =>
+                                showTrackActions(
+                                  context,
+                                  widget.state,
+                                  tracks[i],
+                                  position,
+                                ),
                           ),
                     ),
                   ),
@@ -3228,7 +3292,7 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
                   return FloatingActionButton.small(
                     key: const ValueKey<String>('playlist-locate'),
                     heroTag: null,
-                    tooltip: '定位正在播放',
+                    tooltip: context.tr('定位正在播放'),
                     backgroundColor: AppleSemanticColors.of(context).accent,
                     foregroundColor: Colors.white,
                     onPressed: () => unawaited(_locateCurrent()),
@@ -3249,6 +3313,7 @@ class _PlaylistHeader extends StatelessWidget {
     required this.playlist,
     required this.compact,
     required this.onPlay,
+    this.onDownload,
     this.artist,
     this.artistWidget,
     this.note,
@@ -3257,6 +3322,7 @@ class _PlaylistHeader extends StatelessWidget {
   final Playlist playlist;
   final bool compact;
   final VoidCallback? onPlay;
+  final VoidCallback? onDownload;
 
   /// Album-only extras. A playlist leaves both null and renders as before.
   final String? artist;
@@ -3269,15 +3335,15 @@ class _PlaylistHeader extends StatelessWidget {
       showDialog<void>(
         context: context,
         builder: (BuildContext context) => AlertDialog(
-          title: const Text('专辑简介'),
+          title: const TrText('专辑简介'),
           content: SizedBox(
             width: 460,
-            child: SingleChildScrollView(child: Text(note)),
+            child: SingleChildScrollView(child: TrText(note)),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
+              child: const TrText('关闭'),
             ),
           ],
         ),
@@ -3296,18 +3362,22 @@ class _PlaylistHeader extends StatelessWidget {
     final Widget cover = RepaintBoundary(child: stillCover);
     final Widget? summary = note == null || note!.trim().isEmpty
         ? null
-        : GestureDetector(
+        : TvTapTarget(
             onTap: () => _showNote(context, note!),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Text(
-                note!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: compact ? TextAlign.center : TextAlign.start,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: apple.tertiaryLabel,
-                  height: 1.5,
+            borderRadius: BorderRadius.circular(6),
+            child: GestureDetector(
+              onTap: () => _showNote(context, note!),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Text(
+                  context.tr(note!),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: compact ? TextAlign.center : TextAlign.start,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: apple.tertiaryLabel,
+                    height: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -3355,7 +3425,8 @@ class _PlaylistHeader extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             <String>[
-              if (playlist.trackCount > 0) '${playlist.trackCount} 首歌曲',
+              if (playlist.trackCount > 0)
+                context.tr('${playlist.trackCount} 首歌曲'),
               if (playlist.description.isNotEmpty) playlist.description,
             ].join(' · '),
             maxLines: 2,
@@ -3376,8 +3447,17 @@ class _PlaylistHeader extends StatelessWidget {
             FilledButton.icon(
               onPressed: onPlay,
               icon: const Icon(Icons.play_arrow_rounded, size: 20),
-              label: const Text('播放全部'),
+              label: const TrText('播放全部'),
             ),
+            if (onDownload != null) ...<Widget>[
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                key: const ValueKey<String>('download-all'),
+                onPressed: onDownload,
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: const TrText('下载'),
+              ),
+            ],
             const SizedBox(width: 10),
             Container(
               width: 40,
@@ -3499,7 +3579,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
       if (!mounted || generation != _generation) return;
       setState(() {
         _loading = false;
-        _error = '搜索失败，请检查网络后重试。';
+        _error = '搜索失败，请检查网络后重试。'; // i18n:key
       });
     }
   }
@@ -3539,7 +3619,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
         icon: Icons.search_off_rounded,
         action: FilledButton(
           onPressed: () => unawaited(_run(_query)),
-          child: const Text('重试'),
+          child: const TrText('重试'),
         ),
       );
     }
@@ -3602,6 +3682,12 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
                     playing: widget.state.playing,
                     onTap: () =>
                         widget.state.playQueue(results.tracks, startIndex: i),
+                    onMenuRequested: (Offset position) => showTrackActions(
+                      context,
+                      widget.state,
+                      results.tracks[i],
+                      position,
+                    ),
                   ),
               ],
             ),
@@ -3631,7 +3717,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
                 for (final ArtistRef artist in results.artists)
                   AppleListTile(
                     title: artist.name,
-                    subtitle: '歌手',
+                    subtitle: context.tr('歌手'),
                     minHeight: 56,
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     leading: ClipOval(
@@ -3681,23 +3767,28 @@ class _SearchTabButton extends StatelessWidget {
     return Semantics(
       button: true,
       selected: active,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: TvTapTarget(
         onTap: onTap,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: active ? apple.label.withValues(alpha: .1) : null,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: active ? apple.label : apple.secondaryLabel,
-                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+        borderRadius: BorderRadius.circular(10),
+        focusScale: 1.04,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: active ? apple.label.withValues(alpha: .1) : null,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                context.tr(label),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: active ? apple.label : apple.secondaryLabel,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                ),
               ),
             ),
           ),
@@ -3710,9 +3801,16 @@ class _SearchTabButton extends StatelessWidget {
 /// A single-column, inset-grouped Settings page, following the iOS Settings
 /// information architecture rather than a desktop form grid.
 class LegacySettingsPage extends StatelessWidget {
-  const LegacySettingsPage({super.key, required this.state});
+  const LegacySettingsPage({
+    super.key,
+    required this.state,
+    this.onOpenLocalMusic,
+  });
 
   final AppState state;
+
+  /// Jumps to the local-music page from the download settings group.
+  final VoidCallback? onOpenLocalMusic;
 
   @override
   Widget build(BuildContext context) {
@@ -3721,6 +3819,7 @@ class LegacySettingsPage extends StatelessWidget {
     final double minScale = UiMetrics.minScaleOf(context);
     final double shownScale = UiMetrics.scaleOf(context);
     final bool car = UiMetrics.carOf(context);
+    final bool tv = UiMetrics.tvOf(context);
     final double inset = _pageInset(context);
     return Center(
       child: ConstrainedBox(
@@ -3750,16 +3849,48 @@ class LegacySettingsPage extends StatelessWidget {
                             in LegacyPaletteMode.values)
                           DropdownMenuItem<LegacyPaletteMode>(
                             value: mode,
-                            child: Text(mode.label),
+                            child: TrText(mode.label),
                           ),
                       ],
                       onChanged: (LegacyPaletteMode? value) {
-                        if (value != null) {
-                          unawaited(state.setLegacyPalette(value));
+                        if (value == null) return;
+                        unawaited(state.setLegacyPalette(value));
+                        if (value == LegacyPaletteMode.custom &&
+                            state.legacyAccentColor == null) {
+                          unawaited(_pickLegacyAccent(context, state));
                         }
                       },
                     ),
                   ),
+                  if (state.legacyPalette == LegacyPaletteMode.custom)
+                    _LegacySettingRow(
+                      label: '强调色',
+                      subtitle: '点按色块挑选主题强调色',
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            _accentHex(
+                              state.legacyAccentColor ?? AppleColors.musicRed,
+                            ),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: apple.secondaryLabel,
+                              fontFeatures: const <FontFeature>[
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          _LegacyAccentSwatch(
+                            key: const ValueKey('legacy-accent-swatch'),
+                            color:
+                                state.legacyAccentColor ?? AppleColors.musicRed,
+                            onTap: () =>
+                                unawaited(_pickLegacyAccent(context, state)),
+                          ),
+                        ],
+                      ),
+                    ),
                   _LegacySettingRow(
                     label: '设备形态',
                     subtitle: state.surface.detail,
@@ -3771,7 +3902,7 @@ class LegacySettingsPage extends StatelessWidget {
                         for (final AppSurface surface in AppSurface.values)
                           DropdownMenuItem<AppSurface>(
                             value: surface,
-                            child: Text(surface.label),
+                            child: TrText(surface.label),
                           ),
                       ],
                       onChanged: (AppSurface? value) {
@@ -3790,7 +3921,7 @@ class LegacySettingsPage extends StatelessWidget {
                         for (final AppUiMode mode in AppUiMode.values)
                           DropdownMenuItem<AppUiMode>(
                             value: mode,
-                            child: Text(mode.label),
+                            child: TrText(mode.label),
                           ),
                       ],
                       onChanged: (AppUiMode? value) {
@@ -3804,6 +3935,8 @@ class LegacySettingsPage extends StatelessWidget {
                     valueText: '${(shownScale * 100).round()}%',
                     subtitle: state.autoDpiScale
                         ? '自动推算 · 拖动拉杆即改为手动'
+                        : tv
+                        ? '电视形态已把界面放大到 ${(minScale * 100).round()}% 起'
                         : car
                         ? '车机形态已把界面放大到 ${(minScale * 100).round()}% 起'
                         : '按比例放大整块界面，适合高分屏',
@@ -3817,7 +3950,7 @@ class LegacySettingsPage extends StatelessWidget {
                     action: TextButton(
                       key: const ValueKey('dpi-scale-reset'),
                       onPressed: () => unawaited(state.resetDpiScale()),
-                      child: const Text('恢复默认'),
+                      child: const TrText('恢复默认'),
                     ),
                   ),
                   _LegacySwitchRow(
@@ -3830,7 +3963,7 @@ class LegacySettingsPage extends StatelessWidget {
                   ),
                   _LegacySettingRow(
                     label: '背景',
-                    subtitle: '使用当前歌曲封面主色渲染整页画布',
+                    subtitle: state.legacyBackground.detail,
                     trailing: DropdownButton<LegacyBackgroundMode>(
                       value: state.legacyBackground,
                       underline: const SizedBox.shrink(),
@@ -3840,21 +3973,66 @@ class LegacySettingsPage extends StatelessWidget {
                             in LegacyBackgroundMode.values)
                           DropdownMenuItem<LegacyBackgroundMode>(
                             value: mode,
-                            child: Text(mode.label),
+                            child: TrText(mode.label),
                           ),
                       ],
                       onChanged: (LegacyBackgroundMode? value) {
-                        if (value != null) {
-                          unawaited(state.setLegacyBackground(value));
+                        if (value == null) return;
+                        unawaited(state.setLegacyBackground(value));
+                        if (value == LegacyBackgroundMode.customImage &&
+                            state.legacyBackgroundImagePath == null) {
+                          unawaited(_pickBackgroundImage(context, state));
                         }
                       },
                     ),
                   ),
+                  if (state.legacyBackground ==
+                      LegacyBackgroundMode.customImage)
+                    _LegacySettingRow(
+                      label: '背景图片',
+                      subtitle: state.legacyBackgroundImagePath == null
+                          ? '尚未选择图片，点按右侧选择'
+                          : '已选择图片，可更换或移除',
+                      trailing: Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: <Widget>[
+                          if (state.legacyBackgroundImagePath != null)
+                            TextButton(
+                              key: const ValueKey('background-image-clear'),
+                              onPressed: () {
+                                final String? path =
+                                    state.legacyBackgroundImagePath;
+                                unawaited(state.setLegacyBackgroundImage(null));
+                                unawaited(
+                                  state.setLegacyBackground(
+                                    LegacyBackgroundMode.off,
+                                  ),
+                                );
+                                unawaited(deleteCustomBackgroundImage(path));
+                              },
+                              child: const TrText('移除'),
+                            ),
+                          OutlinedButton(
+                            key: const ValueKey('background-image-pick'),
+                            onPressed: () =>
+                                unawaited(_pickBackgroundImage(context, state)),
+                            child: Text(
+                              context.tr(
+                                state.legacyBackgroundImagePath == null
+                                    ? '选择图片'
+                                    : '更换',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   _LegacySliderRow(
                     key: const ValueKey('legacy-ui-alpha'),
                     label: '内容不透明度',
                     valueText: '${(state.legacyUiAlpha * 100).round()}%',
-                    subtitle: '数值越小，封面主色越明显',
+                    subtitle: '数值越小，背景越明显',
                     value: state.legacyUiAlpha.clamp(0.4, 1.0),
                     min: 0.4,
                     max: 1.0,
@@ -3887,15 +4065,15 @@ class LegacySettingsPage extends StatelessWidget {
                       items: const <DropdownMenuItem<ThemeMode>>[
                         DropdownMenuItem<ThemeMode>(
                           value: ThemeMode.system,
-                          child: Text('跟随系统'),
+                          child: TrText('跟随系统'),
                         ),
                         DropdownMenuItem<ThemeMode>(
                           value: ThemeMode.light,
-                          child: Text('浅色'),
+                          child: TrText('浅色'),
                         ),
                         DropdownMenuItem<ThemeMode>(
                           value: ThemeMode.dark,
-                          child: Text('深色'),
+                          child: TrText('深色'),
                         ),
                       ],
                       onChanged: (ThemeMode? value) {
@@ -3932,12 +4110,117 @@ class LegacySettingsPage extends StatelessWidget {
             const _LegacySectionLabel('播放'),
             AppleGroupedCard(
               margin: EdgeInsets.zero,
-              child: _LegacySwitchRow(
-                label: '独立播放',
-                subtitle: '不接入系统媒体控制',
-                value: state.independentPlayback,
-                onChanged: (bool value) =>
-                    unawaited(state.setIndependentPlayback(value)),
+              child: Column(
+                children: <Widget>[
+                  _LegacySettingRow(
+                    label: '播放音质',
+                    subtitle: state.playbackQuality.detail,
+                    trailing: DropdownButton<AudioQuality>(
+                      key: const ValueKey('playback-quality'),
+                      value: state.playbackQuality,
+                      underline: const SizedBox.shrink(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: <DropdownMenuItem<AudioQuality>>[
+                        for (final AudioQuality quality in AudioQuality.values)
+                          DropdownMenuItem<AudioQuality>(
+                            value: quality,
+                            child: TrText(quality.label),
+                          ),
+                      ],
+                      onChanged: (AudioQuality? value) {
+                        if (value != null) {
+                          unawaited(state.setPlaybackQuality(value));
+                        }
+                      },
+                    ),
+                  ),
+                  _LegacySwitchRow(
+                    label: '独立播放',
+                    subtitle: '不接入系统媒体控制',
+                    value: state.independentPlayback,
+                    onChanged: (bool value) =>
+                        unawaited(state.setIndependentPlayback(value)),
+                  ),
+                ],
+              ),
+            ),
+            const _LegacySectionLabel('下载'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySettingRow(
+                    label: '下载音质',
+                    subtitle: state.downloadQuality.detail,
+                    trailing: DropdownButton<AudioQuality>(
+                      key: const ValueKey('download-quality'),
+                      value: state.downloadQuality,
+                      underline: const SizedBox.shrink(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: <DropdownMenuItem<AudioQuality>>[
+                        for (final AudioQuality quality in AudioQuality.values)
+                          DropdownMenuItem<AudioQuality>(
+                            value: quality,
+                            child: TrText(quality.label),
+                          ),
+                      ],
+                      onChanged: (AudioQuality? value) {
+                        if (value != null) {
+                          unawaited(state.setDownloadQuality(value));
+                        }
+                      },
+                    ),
+                  ),
+                  _LegacySettingRow(
+                    label: '下载任务',
+                    subtitle: '查看进度、取消或重试下载',
+                    trailing: AnimatedBuilder(
+                      animation: state.downloadManager,
+                      builder: (BuildContext context, Widget? child) {
+                        final int active = state.downloadManager.activeCount;
+                        final int done = state.downloadManager.completedCount;
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text(
+                              context.tr(
+                                active > 0 ? '$active 进行中' : '$done 已完成',
+                              ),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: apple.secondaryLabel,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            TextButton(
+                              key: const ValueKey('open-download-queue'),
+                              onPressed: () =>
+                                  showDownloadQueueSheet(context, state),
+                              child: const TrText('查看'),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  if (onOpenLocalMusic != null)
+                    AnimatedBuilder(
+                      animation: state.localLibrary,
+                      builder: (BuildContext context, Widget? child) {
+                        final int count = state.localLibrary.availableCount;
+                        return _LegacySettingRow(
+                          label: '本地音乐',
+                          subtitle: count == 0
+                              ? '下载和导入的歌曲会保存在这里'
+                              : '$count 首 · ${formatBytes(state.localLibrary.totalBytes)}',
+                          trailing: TextButton(
+                            key: const ValueKey('open-local-music-settings'),
+                            onPressed: onOpenLocalMusic,
+                            child: const TrText('管理'),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               ),
             ),
             const _LegacySectionLabel('交互'),
@@ -3998,20 +4281,20 @@ class LegacySettingsPage extends StatelessWidget {
                   ),
                   _LegacyChoiceRow(
                     label: '歌词粗细',
-                    valueText: switch (state.lyricFontWeight) {
+                    valueText: context.tr(switch (state.lyricFontWeight) {
                       400 => '常规',
                       500 => '中等',
                       600 => '半粗',
                       _ => '粗体',
-                    },
+                    }),
                     choices: const <int>[400, 500, 600, 700],
                     selected: state.lyricFontWeight,
-                    labelOf: (int weight) => switch (weight) {
+                    labelOf: (int weight) => context.tr(switch (weight) {
                       400 => '常规',
                       500 => '中等',
                       600 => '半粗',
                       _ => '粗体',
-                    },
+                    }),
                     onSelected: (int weight) =>
                         unawaited(state.setLyricFontWeight(weight)),
                   ),
@@ -4056,7 +4339,7 @@ class LegacySettingsPage extends StatelessWidget {
                       onPressed: () => unawaited(
                         state.setScrollRetention(ScrollMotion.defaultRetention),
                       ),
-                      child: const Text('恢复默认'),
+                      child: const TrText('恢复默认'),
                     ),
                   ),
                   _LegacySliderRow(
@@ -4075,7 +4358,7 @@ class LegacySettingsPage extends StatelessWidget {
                           ScrollMotion.defaultAcceleration,
                         ),
                       ),
-                      child: const Text('恢复默认'),
+                      child: const TrText('恢复默认'),
                     ),
                   ),
                 ],
@@ -4124,11 +4407,11 @@ class LegacySettingsPage extends StatelessWidget {
                             onPressed: () => unawaited(
                               showLegacyLoginDialog(context, state),
                             ),
-                            child: const Text('登录'),
+                            child: const TrText('登录'),
                           )
                         : TextButton(
                             onPressed: state.signOut,
-                            child: const Text('退出登录'),
+                            child: const TrText('退出登录'),
                           ),
                   ),
                   _LegacySettingRow(
@@ -4137,7 +4420,7 @@ class LegacySettingsPage extends StatelessWidget {
                     trailing: OutlinedButton(
                       onPressed: () =>
                           unawaited(state.refreshHome(force: true)),
-                      child: const Text('刷新'),
+                      child: const TrText('刷新'),
                     ),
                   ),
                 ],
@@ -4148,7 +4431,7 @@ class LegacySettingsPage extends StatelessWidget {
               margin: EdgeInsets.zero,
               child: AppleListTile(
                 title: 'Lazer',
-                subtitle: '提交 ${BuildInfo.shortCommit}',
+                subtitle: context.tr('提交 ${BuildInfo.shortCommit}'),
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(7),
                   child: Image.asset(
@@ -4179,7 +4462,7 @@ class _LegacySectionLabel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 22, 12, 7),
       child: Text(
-        label,
+        context.tr(label),
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
           color: apple.secondaryLabel,
           fontWeight: FontWeight.w500,
@@ -4209,13 +4492,13 @@ class _LegacySettingRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          label,
+          context.tr(label),
           style: theme.textTheme.bodyLarge?.copyWith(color: apple.label),
         ),
         if (subtitle.isNotEmpty) ...<Widget>[
           const SizedBox(height: 2),
           Text(
-            subtitle,
+            context.tr(subtitle),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(
@@ -4321,7 +4604,7 @@ class _LegacySliderRow extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  label,
+                  context.tr(label),
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: apple.label,
                   ),
@@ -4332,7 +4615,7 @@ class _LegacySliderRow extends StatelessWidget {
                 const SizedBox(width: 4),
               ],
               Text(
-                valueText,
+                context.tr(valueText),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: apple.secondaryLabel,
                   fontFeatures: const <FontFeature>[
@@ -4345,7 +4628,7 @@ class _LegacySliderRow extends StatelessWidget {
           if (subtitle != null) ...<Widget>[
             const SizedBox(height: 2),
             Text(
-              subtitle!,
+              context.tr(subtitle!),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: apple.secondaryLabel,
               ),
@@ -4400,14 +4683,14 @@ class _LegacyChoiceRow extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  label,
+                  context.tr(label),
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: apple.label,
                   ),
                 ),
               ),
               Text(
-                valueText,
+                context.tr(valueText),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: apple.secondaryLabel,
                 ),
@@ -4422,7 +4705,7 @@ class _LegacyChoiceRow extends StatelessWidget {
               for (final int choice in choices)
                 ChoiceChip(
                   label: Text(
-                    labelOf(choice),
+                    context.tr(labelOf(choice)),
                     style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.values[choice ~/ 100 - 1],
                       color: selected == choice ? apple.accent : apple.label,
@@ -4439,6 +4722,330 @@ class _LegacyChoiceRow extends StatelessWidget {
                   onSelected: (_) => onSelected(choice),
                 ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// `#RRGGBB` label shown beside the custom accent swatch.
+String _accentHex(Color color) =>
+    '#${((color.toARGB32() & 0xFFFFFF).toRadixString(16)).padLeft(6, '0').toUpperCase()}';
+
+/// Opens the custom-accent picker and persists the chosen colour.
+Future<void> _pickLegacyAccent(BuildContext context, AppState state) async {
+  final Color initial = state.legacyAccentColor ?? AppleColors.musicRed;
+  final Color? picked = await showDialog<Color>(
+    context: context,
+    builder: (BuildContext context) => _LegacyAccentDialog(initial: initial),
+  );
+  if (picked != null) await state.setLegacyAccent(picked);
+}
+
+/// Picks a picture, stores a copy and switches the backdrop to it.
+Future<void> _pickBackgroundImage(BuildContext context, AppState state) async {
+  String? stored;
+  try {
+    stored = await pickCustomBackgroundImage();
+  } catch (_) {
+    // No picker on this platform, or the copy failed; leave the setting as is.
+    return;
+  }
+  if (stored == null) return;
+  final String? previous = state.legacyBackgroundImagePath;
+  await state.setLegacyBackgroundImage(stored);
+  await state.setLegacyBackground(LegacyBackgroundMode.customImage);
+  if (previous != stored) await deleteCustomBackgroundImage(previous);
+}
+
+class _LegacyAccentSwatch extends StatelessWidget {
+  const _LegacyAccentSwatch({
+    super.key,
+    required this.color,
+    required this.onTap,
+  });
+
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return Semantics(
+      button: true,
+      label: context.tr('选择强调色'),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: TvTapTarget(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(15),
+          focusScale: 1.12,
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: apple.separator, width: .75),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hue/saturation/value picker for the custom accent.
+class _LegacyAccentDialog extends StatefulWidget {
+  const _LegacyAccentDialog({required this.initial});
+
+  final Color initial;
+
+  @override
+  State<_LegacyAccentDialog> createState() => _LegacyAccentDialogState();
+}
+
+class _LegacyAccentDialogState extends State<_LegacyAccentDialog> {
+  static const List<Color> _presets = <Color>[
+    AppleColors.musicRed,
+    AppleColors.systemPink,
+    AppleColors.systemPurple,
+    AppleColors.systemBlue,
+    AppleColors.systemTeal,
+    AppleColors.systemGreen,
+    AppleColors.systemOrange,
+    AppleColors.systemYellow,
+  ];
+
+  late HSVColor _hsv = HSVColor.fromColor(widget.initial);
+
+  Color get _color => _hsv.toColor();
+
+  void _selectPreset(Color color) =>
+      setState(() => _hsv = HSVColor.fromColor(color));
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return AlertDialog(
+      title: const TrText('自定义主题色'),
+      content: SizedBox(
+        width: 320,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                height: 54,
+                decoration: BoxDecoration(
+                  color: _color,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: apple.separator, width: .5),
+                ),
+              ),
+              const SizedBox(height: 14),
+              for (int row = 0; row < 2; row++) ...<Widget>[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: <Widget>[
+                    for (final Color preset in _presets.skip(row * 4).take(4))
+                      _LegacyPresetSwatch(
+                        color: preset,
+                        selected: preset.toARGB32() == _color.toARGB32(),
+                        onTap: () => _selectPreset(preset),
+                      ),
+                  ],
+                ),
+                if (row == 0) const SizedBox(height: 10),
+              ],
+              _LegacyGradientSlider(
+                label: '色相',
+                value: _hsv.hue,
+                max: 360,
+                colors: const <Color>[
+                  Color(0xFFFF0000),
+                  Color(0xFFFFFF00),
+                  Color(0xFF00FF00),
+                  Color(0xFF00FFFF),
+                  Color(0xFF0000FF),
+                  Color(0xFFFF00FF),
+                  Color(0xFFFF0000),
+                ],
+                onChanged: (double value) =>
+                    setState(() => _hsv = _hsv.withHue(value)),
+              ),
+              _LegacyGradientSlider(
+                label: '饱和度',
+                value: _hsv.saturation,
+                colors: <Color>[
+                  Colors.white,
+                  HSVColor.fromAHSV(1, _hsv.hue, 1, 1).toColor(),
+                ],
+                onChanged: (double value) =>
+                    setState(() => _hsv = _hsv.withSaturation(value)),
+              ),
+              _LegacyGradientSlider(
+                label: '明度',
+                value: _hsv.value,
+                colors: <Color>[
+                  Colors.black,
+                  HSVColor.fromAHSV(1, _hsv.hue, _hsv.saturation, 1).toColor(),
+                ],
+                onChanged: (double value) =>
+                    setState(() => _hsv = _hsv.withValue(value)),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _accentHex(_color),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: apple.secondaryLabel,
+                  fontFeatures: const <FontFeature>[
+                    FontFeature.tabularFigures(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const TrText('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_color),
+          child: const TrText('完成'),
+        ),
+      ],
+    );
+  }
+}
+
+class _LegacyPresetSwatch extends StatelessWidget {
+  const _LegacyPresetSwatch({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final Color check =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+        ? Colors.white
+        : Colors.black;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 20,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? apple.label : apple.separator,
+              width: selected ? 2 : .5,
+            ),
+          ),
+          child: selected
+              ? Icon(Icons.check_rounded, size: 18, color: check)
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// A slider painted over its own gradient track.
+class _LegacyGradientSlider extends StatelessWidget {
+  const _LegacyGradientSlider({
+    required this.label,
+    required this.value,
+    required this.colors,
+    required this.onChanged,
+    this.max = 1,
+  });
+
+  final String label;
+  final double value;
+  final double max;
+  final List<Color> colors;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            context.tr(label),
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: apple.secondaryLabel,
+            ),
+          ),
+          SizedBox(
+            height: 40,
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: 14,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: colors),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: apple.separator, width: .5),
+                    ),
+                  ),
+                ),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 14,
+                    activeTrackColor: Colors.transparent,
+                    inactiveTrackColor: Colors.transparent,
+                    secondaryActiveTrackColor: Colors.transparent,
+                    thumbColor: Colors.white,
+                    overlayColor: Colors.white.withValues(alpha: .18),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 18,
+                    ),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 9,
+                      elevation: 2,
+                    ),
+                    tickMarkShape: SliderTickMarkShape.noTickMark,
+                  ),
+                  child: Slider(
+                    value: value.clamp(0, max),
+                    min: 0,
+                    max: max,
+                    onChanged: onChanged,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

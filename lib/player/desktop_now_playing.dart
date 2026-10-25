@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/models.dart';
+import '../downloads/download_dialog.dart';
+import '../downloads/download_manager.dart';
+import '../downloads/download_queue_sheet.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../theme/app_palette.dart';
+import '../tv/tv_mode.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/animated_notice.dart';
 import '../widgets/player_seek_bar.dart';
@@ -44,111 +48,185 @@ class DesktopNowPlaying extends StatelessWidget {
   final VoidCallback onActivity;
 
   @override
-  Widget build(BuildContext context) => Focus(
-    autofocus: true,
-    onKeyEvent: (node, event) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) onActivity();
-      return KeyEventResult.ignored;
-    },
-    child: MouseRegion(
-      onEnter: (_) => onActivity(),
-      onHover: (_) => onActivity(),
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => onActivity(),
-        onPointerUp: (_) => onActivity(),
-        onPointerCancel: (_) => onActivity(),
-        onPointerSignal: (_) => onActivity(),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 20, 8),
-              child: Row(
-                children: [
-                  AccessibleIconButton(
-                    key: const ValueKey('desktop-close'),
-                    tooltip: '返回',
-                    onPressed: onBack,
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, box) => Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 24, 24, 24),
+  Widget build(BuildContext context) {
+    final bool tv = TvScope.isActive(context);
+    return Focus(
+      // A remote needs the first focusable control, not an empty root node;
+      // the shell's TvFocusRegion claims focus on a television.
+      autofocus: !tv,
+      canRequestFocus: !tv,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent || event is KeyRepeatEvent) onActivity();
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onEnter: (_) => onActivity(),
+        onHover: (_) => onActivity(),
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => onActivity(),
+          onPointerUp: (_) => onActivity(),
+          onPointerCancel: (_) => onActivity(),
+          onPointerSignal: (_) => onActivity(),
+          child: SafeArea(
+            minimum: tvSafeInsets(context),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 20, 8),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
-                        width: (box.maxWidth * .34).clamp(240, 440),
-                        child: _Presentation(
-                          track: track,
-                          state: state,
-                          artwork: artwork,
-                          onSaveArtwork: onSaveArtwork,
-                        ),
+                      AccessibleIconButton(
+                        key: const ValueKey('desktop-close'),
+                        tooltip: '返回',
+                        onPressed: onBack,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
                       ),
-                      const SizedBox(width: 32),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: RepaintBoundary(
-                          child: AnimatedSwitcher(
-                            duration: MediaQuery.disableAnimationsOf(context)
-                                ? Duration.zero
-                                : const Duration(milliseconds: 240),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeInCubic,
-                            transitionBuilder: (child, animation) =>
-                                FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: Tween(
-                                      begin: const Offset(.025, 0),
-                                      end: Offset.zero,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                ),
-                            layoutBuilder: (current, previous) => Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                for (final old in previous)
-                                  ExcludeSemantics(
-                                    child: IgnorePointer(child: old),
-                                  ),
-                                ?current,
-                              ],
-                            ),
-                            child: KeyedSubtree(
-                              key: ValueKey(pane),
-                              child: switch (pane) {
-                                DesktopNowPlayingPane.lyrics => lyrics,
-                                DesktopNowPlayingPane.comments => comments,
-                                DesktopNowPlayingPane.queue => queue,
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
+                      const Spacer(),
+                      _DownloadButton(state: state, track: track),
                     ],
                   ),
                 ),
-              ),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, box) => Padding(
+                      padding: const EdgeInsets.fromLTRB(32, 24, 24, 24),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: (box.maxWidth * .34).clamp(240, 440),
+                            child: _Presentation(
+                              track: track,
+                              state: state,
+                              artwork: artwork,
+                              onSaveArtwork: onSaveArtwork,
+                            ),
+                          ),
+                          const SizedBox(width: 32),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: RepaintBoundary(
+                              child: AnimatedSwitcher(
+                                duration:
+                                    MediaQuery.disableAnimationsOf(context)
+                                    ? Duration.zero
+                                    : const Duration(milliseconds: 240),
+                                switchInCurve: Curves.easeOutCubic,
+                                switchOutCurve: Curves.easeInCubic,
+                                transitionBuilder: (child, animation) =>
+                                    FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: Tween(
+                                          begin: const Offset(.025, 0),
+                                          end: Offset.zero,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    ),
+                                layoutBuilder: (current, previous) => Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    for (final old in previous)
+                                      ExcludeSemantics(
+                                        child: IgnorePointer(child: old),
+                                      ),
+                                    ?current,
+                                  ],
+                                ),
+                                child: KeyedSubtree(
+                                  key: ValueKey(pane),
+                                  child: switch (pane) {
+                                    DesktopNowPlayingPane.lyrics => lyrics,
+                                    DesktopNowPlayingPane.comments => comments,
+                                    DesktopNowPlayingPane.queue => queue,
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _DesktopDock(
+                  state: state,
+                  visible: controlsVisible,
+                  pane: pane,
+                  onPaneChanged: onPaneChanged,
+                  onFullscreen: onFullscreen,
+                ),
+              ],
             ),
-            _DesktopDock(
-              state: state,
-              visible: controlsVisible,
-              pane: pane,
-              onPaneChanged: onPaneChanged,
-              onFullscreen: onFullscreen,
-            ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+/// Top-bar action for the current track. Tapping it opens the same quality /
+/// destination dialog every other download entry point uses; once the track is
+/// queued or finished, the same button opens the download queue instead of
+/// enqueueing a duplicate.
+class _DownloadButton extends StatelessWidget {
+  const _DownloadButton({required this.state, required this.track});
+  final AppState state;
+  final Track track;
+
+  @override
+  Widget build(BuildContext context) {
+    // Local files (imports, scans and downloads played back from the library)
+    // have no service id to resolve.
+    if (int.tryParse(track.id) == null || track.localPath != null) {
+      return AccessibleIconButton(
+        key: const ValueKey('desktop-download'),
+        tooltip: '本地歌曲无需下载',
+        onPressed: null,
+        color: context.colors.cloudDark,
+        icon: const Icon(Icons.download_rounded),
+      );
+    }
+    return AnimatedBuilder(
+      animation: state.downloadManager,
+      builder: (context, _) {
+        DownloadTask? task;
+        for (final DownloadTask candidate in state.downloadManager.tasks) {
+          if (candidate.track.id != track.id) continue;
+          // A running task describes the button better than an older finished
+          // one for the same song at a different quality.
+          if (task == null || candidate.isActive) task = candidate;
+        }
+        final bool active = task?.isActive ?? false;
+        final bool done = task?.isDone ?? false;
+        final bool queued = active || done;
+        return AccessibleIconButton(
+          key: const ValueKey('desktop-download'),
+          tooltip: queued ? '下载任务' : '下载歌曲',
+          onPressed: () => unawaited(
+            queued
+                ? showDownloadQueueSheet(context, state)
+                : downloadTracks(context, state, <Track>[track]),
+          ),
+          color: queued ? context.colors.clayDeep : context.colors.onPlayer,
+          icon: active
+              ? SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(
+                    value: task?.progress,
+                    strokeWidth: 2.4,
+                    color: context.colors.clayDeep,
+                  ),
+                )
+              : Icon(
+                  done ? Icons.download_done_rounded : Icons.download_rounded,
+                ),
+        );
+      },
+    );
+  }
 }
 
 class _PaneTab extends StatelessWidget {
@@ -170,30 +248,35 @@ class _PaneTab extends StatelessWidget {
     return Semantics(
       button: true,
       selected: active,
-      label: label,
+      label: context.tr(label),
       child: Tooltip(
-        message: label,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: feedbackAction(context, onPressed),
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOut,
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                // The selected pane keeps a soft chip around its glyph, the way
-                // the mobile player marks the active tab.
-                color: active
-                    ? Colors.white.withValues(alpha: 0.16)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(
-                icon,
-                size: 21,
-                color: active ? activeColor : mutedColor,
+        message: context.tr(label),
+        child: TvTapTarget(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(11),
+          focusScale: 1.08,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: feedbackAction(context, onPressed),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  // The selected pane keeps a soft chip around its glyph, the
+                  // way the mobile player marks the active tab.
+                  color: active
+                      ? Colors.white.withValues(alpha: 0.16)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  icon,
+                  size: 21,
+                  color: active ? activeColor : mutedColor,
+                ),
               ),
             ),
           ),
@@ -218,9 +301,8 @@ class _Presentation extends StatelessWidget {
   /// The cover is the download affordance now: right-clicking it offers the
   /// save action instead of a toolbar button.
   Widget _cover(BuildContext context) => GestureDetector(
-    onSecondaryTapDown: (TapDownDetails details) => unawaited(
-      _showCoverMenu(context, details.globalPosition),
-    ),
+    onSecondaryTapDown: (TapDownDetails details) =>
+        unawaited(_showCoverMenu(context, details.globalPosition)),
     child: artwork,
   );
 
@@ -235,11 +317,16 @@ class _Presentation extends StatelessWidget {
         overlay.size.width - position.dx,
         overlay.size.height - position.dy,
       ),
-      items: const <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(value: 'save', child: Text('保存封面')),
+      items: <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(value: 'save', child: TrText('保存封面')),
+        if (int.tryParse(track.id) != null)
+          PopupMenuItem<String>(value: 'download', child: TrText('下载歌曲')),
       ],
     );
     if (choice == 'save') onSaveArtwork();
+    if (choice == 'download' && context.mounted) {
+      await downloadTracks(context, state, <Track>[track]);
+    }
   }
 
   Widget _metadata(BuildContext context, {bool compact = false}) => Column(
@@ -463,43 +550,40 @@ class _DesktopDock extends StatelessWidget {
                               flex: 2,
                               child: Row(
                                 children: [
-                            _PaneTab(
-                              key: const ValueKey('desktop-lyrics'),
-                              label: '歌词',
-                              icon: Icons.lyrics_outlined,
-                              active: pane == DesktopNowPlayingPane.lyrics,
-                              onPressed: () =>
-                                  onPaneChanged(DesktopNowPlayingPane.lyrics),
-                            ),
-                            _PaneTab(
-                              key: const ValueKey('desktop-comments'),
-                              label: '评论',
-                              icon: Icons.chat_bubble_outline_rounded,
-                              active: pane == DesktopNowPlayingPane.comments,
-                              onPressed: () => onPaneChanged(
-                                DesktopNowPlayingPane.comments,
+                                  _PaneTab(
+                                    key: const ValueKey('desktop-lyrics'),
+                                    label: '歌词',
+                                    icon: Icons.lyrics_outlined,
+                                    active:
+                                        pane == DesktopNowPlayingPane.lyrics,
+                                    onPressed: () => onPaneChanged(
+                                      DesktopNowPlayingPane.lyrics,
+                                    ),
+                                  ),
+                                  _PaneTab(
+                                    key: const ValueKey('desktop-comments'),
+                                    label: '评论',
+                                    icon: Icons.chat_bubble_outline_rounded,
+                                    active:
+                                        pane == DesktopNowPlayingPane.comments,
+                                    onPressed: () => onPaneChanged(
+                                      DesktopNowPlayingPane.comments,
+                                    ),
+                                  ),
+                                  _PaneTab(
+                                    key: const ValueKey('desktop-queue'),
+                                    label: '播放队列 (Q)',
+                                    icon: Icons.queue_music_rounded,
+                                    active: pane == DesktopNowPlayingPane.queue,
+                                    onPressed: () => onPaneChanged(
+                                      DesktopNowPlayingPane.queue,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            _PaneTab(
-                              key: const ValueKey('desktop-queue'),
-                              label: '播放队列 (Q)',
-                              icon: Icons.queue_music_rounded,
-                              active: pane == DesktopNowPlayingPane.queue,
-                              onPressed: () =>
-                                  onPaneChanged(DesktopNowPlayingPane.queue),
-                            ),
-                            _PaneTab(
-                              key: const ValueKey('desktop-fullscreen'),
-                              label: '全屏 (F)',
-                              icon: Icons.fullscreen_rounded,
-                              active: false,
-                              onPressed: onFullscreen,
-                            ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          flex: 3,
+                            Expanded(
+                              flex: 3,
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Row(
@@ -573,9 +657,25 @@ class _DesktopDock extends StatelessWidget {
                             const SizedBox(width: 12),
                             Expanded(
                               flex: 2,
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: VolumeControl(state: state),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Flexible(child: VolumeControl(state: state)),
+                                  const SizedBox(width: 2),
+                                  AccessibleIconButton(
+                                    key: const ValueKey('desktop-fullscreen'),
+                                    tooltip: '全屏 (F)',
+                                    color: context.colors.slateDark,
+                                    iconSize: 22,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 40,
+                                      minHeight: 48,
+                                    ),
+                                    padding: const EdgeInsets.all(8),
+                                    onPressed: onFullscreen,
+                                    icon: const Icon(Icons.fullscreen_rounded),
+                                  ),
+                                ],
                               ),
                             ),
                           ],

@@ -1,3 +1,4 @@
+import '../data/audio_quality.dart';
 import 'crypto.dart';
 
 /// One in-process route: upstream path plus the pre-encoded payload.
@@ -45,20 +46,19 @@ NeteaseRequest buildNeteaseRequest(
     bool web = false,
     bool plain = false,
     Map<String, Object?> body = const <String, Object?>{},
-  }) =>
-      NeteaseRequest(
-        path: path,
-        payload: body,
-        encoding: plain
-            ? NeteaseEncoding.api
-            : (web ? NeteaseEncoding.weapi : NeteaseEncoding.eapi),
-        mobileClient: alias.startsWith('/listentogether/'),
-      );
+  }) => NeteaseRequest(
+    path: path,
+    payload: body,
+    encoding: plain
+        ? NeteaseEncoding.api
+        : (web ? NeteaseEncoding.weapi : NeteaseEncoding.eapi),
+    mobileClient: alias.startsWith('/listentogether/'),
+  );
 
   Map<String, Object?> page({int defaultLimit = 30}) => <String, Object?>{
-        'limit': value('limit', defaultLimit.toString()),
-        'offset': value('offset', '0'),
-      };
+    'limit': value('limit', defaultLimit.toString()),
+    'offset': value('offset', '0'),
+  };
 
   switch (alias) {
     case '/login/cellphone':
@@ -138,8 +138,8 @@ NeteaseRequest buildNeteaseRequest(
       final String path = voice
           ? '/api/search/voice/get'
           : alias == '/cloudsearch'
-              ? '/api/cloudsearch/pc'
-              : '/api/search/get';
+          ? '/api/cloudsearch/pc'
+          : '/api/search/get';
       return request(
         path,
         body: <String, Object?>{
@@ -175,20 +175,17 @@ NeteaseRequest buildNeteaseRequest(
       if (value('unblock', 'false') != 'false') {
         throw UnsupportedError('External music matching is not supported.');
       }
-      final int bitrate = switch (value('level', 'exhigh')) {
-        'standard' => 128000,
-        'higher' => 192000,
-        'exhigh' => 320000,
-        _ => throw UnsupportedError(
+      final AudioQuality quality =
+          AudioQualityInfo.fromLevel(value('level', 'exhigh')) ??
+          (throw UnsupportedError(
             'This audio quality requires an unsupported upstream handshake.',
-          ),
-      };
+          ));
       return request(
         '/api/song/enhance/player/url',
         web: true,
         body: <String, Object?>{
           'ids': _songIds(value('id')).toString(),
-          'br': bitrate,
+          'br': quality.bitrate,
         },
       );
     case '/check/music':
@@ -480,17 +477,20 @@ NeteaseRequest buildNeteaseRequest(
 }
 
 List<int> _songIds(String value) {
-  return value.split(',').map((String raw) {
-    final int? parsed = int.tryParse(raw.trim());
-    if (parsed == null || parsed <= 0) {
-      throw ArgumentError.value(
-        value,
-        'ids',
-        'Song IDs must be positive integers.',
-      );
-    }
-    return parsed;
-  }).toList(growable: false);
+  return value
+      .split(',')
+      .map((String raw) {
+        final int? parsed = int.tryParse(raw.trim());
+        if (parsed == null || parsed <= 0) {
+          throw ArgumentError.value(
+            value,
+            'ids',
+            'Song IDs must be positive integers.',
+          );
+        }
+        return parsed;
+      })
+      .toList(growable: false);
 }
 
 String _songIdPayload(String value) =>

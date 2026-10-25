@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -269,24 +270,20 @@ class _FlowPainter extends CustomPainter {
         .5 +
         .5 *
             math.sin(
-              u * 3.35 +
-                  math.sin(v * 2.75 - time * .19) * 1.15 +
-                  time * .21,
+              u * 3.35 + math.sin(v * 2.75 - time * .19) * 1.15 + time * .21,
             );
     final double waveB =
         .5 +
         .5 *
             math.cos(
-              v * 3.05 +
-                  math.sin(u * 3.7 + time * .17) * 1.05 -
-                  time * .16,
+              v * 3.05 + math.sin(u * 3.7 + time * .17) * 1.05 - time * .16,
             );
     final double sampleA = (.08 + waveA * .58).clamp(0.0, 1.0);
     final double sampleB = (.38 + waveB * .60).clamp(0.0, 1.0);
     final Color upper = _samplePalette(colors, sampleA);
     final Color lower = _samplePalette(colors, sampleB);
-    final double mix =
-        (.42 + .25 * math.sin((u - v) * 2.35 + time * .14)).clamp(0.0, 1.0);
+    final double mix = (.42 + .25 * math.sin((u - v) * 2.35 + time * .14))
+        .clamp(0.0, 1.0);
     final Color base = Color.lerp(upper, lower, mix) ?? lower;
     final HSLColor hsl = HSLColor.fromColor(base);
     return hsl
@@ -313,8 +310,7 @@ class _FlowPainter extends CustomPainter {
         final double v = row / _rows;
         for (var column = 0; column <= _columns; column++) {
           final double u = column / _columns;
-          final double envelope =
-              math.sin(math.pi * u) * math.sin(math.pi * v);
+          final double envelope = math.sin(math.pi * u) * math.sin(math.pi * v);
           final double waveX =
               math.sin(v * math.pi * 2.4 + time * .20 + 1.1) * .115 +
               math.sin(u * math.pi * 4.2 - time * .13 + .7) * .055;
@@ -462,11 +458,7 @@ class _ColorBucket {
   double score = 0;
 }
 
-List<Color> albumMeshColorsFromPixels(
-  Uint8List rgba,
-  int width,
-  int height,
-) {
+List<Color> albumMeshColorsFromPixels(Uint8List rgba, int width, int height) {
   if (width <= 0 || height <= 0) {
     return albumFlowColors(kAlbumDefaultSeed);
   }
@@ -486,10 +478,7 @@ List<Color> albumMeshColorsFromPixels(
       // pixels near mid-lightness, matching the contrast/saturation treatment
       // used by AMLL's WebGL cover texture.
       final int key = (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
-      final _ColorBucket bucket = buckets.putIfAbsent(
-        key,
-        _ColorBucket.new,
-      );
+      final _ColorBucket bucket = buckets.putIfAbsent(key, _ColorBucket.new);
       bucket
         ..count += 1
         ..red += r
@@ -665,6 +654,7 @@ class LegacyAlbumBackdrop extends StatefulWidget {
     required this.track,
     required this.mode,
     required this.uiAlpha,
+    this.imagePath,
     this.veil,
     this.pageColor,
     this.onSeed,
@@ -672,6 +662,10 @@ class LegacyAlbumBackdrop extends StatefulWidget {
 
   final Track? track;
   final LegacyBackgroundMode mode;
+
+  /// Stored copy of the listener's picture, painted in
+  /// [LegacyBackgroundMode.customImage].
+  final String? imagePath;
 
   /// `内容不透明度` — 0.4 … 1.0. The veil over the palette is its square.
   final double uiAlpha;
@@ -732,6 +726,12 @@ class _LegacyAlbumBackdropState extends State<LegacyAlbumBackdrop> {
           : ColoredBox(color: pageColor);
     }
     final ColorScheme scheme = Theme.of(context).colorScheme;
+    if (widget.mode == LegacyBackgroundMode.customImage) {
+      return _CustomImageBackdrop(
+        path: widget.imagePath,
+        pageColor: pageColor ?? scheme.surface,
+      );
+    }
     final double veil = (widget.uiAlpha * widget.uiAlpha).clamp(0.0, 1.0);
     return Stack(
       fit: StackFit.expand,
@@ -746,6 +746,39 @@ class _LegacyAlbumBackdropState extends State<LegacyAlbumBackdrop> {
         if (widget.veil == null)
           ColoredBox(color: scheme.surface.withValues(alpha: veil)),
       ],
+    );
+  }
+}
+
+/// Paints the listener's picture edge to edge.
+///
+/// A missing or undecodable file falls back to [pageColor], so a stale
+/// preference never leaves a hole in the window. The content veil that keeps
+/// labels readable is drawn by the shell above this widget.
+class _CustomImageBackdrop extends StatelessWidget {
+  const _CustomImageBackdrop({required this.path, required this.pageColor});
+
+  final String? path;
+  final Color pageColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? source = path;
+    return RepaintBoundary(
+      child: ColoredBox(
+        color: pageColor,
+        child: source == null || source.isEmpty
+            ? const SizedBox.expand()
+            : Image.file(
+                File(source),
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                gaplessPlayback: true,
+                errorBuilder:
+                    (BuildContext context, Object error, StackTrace? stack) =>
+                        const SizedBox.expand(),
+              ),
+      ),
     );
   }
 }

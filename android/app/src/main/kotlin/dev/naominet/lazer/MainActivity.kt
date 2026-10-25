@@ -1,6 +1,10 @@
 package dev.naominet.lazer
 
+import android.Manifest
+import android.app.UiModeManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -18,6 +22,7 @@ import kotlin.math.roundToInt
 /// tick and lets the analytics-free intensity slider control its strength.
 class MainActivity : AudioServiceActivity() {
     private var vibrator: Vibrator? = null
+    private var permissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -33,6 +38,83 @@ class MainActivity : AudioServiceActivity() {
                 impact(intensity, kind)
                 result.success(null)
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LOCAL_MEDIA_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "hasAudioAccess" -> result.success(hasAudioAccess())
+                    "requestAudioAccess" -> requestAudioAccess(result)
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, TV_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isTelevision" -> result.success(isTelevision())
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    /// Whether this device is a television, so Dart can switch to the ten-foot
+    /// layout and make every tap target reachable with a D-pad remote.
+    ///
+    /// Leanback is the official answer, but cheap set-top boxes often ship
+    /// without the feature flag while still having a television UI mode or no
+    /// touch screen at all; all three shapes are recognised.
+    private fun isTelevision(): Boolean {
+        val uiMode =
+            (getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)?.currentModeType
+        if (uiMode == Configuration.UI_MODE_TYPE_TELEVISION) return true
+        val manager = packageManager
+        if (manager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+            manager.hasSystemFeature(PackageManager.FEATURE_TELEVISION) ||
+            manager.hasSystemFeature(TELEVISION_FEATURE)
+        ) {
+            return true
+        }
+        // No touch input means the only way through the app is a D-pad.
+        return !manager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN) &&
+            !manager.hasSystemFeature(PackageManager.FEATURE_FAKETOUCH)
+    }
+
+    /// `READ_MEDIA_AUDIO` replaced `READ_EXTERNAL_STORAGE` on Android 13.
+    private fun audioPermission(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+    private fun hasAudioAccess(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        return checkSelfPermission(audioPermission()) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestAudioAccess(result: MethodChannel.Result) {
+        if (hasAudioAccess()) {
+            result.success(true)
+            return
+        }
+        // A permission dialog is already on screen; never stack two requests.
+        if (permissionResult != null) {
+            result.success(false)
+            return
+        }
+        permissionResult = result
+        requestPermissions(arrayOf(audioPermission()), PERMISSION_REQUEST)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != PERMISSION_REQUEST) return
+        val granted = grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        permissionResult?.success(granted)
+        permissionResult = null
     }
 
     private fun impact(intensity: Float, kind: String) {
@@ -63,5 +145,9 @@ class MainActivity : AudioServiceActivity() {
 
     private companion object {
         const val HAPTICS_CHANNEL = "dev.naominet.lazer/haptics"
+        const val LOCAL_MEDIA_CHANNEL = "dev.naominet.lazer/local_media"
+        const val TV_CHANNEL = "dev.naominet.lazer/tv"
+        const val TELEVISION_FEATURE = "android.hardware.type.television"
+        const val PERMISSION_REQUEST = 4101
     }
 }

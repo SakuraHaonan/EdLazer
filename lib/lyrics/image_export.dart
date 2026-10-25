@@ -176,7 +176,7 @@ class _LyricImageDialogState extends State<LyricImageDialog> {
       );
       if (mounted && saved) setState(() => _saved = true);
     } catch (_) {
-      if (mounted) setState(() => _error = '保存失败，请检查相册权限或稍后重试。');
+      if (mounted) setState(() => _error = '保存失败，请检查相册权限或稍后重试。');  // i18n:key
     } finally {
       if (mounted) setState(() => _saving = false);
     }

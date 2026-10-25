@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
+import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../theme/apple_design.dart';
 import '../theme/tokens.dart';
+import '../tv/tv_mode.dart';
 import 'accessible_controls.dart';
 import 'interaction_feedback.dart';
 import 'plate_art.dart';
@@ -81,9 +83,12 @@ class _PlaybackQueueViewState extends State<PlaybackQueueView> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text('播放队列', style: theme.textTheme.titleMedium),
+                        child: TrText(
+                          '播放队列',
+                          style: theme.textTheme.titleMedium,
+                        ),
                       ),
-                      Text(
+                      TrText(
                         '${state.queue.length} 首',
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: apple.secondaryLabel,
@@ -149,12 +154,14 @@ class _QueueRow extends StatefulWidget {
 
 class _QueueRowState extends State<_QueueRow> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final bool current = widget.isCurrent;
+    final bool highlighted = _hovering || _focused;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovering = true),
@@ -164,86 +171,103 @@ class _QueueRowState extends State<_QueueRow> {
         child: Material(
           color: current
               ? apple.accentSoft
-              : _hovering
+              : highlighted
               ? apple.fill
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: feedbackAction(context, widget.onTap),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-              child: Row(
-                children: <Widget>[
-                  SizedBox(
-                    width: 24,
-                    child: current && widget.playing
-                        ? _PlayingBars(state: widget.state)
-                        : Text(
-                            '${widget.index + 1}'.padLeft(2, '0'),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: current
-                                  ? apple.accent
-                                  : apple.secondaryLabel,
-                              fontFeatures: const <FontFeature>[
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                          ),
+            onFocusChange: (bool value) => setState(() => _focused = value),
+            child: Stack(
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 10,
                   ),
-                  const SizedBox(width: 8),
-                  ClipRRect(
-                    borderRadius: AppShape.smRadius,
-                    child: SizedBox.square(
-                      dimension: 44,
-                      child: PlateArt(
-                        seed: widget.track.coverSeed,
-                        coverUrl: widget.track.coverUrl,
-                        size: 44,
+                  child: Row(
+                    children: <Widget>[
+                      SizedBox(
+                        width: 24,
+                        child: current && widget.playing
+                            ? _PlayingBars(state: widget.state)
+                            : Text(
+                                '${widget.index + 1}'.padLeft(2, '0'),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: current
+                                      ? apple.accent
+                                      : apple.secondaryLabel,
+                                  fontFeatures: const <FontFeature>[
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: 8),
+                      ClipRRect(
+                        borderRadius: AppShape.smRadius,
+                        child: SizedBox.square(
+                          dimension: 44,
+                          child: PlateArt(
+                            seed: widget.track.coverSeed,
+                            coverUrl: widget.track.coverUrl,
+                            size: 44,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: <Widget>[
+                            Text(
+                              widget.track.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: current ? apple.accent : apple.label,
+                                fontWeight: current
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.track.artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: apple.secondaryLabel,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        fmt(widget.track.duration),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: apple.secondaryLabel,
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_focused && TvScope.isActive(context))
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: TvFocusOutline(
+                        borderRadius: BorderRadius.circular(8),
+                        width: 2,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Text(
-                          widget.track.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: current ? apple.accent : apple.label,
-                            fontWeight: current
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.track.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: apple.secondaryLabel,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    fmt(widget.track.duration),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: apple.secondaryLabel,
-                      fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
           ),
         ),

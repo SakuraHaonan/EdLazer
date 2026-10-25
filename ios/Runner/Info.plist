@@ -8,6 +8,10 @@
 	<string>将你选择保存的歌曲封面存入相册。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>保存你选择的歌曲封面。</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

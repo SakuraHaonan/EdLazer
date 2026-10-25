@@ -24,7 +24,7 @@ slider is in charge, a head unit never drops back to desktop density.
 
 ## How it is selected
 
-`设置 → 界面 → 设备形态` offers `自动选择 / 标准 / 车机`, persisted as
+`设置 → 界面 → 设备形态` offers `自动选择 / 标准 / 车机 / 电视`, persisted as
 `lazer_surface`. An explicit choice always wins; `自动选择` asks the platform:
 
 ```dart
@@ -37,9 +37,11 @@ looksLikeCarDisplay(
 
 That is the shape every embedded Android display has: a low-density landscape
 panel. Android TV boxes match too and want the same large, far-viewed
-interface. Phones (high density) and portrait tablets never match, and desktop
-platforms are excluded on purpose — a window's size says nothing about the
-display behind it, so there the choice stays manual.
+interface; a real Leanback television is detected first and takes the
+television profile instead (150% floor plus D-pad navigation — see
+[android-tv.md](android-tv.md)). Phones (high density) and portrait tablets
+never match, and desktop platforms are excluded on purpose — a window's size
+says nothing about the display behind it, so there the choice stays manual.
 
 Detection is best-effort by design: the app cannot ask Android whether it runs
 on a vehicle head unit without platform code, so the setting stays one tap away.

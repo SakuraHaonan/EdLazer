@@ -1,5 +1,6 @@
 import 'package:lazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
+import '../tv/tv_mode.dart';
 import 'package:flutter/material.dart';
 import '../widgets/interaction_feedback.dart';
 
@@ -118,44 +119,49 @@ class _IvoryButtonState extends State<IvoryButton> {
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
+      child: TvTapTarget(
         onTap: feedbackAction(context, widget.onPressed),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: _ButtonSpec.filledPadding,
-          width: widget.expand ? double.infinity : null,
-          decoration: BoxDecoration(
-            color: !enabled
-                ? context.colors.ivoryMedium
-                : _hovering
-                ? context.colors.manilla
-                : context.colors.ivoryLight,
-            borderRadius: AppRadius.filledButton,
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.icon != null) ...[
-                Icon(
-                  widget.icon,
-                  size: 16,
-                  color: enabled
-                      ? context.colors.slateDark
-                      : context.colors.cloudMedium,
+        enabled: enabled,
+        borderRadius: BorderRadius.circular(10),
+        child: GestureDetector(
+          onTap: feedbackAction(context, widget.onPressed),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: _ButtonSpec.filledPadding,
+            width: widget.expand ? double.infinity : null,
+            decoration: BoxDecoration(
+              color: !enabled
+                  ? context.colors.ivoryMedium
+                  : _hovering
+                  ? context.colors.manilla
+                  : context.colors.ivoryLight,
+              borderRadius: AppRadius.filledButton,
+            ),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.icon != null) ...[
+                  Icon(
+                    widget.icon,
+                    size: 16,
+                    color: enabled
+                        ? context.colors.slateDark
+                        : context.colors.cloudMedium,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                ],
+                TrText(
+                  widget.label,
+                  style: context.type.bodySm.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: enabled
+                        ? context.colors.slateDark
+                        : context.colors.cloudMedium,
+                  ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
               ],
-              TrText(
-                widget.label,
-                style: context.type.bodySm.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: enabled
-                      ? context.colors.slateDark
-                      : context.colors.cloudMedium,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -198,39 +204,46 @@ class _OutlinedButton2State extends State<OutlinedButton2> {
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
+      child: TvTapTarget(
         onTap: feedbackAction(context, widget.onPressed),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: _ButtonSpec.compactPadding,
-          decoration: BoxDecoration(
-            color: _hovering && enabled
-                ? (widget.invert
-                      ? context.colors.slateMedium
-                      : context.colors.oatWarm.withValues(alpha: 0.45))
-                : Colors.transparent,
-            border: Border.all(
-              color: enabled ? context.colors.cloudDark : context.colors.stone,
-              width: 1,
-            ),
-            borderRadius: AppRadius.outlinedBorder,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.icon != null) ...[
-                Icon(widget.icon, size: 14, color: fg),
-                const SizedBox(width: 6),
-              ],
-              TrText(
-                widget.label,
-                style: context.type.caption.copyWith(
-                  color: fg,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+        enabled: enabled,
+        borderRadius: BorderRadius.circular(12),
+        child: GestureDetector(
+          onTap: feedbackAction(context, widget.onPressed),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: _ButtonSpec.compactPadding,
+            decoration: BoxDecoration(
+              color: _hovering && enabled
+                  ? (widget.invert
+                        ? context.colors.slateMedium
+                        : context.colors.oatWarm.withValues(alpha: 0.45))
+                  : Colors.transparent,
+              border: Border.all(
+                color: enabled
+                    ? context.colors.cloudDark
+                    : context.colors.stone,
+                width: 1,
               ),
-            ],
+              borderRadius: AppRadius.outlinedBorder,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.icon != null) ...[
+                  Icon(widget.icon, size: 14, color: fg),
+                  const SizedBox(width: 6),
+                ],
+                TrText(
+                  widget.label,
+                  style: context.type.caption.copyWith(
+                    color: fg,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -275,19 +288,24 @@ class _TextLinkButtonState extends State<TextLinkButton> {
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
+      child: TvTapTarget(
         onTap: feedbackAction(context, widget.onPressed),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: TrText(
-            widget.label,
-            style: context.type.bodySm.copyWith(
-              color: fg,
-              decoration: showUnderline
-                  ? TextDecoration.underline
-                  : TextDecoration.none,
-              decorationColor: fg,
-              decorationThickness: 1,
+        enabled: enabled,
+        borderRadius: BorderRadius.circular(6),
+        child: GestureDetector(
+          onTap: feedbackAction(context, widget.onPressed),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: TrText(
+              widget.label,
+              style: context.type.bodySm.copyWith(
+                color: fg,
+                decoration: showUnderline
+                    ? TextDecoration.underline
+                    : TextDecoration.none,
+                decorationColor: fg,
+                decorationThickness: 1,
+              ),
             ),
           ),
         ),
@@ -339,9 +357,13 @@ class PaperCard extends StatelessWidget {
     if (onTap != null) {
       box = MouseRegion(
         cursor: SystemMouseCursors.click,
-        child: GestureDetector(
+        child: TvTapTarget(
           onTap: feedbackAction(context, onTap),
-          child: box,
+          borderRadius: br,
+          child: GestureDetector(
+            onTap: feedbackAction(context, onTap),
+            child: box,
+          ),
         ),
       );
     }

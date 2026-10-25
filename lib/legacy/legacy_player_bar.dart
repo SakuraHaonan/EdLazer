@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/models.dart';
+import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../theme/apple_design.dart';
+import '../tv/tv_mode.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/playback_queue_view.dart';
@@ -54,9 +57,7 @@ class LegacyPlayerBar extends StatelessWidget {
             borderRadius: BorderRadius.zero,
             blurSigma: 28,
             color: apple.glassStrong,
-            border: Border(
-              top: BorderSide(color: apple.separator, width: .5),
-            ),
+            border: Border(top: BorderSide(color: apple.separator, width: .5)),
             child: SizedBox(
               height: 60,
               child: Padding(
@@ -96,100 +97,102 @@ class LegacyPlayerBar extends StatelessWidget {
           borderRadius: BorderRadius.zero,
           blurSigma: 30,
           color: apple.glassStrong,
-          border: Border(
-            top: BorderSide(color: apple.separator, width: .5),
-          ),
+          border: Border(top: BorderSide(color: apple.separator, width: .5)),
           child: SizedBox(
             height: 84,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
-            children: [
-              SizedBox(
-                width: 250,
-                child: _NowPlayingTile(
-                  track: track,
-                  onTap: onOpen,
-                  artworkSize: 50,
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 250,
+                    child: _NowPlayingTile(
+                      track: track,
+                      onTap: onOpen,
+                      artworkSize: 50,
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          _CompactIcon(
-                            icon: state.currentLiked
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            tooltip: state.currentLiked ? '取消喜欢' : '喜欢',
-                            selected: state.currentLiked,
-                            onPressed: track == null
-                                ? null
-                                : () => unawaited(state.toggleLikeCurrent()),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _CompactIcon(
+                                icon: state.currentLiked
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                tooltip: state.currentLiked ? '取消喜欢' : '喜欢',
+                                selected: state.currentLiked,
+                                onPressed: track == null
+                                    ? null
+                                    : () =>
+                                          unawaited(state.toggleLikeCurrent()),
+                              ),
+                              const SizedBox(width: 3),
+                              _CompactIcon(
+                                icon: Icons.skip_previous_rounded,
+                                tooltip: '上一首',
+                                onPressed: track == null
+                                    ? null
+                                    : state.previous,
+                              ),
+                              const SizedBox(width: 3),
+                              _PlayButton(state: state),
+                              const SizedBox(width: 3),
+                              _CompactIcon(
+                                icon: Icons.skip_next_rounded,
+                                tooltip: '下一首',
+                                onPressed: track == null ? null : state.next,
+                              ),
+                              const SizedBox(width: 3),
+                              _CompactIcon(
+                                icon: _playModeIcon(state),
+                                tooltip: _playModeLabel(context, state),
+                                selected:
+                                    state.shuffle ||
+                                    state.repeat != LoopMode.off,
+                                onPressed: state.cyclePlayMode,
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 3),
-                          _CompactIcon(
-                            icon: Icons.skip_previous_rounded,
-                            tooltip: '上一首',
-                            onPressed: track == null ? null : state.previous,
-                          ),
-                          const SizedBox(width: 3),
-                          _PlayButton(state: state),
-                          const SizedBox(width: 3),
-                          _CompactIcon(
-                            icon: Icons.skip_next_rounded,
-                            tooltip: '下一首',
-                            onPressed: track == null ? null : state.next,
-                          ),
-                          const SizedBox(width: 3),
-                          _CompactIcon(
-                            icon: _playModeIcon(state),
-                            tooltip: _playModeLabel(state),
-                            selected:
-                                state.shuffle || state.repeat != LoopMode.off,
-                            onPressed: state.cyclePlayMode,
-                          ),
+                          const SizedBox(height: 2),
+                          _SeekRow(state: state),
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      _SeekRow(state: state),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 168,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _VolumeButton(state: state),
-                    const SizedBox(width: 2),
-                    LegacyQueueButton(state: state),
-                    const SizedBox(width: 2),
-                    if (onComments != null) ...[
-                      _CompactIcon(
-                        icon: Icons.mode_comment_outlined,
-                        tooltip: '评论',
-                        selected: comments,
-                        onPressed: onComments,
-                      ),
-                      const SizedBox(width: 2),
-                    ],
-                    _CompactIcon(
-                      icon: Icons.lyrics_outlined,
-                      tooltip: '歌词',
-                      onPressed: onOpen,
                     ),
-                  ],
-                ),
+                  ),
+                  SizedBox(
+                    width: 168,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _VolumeButton(state: state),
+                        const SizedBox(width: 2),
+                        LegacyQueueButton(state: state),
+                        const SizedBox(width: 2),
+                        if (onComments != null) ...[
+                          _CompactIcon(
+                            icon: Icons.mode_comment_outlined,
+                            tooltip: '评论',
+                            selected: comments,
+                            onPressed: onComments,
+                          ),
+                          const SizedBox(width: 2),
+                        ],
+                        _CompactIcon(
+                          icon: Icons.lyrics_outlined,
+                          tooltip: '歌词',
+                          onPressed: onOpen,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
             ),
           ),
         );
@@ -207,12 +210,12 @@ IconData _playModeIcon(AppState state) {
   };
 }
 
-String _playModeLabel(AppState state) {
-  if (state.shuffle) return '随机播放';
+String _playModeLabel(BuildContext context, AppState state) {
+  if (state.shuffle) return context.tr('随机播放');
   return switch (state.repeat) {
-    LoopMode.off => '顺序播放',
-    LoopMode.all => '列表循环',
-    LoopMode.one => '单曲循环',
+    LoopMode.off => context.tr('顺序播放'),
+    LoopMode.all => context.tr('列表循环'),
+    LoopMode.one => context.tr('单曲循环'),
   };
 }
 
@@ -235,67 +238,76 @@ class _NowPlayingTile extends StatefulWidget {
 
 class _NowPlayingTileState extends State<_NowPlayingTile> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
     final Track? track = widget.track;
+    final bool highlighted = _hovering || _focused;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+      child: TvTapTarget(
         onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: ColoredBox(
-            color: _hovering
-                ? scheme.surfaceContainerHighest.withValues(alpha: 0.55)
-                : Colors.transparent,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              child: Row(
-                children: [
-                  LegacyCover(
-                    url: track?.coverUrl,
-                    size: widget.artworkSize,
-                    radius: 12,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          track?.title ?? '未选择曲目',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall,
-                        ),
-                        if (track?.translatedTitle?.trim().isNotEmpty ?? false)
+        onFocusChange: (bool value) => setState(() => _focused = value),
+        borderRadius: BorderRadius.circular(14),
+        focusScale: 1.004,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: ColoredBox(
+              color: highlighted
+                  ? scheme.surfaceContainerHighest.withValues(alpha: 0.55)
+                  : Colors.transparent,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(
+                  children: [
+                    LegacyCover(
+                      url: track?.coverUrl,
+                      size: widget.artworkSize,
+                      radius: 12,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Text(
-                            track!.translatedTitle!,
+                            track?.title ?? context.tr('未选择曲目'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          if (track?.translatedTitle?.trim().isNotEmpty ??
+                              false)
+                            Text(
+                              track!.translatedTitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          Text(
+                            track?.artist ?? 'Lazer',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
                           ),
-                        Text(
-                          track?.artist ?? 'Lazer',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -313,6 +325,7 @@ class _CompactIcon extends StatelessWidget {
     this.onPressed,
     this.selected = false,
     this.iconSize = 18,
+    this.focusNode,
   });
 
   final IconData icon;
@@ -320,6 +333,7 @@ class _CompactIcon extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool selected;
   final double iconSize;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -327,11 +341,12 @@ class _CompactIcon extends StatelessWidget {
     return SizedBox.square(
       dimension: 30,
       child: IconButton(
+        focusNode: focusNode,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints.tightFor(width: 30, height: 30),
         iconSize: iconSize,
         visualDensity: VisualDensity.compact,
-        tooltip: tooltip,
+        tooltip: context.tr(tooltip),
         onPressed: feedbackAction(context, onPressed),
         style: IconButton.styleFrom(
           foregroundColor: selected ? scheme.primary : scheme.onSurfaceVariant,
@@ -361,7 +376,7 @@ class _PlayButton extends StatelessWidget {
         constraints: const BoxConstraints.tightFor(width: 38, height: 38),
         iconSize: 21,
         visualDensity: VisualDensity.compact,
-        tooltip: state.playing ? '暂停' : '播放',
+        tooltip: context.tr(state.playing ? '暂停' : '播放'),
         onPressed: state.current == null ? null : state.togglePlay,
         style: IconButton.styleFrom(
           backgroundColor: scheme.primary,
@@ -487,6 +502,8 @@ class LegacyThinSeekBar extends StatefulWidget {
 
 class _LegacyThinSeekBarState extends State<LegacyThinSeekBar> {
   double? _drag;
+  bool _focused = false;
+  Timer? _nudgeTimer;
 
   void _seekTo(double dx, double width) {
     if (widget.onSeek == null || width <= 0) return;
@@ -503,6 +520,29 @@ class _LegacyThinSeekBarState extends State<LegacyThinSeekBar> {
     if (mounted) setState(() => _drag = null);
   }
 
+  /// A D-pad step: move the playhead without a pointer and treat the new
+  /// position as committed. The preview fraction stays pinned briefly so the
+  /// rail does not snap back while the engine finishes the seek.
+  void _nudge(double delta) {
+    if (widget.onSeek == null) return;
+    final double base = _drag ?? widget.progress;
+    final double next = (base + delta).clamp(0.0, 1.0);
+    setState(() => _drag = next);
+    widget.onSeek!(next);
+    widget.onSeekCommit?.call(next);
+    widget.onSeekFinished?.call();
+    _nudgeTimer?.cancel();
+    _nudgeTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _drag = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _nudgeTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
@@ -512,107 +552,136 @@ class _LegacyThinSeekBarState extends State<LegacyThinSeekBar> {
       fraction,
       (widget.bufferedProgress ?? fraction).clamp(0.0, 1.0),
     );
-    return SizedBox(
-      height: height,
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final double width = constraints.maxWidth;
-          final double thumbTravel = math.max(0.0, width - 10);
-          final Color track = scheme.surfaceContainerHighest.withValues(
-            alpha: 0.95,
-          );
-          return Semantics(
-            label: widget.semanticLabel,
-            value: '${(fraction * 100).round()}%',
-            child: MouseRegion(
-              cursor: widget.onSeek == null
-                  ? SystemMouseCursors.basic
-                  : SystemMouseCursors.click,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: widget.onSeek == null
-                    ? null
-                    : (TapDownDetails details) =>
-                          _seekTo(details.localPosition.dx, width),
-                onTapUp: widget.onSeek == null
-                    ? null
-                    : (TapUpDetails details) => _finish(),
-                onTapCancel: widget.onSeek == null
-                    ? null
-                    : () {
-                        widget.onSeekFinished?.call();
-                        setState(() => _drag = null);
-                      },
-                onHorizontalDragStart: widget.onSeek == null
-                    ? null
-                    : (DragStartDetails details) =>
-                          _seekTo(details.localPosition.dx, width),
-                onHorizontalDragUpdate: widget.onSeek == null
-                    ? null
-                    : (DragUpdateDetails details) =>
-                          _seekTo(details.localPosition.dx, width),
-                onHorizontalDragEnd: widget.onSeek == null
-                    ? null
-                    : (DragEndDetails details) => _finish(),
-                onHorizontalDragCancel: widget.onSeek == null ? null : _finish,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: (height - 3) / 2,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: track,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const SizedBox(height: 3),
-                      ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      top: (height - 3) / 2,
-                      width: width * buffered,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: scheme.onSurfaceVariant.withValues(
-                            alpha: 0.34,
+    return FocusableActionDetector(
+      enabled: TvScope.isActive(context) && widget.onSeek != null,
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.arrowLeft): _SeekNudgeIntent(-0.02),
+        SingleActivator(LogicalKeyboardKey.arrowRight): _SeekNudgeIntent(0.02),
+      },
+      actions: <Type, Action<Intent>>{
+        _SeekNudgeIntent: CallbackAction<_SeekNudgeIntent>(
+          onInvoke: (_SeekNudgeIntent intent) {
+            _nudge(intent.delta);
+            return null;
+          },
+        ),
+      },
+      onFocusChange: (bool value) => setState(() => _focused = value),
+      child: SizedBox(
+        height: height,
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final double width = constraints.maxWidth;
+            final double thumbTravel = math.max(0.0, width - 10);
+            final Color track = scheme.surfaceContainerHighest.withValues(
+              alpha: 0.95,
+            );
+            return Semantics(
+              label: widget.semanticLabel == null
+                  ? null
+                  : context.tr(widget.semanticLabel!),
+              value: '${(fraction * 100).round()}%',
+              child: MouseRegion(
+                cursor: widget.onSeek == null
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: widget.onSeek == null
+                      ? null
+                      : (TapDownDetails details) =>
+                            _seekTo(details.localPosition.dx, width),
+                  onTapUp: widget.onSeek == null
+                      ? null
+                      : (TapUpDetails details) => _finish(),
+                  onTapCancel: widget.onSeek == null
+                      ? null
+                      : () {
+                          widget.onSeekFinished?.call();
+                          setState(() => _drag = null);
+                        },
+                  onHorizontalDragStart: widget.onSeek == null
+                      ? null
+                      : (DragStartDetails details) =>
+                            _seekTo(details.localPosition.dx, width),
+                  onHorizontalDragUpdate: widget.onSeek == null
+                      ? null
+                      : (DragUpdateDetails details) =>
+                            _seekTo(details.localPosition.dx, width),
+                  onHorizontalDragEnd: widget.onSeek == null
+                      ? null
+                      : (DragEndDetails details) => _finish(),
+                  onHorizontalDragCancel: widget.onSeek == null
+                      ? null
+                      : _finish,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: (height - 3) / 2,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: track,
+                            borderRadius: BorderRadius.circular(999),
                           ),
-                          borderRadius: BorderRadius.circular(999),
+                          child: const SizedBox(height: 3),
                         ),
-                        child: const SizedBox(height: 3),
                       ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      top: (height - 3) / 2,
-                      width: width * fraction,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          borderRadius: BorderRadius.circular(999),
+                      Positioned(
+                        left: 0,
+                        top: (height - 3) / 2,
+                        width: width * buffered,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.onSurfaceVariant.withValues(
+                              alpha: 0.34,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const SizedBox(height: 3),
                         ),
-                        child: const SizedBox(height: 3),
                       ),
-                    ),
-                    Positioned(
-                      left: thumbTravel * fraction,
-                      top: (height - 10) / 2,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          shape: BoxShape.circle,
+                      Positioned(
+                        left: 0,
+                        top: (height - 3) / 2,
+                        width: width * fraction,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const SizedBox(height: 3),
                         ),
-                        child: const SizedBox.square(dimension: 10),
                       ),
-                    ),
-                  ],
+                      Positioned(
+                        left: thumbTravel * fraction,
+                        top: (height - 10) / 2,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const SizedBox.square(dimension: 10),
+                        ),
+                      ),
+                      if (_focused)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: TvFocusOutline(
+                              borderRadius: BorderRadius.circular(5),
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -643,6 +712,7 @@ class _VerticalVolumeBar extends StatefulWidget {
 
 class _VerticalVolumeBarState extends State<_VerticalVolumeBar> {
   double? _drag;
+  bool _focused = false;
 
   void _seekTo(double dy, double height) {
     if (height <= 0 || widget.onChanged == null) return;
@@ -656,6 +726,15 @@ class _VerticalVolumeBarState extends State<_VerticalVolumeBar> {
     widget.onFinished?.call();
   }
 
+  /// Up/down D-pad step. The gesture path owns persistence, so a step only
+  /// previews; [VolumeButton] commits when the panel closes.
+  void _nudge(double delta) {
+    if (widget.onChanged == null) return;
+    final double next = ((_drag ?? widget.value) + delta).clamp(0.0, 1.0);
+    setState(() => _drag = next);
+    widget.onChanged!(next);
+  }
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
@@ -665,61 +744,88 @@ class _VerticalVolumeBarState extends State<_VerticalVolumeBar> {
       builder: (BuildContext context, BoxConstraints box) {
         final double height = box.maxHeight;
         final double width = box.maxWidth;
-        return Semantics(
-          slider: true,
-          label: widget.semanticLabel,
-          value: '${(value * 100).round()}%',
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (TapDownDetails details) =>
-                _seekTo(details.localPosition.dy, height),
-            onTapUp: (TapUpDetails details) => _finish(),
-            onVerticalDragStart: (DragStartDetails details) =>
-                _seekTo(details.localPosition.dy, height),
-            onVerticalDragUpdate: (DragUpdateDetails details) =>
-                _seekTo(details.localPosition.dy, height),
-            onVerticalDragEnd: (DragEndDetails details) => _finish(),
-            onVerticalDragCancel: _finish,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  top: 0,
-                  bottom: 0,
-                  left: (width - 3) / 2,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: scheme.onSurfaceVariant.withValues(alpha: 0.22),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const SizedBox(width: 3),
-                  ),
-                ),
-                Positioned(
-                  bottom: 0,
-                  left: (width - 3) / 2,
-                  height: height * value,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: scheme.primary,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const SizedBox(width: 3),
-                  ),
-                ),
-                Positioned(
-                  left: (width - 10) / 2,
-                  bottom: (height - 10) * value,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: scheme.primary,
-                      shape: BoxShape.circle,
+        return FocusableActionDetector(
+          enabled: TvScope.isActive(context) && widget.onChanged != null,
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.arrowUp): _SeekNudgeIntent(0.05),
+            SingleActivator(LogicalKeyboardKey.arrowDown): _SeekNudgeIntent(
+              -0.05,
+            ),
+          },
+          actions: <Type, Action<Intent>>{
+            _SeekNudgeIntent: CallbackAction<_SeekNudgeIntent>(
+              onInvoke: (_SeekNudgeIntent intent) {
+                _nudge(intent.delta);
+                return null;
+              },
+            ),
+          },
+          onFocusChange: (bool value) => setState(() => _focused = value),
+          child: Semantics(
+            slider: true,
+            label: context.tr(widget.semanticLabel),
+            value: '${(value * 100).round()}%',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (TapDownDetails details) =>
+                  _seekTo(details.localPosition.dy, height),
+              onTapUp: (TapUpDetails details) => _finish(),
+              onVerticalDragStart: (DragStartDetails details) =>
+                  _seekTo(details.localPosition.dy, height),
+              onVerticalDragUpdate: (DragUpdateDetails details) =>
+                  _seekTo(details.localPosition.dy, height),
+              onVerticalDragEnd: (DragEndDetails details) => _finish(),
+              onVerticalDragCancel: _finish,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    top: 0,
+                    bottom: 0,
+                    left: (width - 3) / 2,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: scheme.onSurfaceVariant.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const SizedBox(width: 3),
                     ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    bottom: 0,
+                    left: (width - 3) / 2,
+                    height: height * value,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const SizedBox(width: 3),
+                    ),
+                  ),
+                  Positioned(
+                    left: (width - 10) / 2,
+                    bottom: (height - 10) * value,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  if (_focused)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: TvFocusOutline(
+                          borderRadius: BorderRadius.circular(6),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -742,27 +848,54 @@ class _VolumeButton extends StatefulWidget {
 class _VolumeButtonState extends State<_VolumeButton> {
   final OverlayPortalController _portal = OverlayPortalController();
   final LayerLink _link = LayerLink();
+  final FocusNode _buttonFocus = FocusNode(debugLabel: 'volume-button');
   Timer? _hide;
   bool _iconHovered = false;
   bool _panelHovered = false;
   double? _drag;
 
+  void _open() {
+    if (_portal.isShowing) return;
+    _portal.show();
+    TvOverlayStack.instance.push(_close);
+    if (mounted) setState(() {});
+  }
+
+  void _close() {
+    if (!_portal.isShowing) return;
+    final double? pending = _drag;
+    if (pending != null) {
+      setState(() => _drag = null);
+      unawaited(widget.state.setVolume(pending));
+    }
+    _portal.hide();
+    TvOverlayStack.instance.remove(_close);
+    if (mounted) setState(() {});
+    if (TvScope.isActive(context)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _buttonFocus.requestFocus();
+      });
+    }
+  }
+
+  void _toggle() => _portal.isShowing ? _close() : _open();
+
   void _sync() {
     _hide?.cancel();
     if (_iconHovered || _panelHovered) {
-      if (!_portal.isShowing) _portal.show();
+      _open();
       return;
     }
     _hide = Timer(const Duration(milliseconds: 160), () {
-      if (!_iconHovered && !_panelHovered && _portal.isShowing) {
-        _portal.hide();
-      }
+      if (!_iconHovered && !_panelHovered) _close();
     });
   }
 
   @override
   void dispose() {
     _hide?.cancel();
+    _buttonFocus.dispose();
+    TvOverlayStack.instance.remove(_close);
     super.dispose();
   }
 
@@ -779,7 +912,9 @@ class _VolumeButtonState extends State<_VolumeButton> {
       // transform still parks it just above the speaker.
       overlayChildBuilder: (BuildContext context) => Align(
         alignment: Alignment.topLeft,
-        child: CompositedTransformFollower(
+        child: TvFocusRegion(
+          focusToken: _portal.isShowing,
+          child: CompositedTransformFollower(
             link: _link,
             showWhenUnlinked: false,
             targetAnchor: Alignment.topCenter,
@@ -846,6 +981,7 @@ class _VolumeButtonState extends State<_VolumeButton> {
             ),
           ),
         ),
+      ),
       child: CompositedTransformTarget(
         link: _link,
         child: MouseRegion(
@@ -858,14 +994,37 @@ class _VolumeButtonState extends State<_VolumeButton> {
             _iconHovered = false;
             _sync();
           },
-          child: _CompactIcon(
-            icon: volume <= 0.001
-                ? Icons.volume_off_rounded
-                : Icons.volume_up_rounded,
-            tooltip: '音量',
-            selected: _portal.isShowing,
-            onPressed: () => unawaited(widget.state.toggleMute()),
-          ),
+          child: TvScope.isActive(context)
+              ? TvTapTarget(
+                  focusNode: _buttonFocus,
+                  onTap: _toggle,
+                  borderRadius: BorderRadius.circular(15),
+                  focusScale: 1.12,
+                  child: Semantics(
+                    button: true,
+                    label: context.tr('音量'),
+                    child: SizedBox.square(
+                      dimension: 30,
+                      child: Icon(
+                        volume <= 0.001
+                            ? Icons.volume_off_rounded
+                            : Icons.volume_up_rounded,
+                        size: 30,
+                        color: _portal.isShowing
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                )
+              : _CompactIcon(
+                  icon: volume <= 0.001
+                      ? Icons.volume_off_rounded
+                      : Icons.volume_up_rounded,
+                  tooltip: '音量',
+                  selected: _portal.isShowing,
+                  onPressed: () => unawaited(widget.state.toggleMute()),
+                ),
         ),
       ),
     );
@@ -887,14 +1046,34 @@ class LegacyQueueButton extends StatefulWidget {
 class _LegacyQueueButtonState extends State<LegacyQueueButton> {
   final OverlayPortalController _portal = OverlayPortalController();
   final LayerLink _link = LayerLink();
+  final FocusNode _buttonFocus = FocusNode(debugLabel: 'queue-button');
 
-  void _toggle() {
-    if (_portal.isShowing) {
-      _portal.hide();
-    } else {
-      _portal.show();
-    }
+  void _show() {
+    if (_portal.isShowing) return;
+    _portal.show();
+    TvOverlayStack.instance.push(_hide);
     setState(() {});
+  }
+
+  void _hide() {
+    if (!_portal.isShowing) return;
+    _portal.hide();
+    TvOverlayStack.instance.remove(_hide);
+    if (mounted) setState(() {});
+    if (TvScope.isActive(context)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _buttonFocus.requestFocus();
+      });
+    }
+  }
+
+  void _toggle() => _portal.isShowing ? _hide() : _show();
+
+  @override
+  void dispose() {
+    _buttonFocus.dispose();
+    TvOverlayStack.instance.remove(_hide);
+    super.dispose();
   }
 
   @override
@@ -911,7 +1090,7 @@ class _LegacyQueueButtonState extends State<LegacyQueueButton> {
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: _toggle,
+              onTap: _hide,
               child: const SizedBox.expand(),
             ),
           ),
@@ -923,24 +1102,30 @@ class _LegacyQueueButtonState extends State<LegacyQueueButton> {
             targetAnchor: Alignment.topRight,
             followerAnchor: Alignment.bottomRight,
             offset: const Offset(8, -12),
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: 380,
-                height: height,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.98),
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.32),
-                      blurRadius: 32,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
+            child: TvFocusRegion(
+              focusToken: _portal.isShowing,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: 380,
+                  height: height,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: scheme.surface.withValues(alpha: 0.98),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.32),
+                        blurRadius: 32,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: PlaybackQueueView(
+                    state: widget.state,
+                    onClose: _toggle,
+                  ),
                 ),
-                child: PlaybackQueueView(state: widget.state, onClose: _toggle),
               ),
             ),
           ),
@@ -949,6 +1134,7 @@ class _LegacyQueueButtonState extends State<LegacyQueueButton> {
       child: CompositedTransformTarget(
         link: _link,
         child: _CompactIcon(
+          focusNode: _buttonFocus,
           icon: Icons.queue_music_rounded,
           tooltip: '播放队列',
           selected: _portal.isShowing,
@@ -957,4 +1143,11 @@ class _LegacyQueueButtonState extends State<LegacyQueueButton> {
       ),
     );
   }
+}
+
+/// Left/right D-pad step on the seek rail, in fractional track length.
+class _SeekNudgeIntent extends Intent {
+  const _SeekNudgeIntent(this.delta);
+
+  final double delta;
 }

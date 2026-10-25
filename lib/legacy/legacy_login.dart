@@ -1,20 +1,16 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
-import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
 
 /// Present the sign-in card in the Apple sheet language.
 Future<void> showLegacyLoginDialog(BuildContext context, AppState state) {
   final Brightness brightness = Theme.of(context).brightness;
-  final Color accent =
-      state.legacyPalette == LegacyPaletteMode.nowPlaying &&
-          state.legacySeed != null
-      ? state.legacySeed!
-      : AppleColors.musicRed;
+  final Color accent = state.legacyAccentSeed ?? AppleColors.musicRed;
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: .32),
@@ -110,7 +106,7 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
     if (outcome.ok) {
       Navigator.of(context).maybePop();
     } else {
-      setState(() => _error = outcome.error ?? '这个 Cookie 无效或已过期。');
+      setState(() => _error = outcome.error ?? '这个 Cookie 无效或已过期。');  // i18n:key
     }
   }
 
@@ -152,7 +148,7 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
             Row(
               children: <Widget>[
                 Expanded(
-                  child: Text(
+                  child: TrText(
                     '登录',
                     style: theme.textTheme.headlineSmall?.copyWith(
                       color: apple.label,
@@ -161,16 +157,18 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
                   ),
                 ),
                 IconButton(
-                  tooltip: '取消',
+                  tooltip: context.tr('取消'),
                   onPressed: () => Navigator.of(context).maybePop(),
                   icon: const Icon(Icons.close_rounded, size: 18),
                 ),
               ],
             ),
             Text(
-              _cookieMode
-                  ? '粘贴浏览器里网易云音乐的登录 Cookie。'
-                  : '使用网易云音乐 App 扫描二维码登录。',
+              context.tr(
+                _cookieMode
+                    ? '粘贴浏览器里网易云音乐的登录 Cookie。'
+                    : '使用网易云音乐 App 扫描二维码登录。',
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: apple.secondaryLabel,
               ),
@@ -220,7 +218,7 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
       ),
       const SizedBox(height: 14),
       Center(
-        child: Text(
+        child: TrText(
           switch (_phase) {
             _Phase.creating => '正在生成二维码…',
             _Phase.waiting => '打开 App 扫描二维码',
@@ -230,7 +228,9 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
           },
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: _phase == _Phase.scanned ? apple.accent : apple.secondaryLabel,
+            color: _phase == _Phase.scanned
+                ? apple.accent
+                : apple.secondaryLabel,
           ),
         ),
       ),
@@ -239,7 +239,7 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
         Center(
           child: FilledButton(
             onPressed: _start,
-            child: const Text('刷新二维码'),
+            child: TrText('刷新二维码'),
           ),
         ),
       ],
@@ -247,7 +247,7 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
       Center(
         child: TextButton(
           onPressed: () => setState(() => _cookieMode = true),
-          child: const Text('使用 Cookie 登录'),
+          child: TrText('使用 Cookie 登录'),
         ),
       ),
     ];
@@ -269,7 +269,7 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
       if (_error != null) ...<Widget>[
         const SizedBox(height: 8),
         Text(
-          _error!,
+          context.tr(_error!),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.error,
           ),
@@ -283,12 +283,12 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
                 dimension: 16,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Text('登录'),
+            : TrText('登录'),
       ),
       const SizedBox(height: 4),
       TextButton(
         onPressed: () => setState(() => _cookieMode = false),
-        child: const Text('返回扫码登录'),
+        child: TrText('返回扫码登录'),
       ),
     ];
   }

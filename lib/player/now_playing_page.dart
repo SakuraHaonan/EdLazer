@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../data/models.dart';
+import '../downloads/download_dialog.dart';
 import 'player_backdrop.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
@@ -13,6 +14,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../theme/design_tokens.dart';
 import '../theme/paper_widgets.dart';
+import '../tv/tv_mode.dart';
 import '../utils/cover_save.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/animated_notice.dart';
@@ -502,6 +504,17 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                 icon: const Icon(Icons.lyrics_outlined),
               ),
             AccessibleIconButton(
+              tooltip: '下载歌曲',
+              onPressed: widget.state.current == null
+                  ? null
+                  : () => unawaited(
+                      downloadTracks(context, widget.state, <Track>[
+                        widget.state.current!,
+                      ]),
+                    ),
+              icon: const Icon(Icons.download_rounded),
+            ),
+            AccessibleIconButton(
               tooltip: '查看评论',
               onPressed: () => unawaited(_openComments()),
               icon: const Icon(Icons.chat_bubble_outline_rounded),
@@ -535,7 +548,10 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
               AlbumBlurFlow(
                 boundaryKey: _backdropKey,
                 track: track,
-                mode: widget.state.legacyBackground,
+                // The immersive player owns its canvas: browse-page backdrop
+                // settings (including "不使用" or a custom picture) must not
+                // strip the song's album-colour flow from here.
+                mode: LegacyBackgroundMode.nowPlayingDynamic,
                 pageColor: Colors.black,
                 animationsEnabled: widget.entranceSettled,
               ),
@@ -939,27 +955,36 @@ class _ControlIcon extends StatefulWidget {
 
 class _ControlIconState extends State<_ControlIcon> {
   bool _hovering = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final bool enabled = widget.onTap != null;
+    final bool highlighted = _hovering || _focused;
     final Color color = !enabled
         ? context.colors.cloudMedium
-        : widget.active || _hovering
+        : widget.active || highlighted
         ? context.colors.slateDark
         : context.colors.cloudDark;
     final Widget btn = MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        onTap: feedbackAction(context, widget.onTap),
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Icon(widget.icon, size: widget.size, color: color),
+      child: TvTapTarget(
+        onTap: widget.onTap,
+        enabled: enabled,
+        onFocusChange: (bool value) => setState(() => _focused = value),
+        borderRadius: BorderRadius.circular(24),
+        focusScale: 1.1,
+        child: GestureDetector(
+          onTap: feedbackAction(context, widget.onTap),
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Center(
+              child: Icon(widget.icon, size: widget.size, color: color),
+            ),
           ),
         ),
       ),

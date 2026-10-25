@@ -1,3 +1,4 @@
+// i18n:data — interface strings declared here are translated at their render sites.
 import 'package:flutter/foundation.dart';
 
 import '../data/song_comments.dart';

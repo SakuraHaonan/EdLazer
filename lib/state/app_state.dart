@@ -1,19 +1,25 @@
+// i18n:data — interface strings declared here are translated at their render sites.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../audio/audio_engine.dart';
+import '../downloads/download_manager.dart';
 import '../interaction/app_haptics.dart';
+import '../data/audio_quality.dart';
 import '../data/catalog.dart';
 import '../data/lyrics.dart';
+import '../local/local_library.dart';
 import '../scrolling/scroll_motion.dart';
 import '../l10n/app_language.dart';
 import '../data/models.dart';
 import '../gateway/gateway.dart';
 import '../gateway/transport.dart';
+import '../lyrics/imported_lyrics_store.dart';
 import 'ui_preferences.dart';
 
 /// How the session was authenticated.
@@ -109,10 +115,20 @@ class AuthOutcome {
 class AppState extends ChangeNotifier {
   AppState({
     Catalog? catalog,
+    LocalLibrary? localLibrary,
+    DownloadManager? downloadManager,
+    ImportedLyricsStore? importedLyrics,
     this.audioEngine,
     this._independentPlayback = false,
     this.enableExternalCharts = false,
-  }) : catalog = catalog ?? Catalog() {
+    this.deviceIsTelevision = false,
+  }) : catalog = catalog ?? Catalog(),
+       localLibrary = localLibrary ?? LocalLibrary() {
+    this.importedLyrics = importedLyrics ?? ImportedLyricsStore();
+    this.downloadManager =
+        downloadManager ??
+        DownloadManager(catalog: this.catalog, library: this.localLibrary);
+    _ownsDownloadManager = downloadManager == null;
     _completionSubscription = audioEngine?.completed.listen(
       (_) => _onEngineCompleted(),
     );
@@ -125,12 +141,82 @@ class AppState extends ChangeNotifier {
   final bool enableExternalCharts;
   bool get independentPlayback => _independentPlayback;
 
+  /// Whether the Android device under this app is a television.
+  ///
+  /// Detected natively before the first frame (Leanback / `UI_MODE_TYPE_
+  /// TELEVISION` / no touch screen). It selects the ten-foot density profile
+  /// in automatic mode and turns every tap target into a D-pad focus stop.
+  final bool deviceIsTelevision;
+
+  /// Downloaded and scanned files, shared by playback, downloads and the
+  /// library page.
+  final LocalLibrary localLibrary;
+
+  /// Download queue. Owned by this state unless a test injects one.
+  late final DownloadManager downloadManager;
+  late final bool _ownsDownloadManager;
+
+  /// Imported `.lrc` files, which take priority over cloud lyrics.
+  late final ImportedLyricsStore importedLyrics;
+
   Future<void> setIndependentPlayback(bool value) async {
     if (_independentPlayback == value) return;
     _independentPlayback = value;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('lazer_independent_playback', _independentPlayback);
+  }
+
+  /// Tier requested for streaming. Changing it while a track is loaded reloads
+  /// that track at the new tier and keeps its position.
+  AudioQuality playbackQuality = AudioQuality.exhigh;
+
+  /// Tier preselected by the download dialog.
+  AudioQuality downloadQuality = AudioQuality.exhigh;
+
+  /// Last directory the download picker returned, used as its start folder.
+  String? downloadDirectory;
+
+  Future<void> setPlaybackQuality(AudioQuality value) async {
+    if (playbackQuality == value) return;
+    playbackQuality = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_playback_quality',
+      value.name,
+    );
+    if (_realActive && current != null) {
+      unawaited(_reloadForQuality(_position));
+    }
+  }
+
+  Future<void> setDownloadQuality(AudioQuality value) async {
+    if (downloadQuality == value) return;
+    downloadQuality = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_download_quality',
+      value.name,
+    );
+  }
+
+  Future<void> setDownloadDirectory(String? value) async {
+    final String? normalized = value == null || value.trim().isEmpty
+        ? null
+        : value.trim();
+    if (downloadDirectory == normalized) return;
+    downloadDirectory = normalized;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (normalized == null) {
+      await prefs.remove('lazer_download_directory');
+    } else {
+      await prefs.setString('lazer_download_directory', normalized);
+    }
+  }
+
+  Future<void> _reloadForQuality(Duration position) async {
+    await _startAudio(resumeAt: position);
   }
 
   static const String _sessionKey = 'lazer_gateway_cookie';
@@ -236,9 +322,14 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  /// Legacy shell backdrop: the album-coloured flowing canvas, or off.
+  /// Legacy shell backdrop: the album-coloured flowing canvas, the listener's
+  /// own picture, or off.
   LegacyBackgroundMode legacyBackground =
       LegacyBackgroundMode.nowPlayingDynamic;
+
+  /// Stored copy of the picture used by [LegacyBackgroundMode.customImage].
+  /// Null until the listener picks one; the canvas still renders without it.
+  String? legacyBackgroundImagePath;
 
   /// `内容不透明度` of the legacy shell — how much of the backdrop the content
   /// veil hides.
@@ -252,6 +343,18 @@ class AppState extends ChangeNotifier {
       'lazer_legacy_background',
       value.name,
     );
+  }
+
+  Future<void> setLegacyBackgroundImage(String? path) async {
+    if (legacyBackgroundImagePath == path) return;
+    legacyBackgroundImagePath = path;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (path == null) {
+      await prefs.remove('lazer_legacy_background_image');
+    } else {
+      await prefs.setString('lazer_legacy_background_image', path);
+    }
   }
 
   Future<void> setLegacyUiAlpha(double value) async {
@@ -325,13 +428,26 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  /// The legacy shell's accent palette: the fixed Lazer scheme, or one seeded
-  /// from the current cover like the app's "follow the song" palette.
+  /// The legacy shell's accent palette: the fixed Lazer scheme, one seeded
+  /// from the current cover like the app's "follow the song" palette, or the
+  /// listener's own colour.
   LegacyPaletteMode legacyPalette = LegacyPaletteMode.fixed;
+
+  /// The accent picked in [LegacyPaletteMode.custom]; null until the listener
+  /// chooses one, in which case the shipped red remains in effect.
+  Color? legacyAccentColor;
 
   /// The last artwork seed the legacy backdrop extracted; only used while
   /// [legacyPalette] is [LegacyPaletteMode.nowPlaying].
   Color? legacySeed;
+
+  /// The accent seed handed to the Apple theme builders. Null keeps the
+  /// shipped Apple Music red.
+  Color? get legacyAccentSeed => switch (legacyPalette) {
+    LegacyPaletteMode.fixed => null,
+    LegacyPaletteMode.nowPlaying => legacySeed,
+    LegacyPaletteMode.custom => legacyAccentColor,
+  };
 
   Future<void> setLegacyPalette(LegacyPaletteMode value) async {
     if (legacyPalette == value) return;
@@ -340,6 +456,16 @@ class AppState extends ChangeNotifier {
     await (await SharedPreferences.getInstance()).setString(
       'lazer_legacy_palette',
       value.name,
+    );
+  }
+
+  Future<void> setLegacyAccent(Color value) async {
+    if (legacyAccentColor == value) return;
+    legacyAccentColor = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setInt(
+      'lazer_legacy_accent',
+      value.toARGB32(),
     );
   }
 
@@ -494,6 +620,9 @@ class AppState extends ChangeNotifier {
   String? lyricsError;
   bool lyricsLoading = false;
   bool lyricsPureMusic = false;
+
+  /// True when the displayed lyrics came from a user-imported `.lrc`.
+  bool lyricsImported = false;
   String? _lyricsTrackId;
   int _lyricGeneration = 0;
   final Set<String> _metadataLoaded = <String>{};
@@ -539,6 +668,9 @@ class AppState extends ChangeNotifier {
       legacyBackground = LegacyBackgroundModeLabels.parse(
         prefs.getString('lazer_legacy_background'),
       );
+      legacyBackgroundImagePath = prefs.getString(
+        'lazer_legacy_background_image',
+      );
       legacyUiAlpha = (prefs.getDouble('lazer_legacy_ui_alpha') ?? 0.7).clamp(
         0.4,
         1.0,
@@ -554,6 +686,13 @@ class AppState extends ChangeNotifier {
           (prefs.getDouble('lazer_unmuted_volume') ??
                   (_volume > 0 ? _volume : 1))
               .clamp(0.01, 1);
+      playbackQuality = AudioQualityInfo.parse(
+        prefs.getString('lazer_playback_quality'),
+      );
+      downloadQuality = AudioQualityInfo.parse(
+        prefs.getString('lazer_download_quality'),
+      );
+      downloadDirectory = prefs.getString('lazer_download_directory');
       lyricControlsSeconds =
           (prefs.getDouble('lazer_lyric_controls_seconds') ?? 1.5).clamp(1, 10);
       lyricBlurEnabled = prefs.getBool('lazer_lyric_blur') ?? true;
@@ -569,6 +708,8 @@ class AppState extends ChangeNotifier {
       legacyPalette = LegacyPaletteModeLabels.parse(
         prefs.getString('lazer_legacy_palette'),
       );
+      final int? accent = prefs.getInt('lazer_legacy_accent');
+      legacyAccentColor = accent == null ? null : Color(accent);
       scrollRetention =
           (prefs.getDouble('lazer_scroll_retention') ??
                   ScrollMotion.defaultRetention)
@@ -585,6 +726,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
     // Apply interaction preferences before session and catalogue requests.
     notifyListeners();
+    await localLibrary.load();
     await audioEngine?.setVolume(_volume);
     await _restoreRecentTracks();
     await _restoreQueue();
@@ -883,6 +1025,7 @@ class AppState extends ChangeNotifier {
     _lyricsTrackId = null;
     lyricsLoading = false;
     lyricsPureMusic = false;
+    lyricsImported = false;
     lyricsError = null;
     ++_generation;
     unawaited(audioEngine?.stop() ?? Future<void>.value());
@@ -1302,9 +1445,23 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Local files win over the network so downloads and scanned songs keep
+  /// playing offline. Missing files fall through to the service.
+  Future<String?> _trackUrl(Track track) async {
+    final File? local = localLibrary.localFileFor(
+      track,
+      quality: playbackQuality,
+    );
+    if (local != null) return local.uri.toString();
+    return catalog.audioUrlFor(track, quality: playbackQuality);
+  }
+
   /// Loads the stream URL. A locked or unavailable song stops playback and
   /// exposes a visible error instead of advancing a simulated clock.
-  Future<void> _startAudio() async {
+  ///
+  /// [resumeAt] is used when the stream has to be re-resolved for the same
+  /// track — switching audio quality keeps the playhead where it was.
+  Future<void> _startAudio({Duration? resumeAt}) async {
     unawaited(_loadCurrentArtwork());
     final AudioEngine? engine = audioEngine;
     final Track? track = current;
@@ -1314,7 +1471,7 @@ class AppState extends ChangeNotifier {
     _queuedNextIndex = null;
     String? url;
     try {
-      url = await catalog.audioUrlFor(track);
+      url = await _trackUrl(track);
     } catch (error) {
       if (generation == _generation) _failPlayback(_friendly(error));
       return;
@@ -1340,9 +1497,22 @@ class AppState extends ChangeNotifier {
           queueId = null;
         }
       }
+      // Rapid next/previous presses supersede loads while the engine is still
+      // opening the stream. Falling back to `setUrl` then would start a second
+      // platform load alongside the newer one; just let it go.
+      if (generation != _generation) return;
       if (queueId == null) await engine.setUrl(url);
       if (generation != _generation) return;
       await engine.setVolume(_volume);
+      if (resumeAt != null && resumeAt > Duration.zero) {
+        try {
+          await engine.seek(resumeAt);
+        } catch (_) {
+          // A source that cannot seek still plays; only the position is lost.
+        }
+        if (generation != _generation) return;
+        _position = resumeAt;
+      }
     } catch (error) {
       if (generation == _generation) _failPlayback('音频加载失败，请重试。');
       return;
@@ -1373,7 +1543,7 @@ class AppState extends ChangeNotifier {
     }
     String? url;
     try {
-      url = await catalog.audioUrlFor(_queue[next]);
+      url = await _trackUrl(_queue[next]);
     } catch (_) {
       url = null;
     }
@@ -1671,22 +1841,72 @@ class AppState extends ChangeNotifier {
     final generation = ++_lyricGeneration;
     lyrics = const <LyricLine>[];
     lyricsError = null;
+    lyricsImported = false;
     _lyricsTrackId = track?.id;
     lyricsLoading = track != null;
     lyricsPureMusic = false;
     notifyListeners();
     if (track == null) return;
-    try {
-      final payload = await catalog.lyricsFor(track);
+    // The imported copy is read in parallel and never blocks the sheet: a slow
+    // or unavailable plugin should not keep the spinner up, and the imported
+    // lyrics still win whenever they arrive for this track.
+    unawaited(
+      importedLyrics
+          .read(track)
+          .then((String? imported) {
+            if (imported == null || generation != _lyricGeneration) return;
+            lyrics = parseLrc(imported);
+            lyricsImported = true;
+            lyricsPureMusic = false;
+            lyricsError = null;
+            lyricsLoading = false;
+            notifyListeners();
+          })
+          .catchError((Object _) {}),
+    );
+    Object? failure;
+    final bool localOnly =
+        track.localPath != null || track.id.startsWith('local:');
+    if (!localOnly) {
+      try {
+        final payload = await catalog.lyricsFor(track);
+        if (generation != _lyricGeneration) return;
+        if (!lyricsImported) {
+          lyrics = payload == null ? const <LyricLine>[] : parseLyrics(payload);
+          lyricsPureMusic = payload?.pureMusic ?? false;
+        }
+      } catch (error) {
+        if (generation != _lyricGeneration) return;
+        failure = error;
+      }
+    }
+    // Cloud lyrics are authoritative, but a `.lrc` beside a downloaded or
+    // scanned file is a useful offline fallback.
+    if (lyrics.isEmpty && !lyricsPureMusic) {
+      final String? localPath =
+          localLibrary.localFileFor(track)?.path ?? track.localPath;
+      final String? sidecar = await ImportedLyricsStore.sidecarFor(localPath);
       if (generation != _lyricGeneration) return;
-      lyrics = payload == null ? const <LyricLine>[] : parseLyrics(payload);
-      lyricsPureMusic = payload?.pureMusic ?? false;
-    } catch (_) {
-      if (generation != _lyricGeneration) return;
+      if (sidecar != null) lyrics = parseLrc(sidecar);
+    }
+    if (lyrics.isEmpty && failure != null) {
       lyricsError = '歌词暂时无法加载。';
     }
     lyricsLoading = false;
     notifyListeners();
+  }
+
+  /// Saves user-provided lyrics for [track] and refreshes it when current.
+  Future<bool> saveImportedLyrics(Track track, String content) async {
+    final bool saved = await importedLyrics.save(track, content);
+    if (saved && current?.id == track.id) await _loadLyrics();
+    return saved;
+  }
+
+  /// Drops the imported copy so the cloud (or the sidecar) is used again.
+  Future<void> clearImportedLyrics(Track track) async {
+    await importedLyrics.delete(track);
+    if (current?.id == track.id) await _loadLyrics();
   }
 
   void _failPlayback(String message) {
@@ -1831,6 +2051,7 @@ class AppState extends ChangeNotifier {
     _indexSubscription?.cancel();
     _ticker?.cancel();
     _tickNotifier.dispose();
+    if (_ownsDownloadManager) downloadManager.dispose();
     super.dispose();
   }
 }

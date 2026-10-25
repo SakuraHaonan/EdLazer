@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../cache/disk_cache.dart';
 import '../cache/media_cache.dart';
 import '../gateway/gateway.dart';
+import 'audio_quality.dart';
 import 'billboard.dart';
 import 'biliboard.dart';
 import 'models.dart';
@@ -192,7 +193,7 @@ class Catalog {
       _homeError = null;
       return _home;
     } catch (_) {
-      _homeError = '曲库加载失败，请检查网络后重试。';
+      _homeError = '曲库加载失败，请检查网络后重试。';  // i18n:key
       return _home = null;
     }
   }
@@ -322,10 +323,10 @@ class Catalog {
     );
     _online = firstFailure == null || !feed.isEmpty;
     if (feed.isEmpty && firstFailure != null) {
-      _homeError = '曲库加载失败，请检查网络后重试。';
+      _homeError = '曲库加载失败，请检查网络后重试。';  // i18n:key
       _home = null;
     } else {
-      if (feed.isEmpty) _homeError = '当前没有可展示的音乐。';
+      if (feed.isEmpty) _homeError = '当前没有可展示的音乐。';  // i18n:key
       _home = feed;
     }
     return _home;
@@ -553,7 +554,10 @@ class Catalog {
     return station;
   }
 
-  Future<MusicChart> prepareChart(MusicChart chart, {bool force = false}) async {
+  Future<MusicChart> prepareChart(
+    MusicChart chart, {
+    bool force = false,
+  }) async {
     var prepared = chart;
     if (chart.providerKey == 'billboard:hot-100') {
       try {
@@ -641,10 +645,9 @@ class Catalog {
       await cache.writeJson(matchKey, resolved.toJson());
       return resolved;
     } on _NoChartMatch {
-      await cache.writeJson(
-        'chart-entry-miss-v1:$identity',
-        <String, dynamic>{'title': entry.title},
-      );
+      await cache.writeJson('chart-entry-miss-v1:$identity', <String, dynamic>{
+        'title': entry.title,
+      });
       return entry;
     } catch (_) {
       // A search that failed for transport reasons stays retryable: writing a
@@ -781,7 +784,7 @@ class Catalog {
       .replaceAll(RegExp(r'[ýÿ]'), 'y')
       .replaceAll(RegExp(r'[źžż]'), 'z')
       .replaceAll(RegExp(r'\b(featuring|feat|ft|with)\.?\b.*$'), '')
-      .replaceAll(RegExp(r'[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9぀-ヿ㐀-鿿]+'), ' ')
       .trim();
 
   /// Reuses recent snapshots; expired snapshots remain available offline.
@@ -800,7 +803,7 @@ class Catalog {
     try {
       final Map<String, dynamic> body = await gateway.playlistDetail(id);
       final dynamic rawPlaylist = body['playlist'];
-      if (rawPlaylist is! Map<String, dynamic>) throw StateError('歌单数据不可用。');
+      if (rawPlaylist is! Map<String, dynamic>) throw StateError('歌单数据不可用。');  // i18n:key
       final GatewayPlaylist playlist = GatewayPlaylist.fromJson(rawPlaylist);
       final List<GatewaySong> ordered = <GatewaySong>[];
       if (playlist.trackIds.isNotEmpty) {
@@ -1064,28 +1067,145 @@ class Catalog {
     );
   }
 
-  /// Playback URL for a track, or null when the gateway has none (VIP /
-  /// region lock / offline).
-  Future<String?> audioUrlFor(Track track) async {
+  /// Resolves a stream for [track] at [quality], degrading through the lower
+  /// tiers when the account or the catalogue cannot provide the requested one.
+  ///
+  /// Cached playback files are quality-specific; [useCache] is false for
+  /// downloads so they always fetch the rendition the user picked.
+  Future<AudioSource?> audioSourceFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+    bool useCache = true,
+  }) async {
     final int id = int.tryParse(track.id) ?? 0;
     if (id <= 0) return null;
-    final cached = await audioCache.find(track.id);
-    if (cached != null) return cached.uri.toString();
-    try {
-      final GatewaySongUrl? url = await gateway.songUrl(id);
-      _online = url != null;
-      final raw = url?.url;
-      final source = raw?.startsWith('http://') == true
-          ? raw!.replaceFirst('http://', 'https://')
-          : raw;
-      if (source != null && source.isNotEmpty) {
-        unawaited(audioCache.store(track.id, source, format: url?.type));
+    Object? failure;
+
+    if (useCache) {
+      final cached = await audioCache.find(track.id, quality: quality);
+      if (cached != null) {
+        return AudioSource(
+          url: cached.uri.toString(),
+          quality: quality,
+          format: _audioFormat(null, cached.path),
+        );
       }
-      return source;
-    } catch (_) {
-      _online = false;
-      rethrow;
     }
+
+    bool mayTryUpstream = true;
+    try {
+      final AudioSource? resolved = await _resolveAudioSource(id, quality);
+      if (resolved != null) {
+        _online = true;
+        if (useCache) {
+          unawaited(
+            audioCache.store(
+              track.id,
+              resolved.url,
+              quality: resolved.quality,
+              format: resolved.format,
+            ),
+          );
+        }
+        return resolved;
+      }
+    } catch (error) {
+      // A transport failure would make every lower-tier request wait for the
+      // same timeout again; cached fallbacks are still worth checking.
+      failure = error;
+      mayTryUpstream = false;
+      _online = false;
+    }
+
+    for (final AudioQuality lower in quality.fallbackChain.skip(1)) {
+      if (useCache) {
+        final cached = await audioCache.find(track.id, quality: lower);
+        if (cached != null) {
+          return AudioSource(
+            url: cached.uri.toString(),
+            quality: lower,
+            format: _audioFormat(null, cached.path),
+          );
+        }
+      }
+      if (!mayTryUpstream) continue;
+      try {
+        final AudioSource? resolved = await _resolveAudioSource(id, lower);
+        if (resolved != null) {
+          _online = true;
+          if (useCache) {
+            unawaited(
+              audioCache.store(
+                track.id,
+                resolved.url,
+                quality: resolved.quality,
+                format: resolved.format,
+              ),
+            );
+          }
+          return resolved;
+        }
+      } catch (error) {
+        failure ??= error;
+        mayTryUpstream = false;
+        _online = false;
+      }
+    }
+    if (failure != null) throw failure;
+    _online = false;
+    return null;
+  }
+
+  /// Playback URL for a track, or null when the gateway has none (VIP /
+  /// region lock / offline).
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => (await audioSourceFor(track, quality: quality))?.url;
+
+  Future<AudioSource?> _resolveAudioSource(
+    int id,
+    AudioQuality requested,
+  ) async {
+    final GatewaySongUrl? result = await gateway.songUrl(
+      id,
+      level: requested.level,
+    );
+    final String? raw = result?.url;
+    if (raw == null || raw.isEmpty) return null;
+    final String url = raw.startsWith('http://')
+        ? raw.replaceFirst('http://', 'https://')
+        : raw;
+    final AudioQuality actual =
+        AudioQualityInfo.fromLevel(result?.level) ??
+        AudioQualityInfo.fromBitrate(result?.br) ??
+        requested;
+    return AudioSource(
+      url: url,
+      quality: actual,
+      format: _audioFormat(result?.type, url),
+      bytes: result?.size,
+    );
+  }
+
+  static const Set<String> _audioFormats = <String>{
+    'mp3',
+    'flac',
+    'm4a',
+    'aac',
+    'ogg',
+    'wav',
+    'mp4',
+  };
+
+  static String? _audioFormat(String? type, String url) {
+    final String declared = type?.trim().toLowerCase() ?? '';
+    if (_audioFormats.contains(declared)) return declared;
+    final String path = Uri.tryParse(url)?.path ?? url;
+    final int dot = path.lastIndexOf('.');
+    if (dot < 0 || dot == path.length - 1) return null;
+    final String suffix = path.substring(dot + 1).toLowerCase();
+    return _audioFormats.contains(suffix) ? suffix : null;
   }
 
   Future<GatewayLyrics?> lyricsFor(Track track) => _cached(
@@ -1214,7 +1334,7 @@ class Catalog {
       artists: album.artists.map(artistFromGateway).toList(),
       year: year,
       coverSeed: _seedFrom(album.id),
-      note: album.trackCount > 0 ? '${album.trackCount} 首曲目' : '',
+      note: album.trackCount > 0 ? '${album.trackCount} 首曲目' : '',  // i18n:key
       accent: _accentFrom(album.id),
       trackCount: album.trackCount > 0 ? album.trackCount : null,
       coverUrl: album.coverUrl,

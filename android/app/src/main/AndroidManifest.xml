@@ -6,11 +6,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Android TV: the app runs on televisions and set-top boxes, but the
+         same APK must stay installable on touch phones and tablets. Leanback
+         is optional, and the touch screen is not required. -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
     <application
         android:enableOnBackInvokedCallback="true"
         android:label="Lazer"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:roundIcon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -32,6 +41,9 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+                <!-- Lets the same activity appear on the Android TV home
+                     screen; phones ignore the extra category. -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
         <service android:name="com.ryanheise.audioservice.AudioService"

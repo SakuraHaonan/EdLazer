@@ -106,7 +106,7 @@ artifacts are retained for 30 days. Extract the complete Windows ZIP before
 launching its EXE, run `chmod +x` on a downloaded AppImage, and note that macOS
 Apps are ad-hoc signed while the IPA needs your own signing.
 
-More documentation: [build details](docs/builds.md) · [system media](docs/system-media.md) · [now playing](docs/now-playing.md) · [car head unit](docs/car-head-unit.md) · [QR sign-in](docs/login-qr.md) · [legacy UI](docs/legacy-ui.md)
+More documentation: [build details](docs/builds.md) · [system media](docs/system-media.md) · [now playing](docs/now-playing.md) · [car head unit](docs/car-head-unit.md) · [Android TV](docs/android-tv.md) · [QR sign-in](docs/login-qr.md) · [legacy UI](docs/legacy-ui.md)
 
 ## References and thanks
 

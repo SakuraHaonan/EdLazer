@@ -15,6 +15,7 @@ import '../data/lyrics.dart';
 import '../data/lyric_selection.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
+import 'lyrics_import.dart';
 import '../widgets/lyric_selection_toolbar.dart';
 import '../widgets/lyric_image_dialog.dart';
 import '../widgets/lyric_edge_fade.dart';
@@ -699,10 +700,22 @@ class _LyricViewportState extends State<LyricViewport>
               style: context.type.captionMuted,
             ),
             if (!widget.state.lyricsPureMusic)
-              TextButton(
-                onPressed: () =>
-                    unawaited(widget.state.ensureCurrentLyrics(force: true)),
-                child: const TrText('重新加载歌词'),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  TextButton(
+                    onPressed: () => unawaited(
+                      widget.state.ensureCurrentLyrics(force: true),
+                    ),
+                    child: const TrText('重新加载歌词'),
+                  ),
+                  TextButton(
+                    key: const ValueKey<String>('import-lyrics'),
+                    onPressed: () =>
+                        unawaited(pickAndImportLyrics(context, widget.state)),
+                    child: const TrText('导入歌词'),
+                  ),
+                ],
               ),
           ],
         ),

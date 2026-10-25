@@ -98,7 +98,7 @@ class _CatalogDetailPageState extends State<CatalogDetailPage> {
       }
     } catch (_) {
       if (mounted && generation == _generation) {
-        setState(() => _error = _isArtist ? '歌手资料加载失败，请重试。' : '专辑资料加载失败，请重试。');
+        setState(() => _error = _isArtist ? '歌手资料加载失败，请重试。' : '专辑资料加载失败，请重试。');  // i18n:key
       }
     } finally {
       if (mounted && generation == _generation) {
@@ -133,7 +133,7 @@ class _CatalogDetailPageState extends State<CatalogDetailPage> {
       });
     } catch (_) {
       if (mounted && generation == _generation) {
-        setState(() => _albumsError = '专辑加载失败，请重试。');
+        setState(() => _albumsError = '专辑加载失败，请重试。');  // i18n:key
       }
     } finally {
       if (mounted && generation == _generation) {

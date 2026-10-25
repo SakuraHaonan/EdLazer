@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
@@ -24,7 +25,10 @@ class _Catalog extends Catalog {
   Future<UserCollections> userCollections(int uid) async =>
       UserCollections.empty;
   @override
-  Future<String?> audioUrlFor(Track track) async => null;
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async =>
       const GatewayLyrics(lrc: '');
@@ -93,14 +97,8 @@ void main() {
     });
 
     test('the device form decides whether the car profile applies', () {
-      expect(
-        carSurfaceActive(AppSurface.auto, detected: true),
-        isTrue,
-      );
-      expect(
-        carSurfaceActive(AppSurface.auto, detected: false),
-        isFalse,
-      );
+      expect(carSurfaceActive(AppSurface.auto, detected: true), isTrue);
+      expect(carSurfaceActive(AppSurface.auto, detected: false), isFalse);
       expect(
         carSurfaceActive(AppSurface.car, detected: false),
         isTrue,
@@ -120,6 +118,44 @@ void main() {
       expect(profileDpiScale(1.5, floor: kCarScaleMin), 1.5);
       expect(profileDpiScale(9, floor: kCarScaleMin), kDpiScaleMax);
       expect(profileDpiScale(1, floor: kDpiScaleMin), 1);
+    });
+
+    test('a television overrides the car heuristic and raises the floor', () {
+      // The television profile is explicit or detected from Leanback.
+      expect(tvSurfaceActive(AppSurface.tv, detected: false), isTrue);
+      expect(tvSurfaceActive(AppSurface.auto, detected: true), isTrue);
+      expect(tvSurfaceActive(AppSurface.auto, detected: false), isFalse);
+      expect(tvSurfaceActive(AppSurface.car, detected: true), isFalse);
+      expect(tvSurfaceActive(AppSurface.standard, detected: true), isFalse);
+      expect(AppSurfaceLabels.parse('tv'), AppSurface.tv);
+      expect(AppSurfaceLabels.parse('car'), AppSurface.car);
+
+      // Density and input are separate: 自动 picks TV before the car guess.
+      expect(
+        resolveDeviceProfile(AppSurface.auto, television: true, car: true),
+        DeviceProfile.tv,
+      );
+      expect(
+        resolveDeviceProfile(AppSurface.auto, television: false, car: true),
+        DeviceProfile.car,
+      );
+      expect(
+        resolveDeviceProfile(AppSurface.auto, television: false, car: false),
+        DeviceProfile.standard,
+      );
+      expect(
+        resolveDeviceProfile(AppSurface.car, television: true, car: true),
+        DeviceProfile.car,
+        reason: 'an explicit choice still wins',
+      );
+      expect(
+        resolveDeviceProfile(AppSurface.standard, television: true, car: false),
+        DeviceProfile.standard,
+      );
+      expect(dpiScaleFloor(car: false, tv: true), kTvScaleMin);
+      expect(dpiScaleFloor(car: true, tv: true), kTvScaleMin);
+      expect(dpiScaleFloor(car: false), kDpiScaleMin);
+      expect(profileDpiScale(1, floor: kTvScaleMin), kTvScaleMin);
     });
 
     test('layout and dpi choices persist and reset together', () async {
@@ -309,9 +345,10 @@ void main() {
     expect(UiMetrics.carOf(tester.element(surfaceDropdown)), isTrue);
     expect(find.textContaining('车机形态已把界面放大到'), findsOneWidget);
     expect(tester.widget<Slider>(dpiSlider).min, kCarScaleMin);
-    expect(tester.widget<Slider>(dpiSlider).value, greaterThanOrEqualTo(
-      kCarScaleMin,
-    ));
+    expect(
+      tester.widget<Slider>(dpiSlider).value,
+      greaterThanOrEqualTo(kCarScaleMin),
+    );
 
     // The floor holds whatever the manual value is: the applied scale can
     // never fall back to desktop density on a head unit.

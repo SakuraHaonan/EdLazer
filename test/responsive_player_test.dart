@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
@@ -68,7 +69,7 @@ class _Catalog extends Catalog {
     albums: [],
   );
   @override
-  Future<String?> audioUrlFor(Track track) async => null;
+  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics(
     lrc: '[00:00.00]第一句歌词\n[00:02.00]第二句歌词\n[00:04.00]第三句歌词\n[00:06.00]第四句歌词',
@@ -245,7 +246,9 @@ void main() {
       final state = AppState(catalog: _Catalog());
       addTearDown(state.dispose);
       await state.bootstrap();
-      await Future<void>.delayed(Duration.zero);
+      for (int attempt = 0; attempt < 100 && state.lyricsLoading; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       expect(state.current?.id, _track.id);
       expect(state.playing, false);
       expect(state.lyricsLoading, false);

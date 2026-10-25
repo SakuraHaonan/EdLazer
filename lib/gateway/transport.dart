@@ -85,7 +85,7 @@ String? normalizeGatewaySessionCookie(String? value) {
   final Map<String, String> cookies = <String, String>{};
   final input = value
       .trim()
-      .replaceFirst(RegExp(r'^\uFEFF'), '')
+      .replaceFirst(RegExp(r'^﻿'), '')
       .replaceFirst(RegExp(r'^cookie:\s*', caseSensitive: false), '');
   for (final String rawSegment in input.split(';')) {
     String segment = rawSegment.trim();

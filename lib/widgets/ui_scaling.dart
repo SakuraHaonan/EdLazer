@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
 import '../state/ui_preferences.dart';
+import '../tv/tv_mode.dart';
 
 /// Estimates the automatic interface scale for the window's workspace.
 ///
@@ -53,6 +54,7 @@ class UiMetrics extends InheritedWidget {
     required this.autoScale,
     required this.minScale,
     required this.car,
+    required this.tv,
     required super.child,
   });
 
@@ -67,6 +69,9 @@ class UiMetrics extends InheritedWidget {
 
   /// Whether the car head-unit profile is in effect.
   final bool car;
+
+  /// Whether the television (ten-foot, D-pad) profile is in effect.
+  final bool tv;
 
   static UiMetrics? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<UiMetrics>();
@@ -87,12 +92,16 @@ class UiMetrics extends InheritedWidget {
   /// Whether the car profile is active here.
   static bool carOf(BuildContext context) => maybeOf(context)?.car ?? false;
 
+  /// Whether the television profile is active here.
+  static bool tvOf(BuildContext context) => maybeOf(context)?.tv ?? false;
+
   @override
   bool updateShouldNotify(UiMetrics oldWidget) =>
       oldWidget.scale != scale ||
       oldWidget.autoScale != autoScale ||
       oldWidget.minScale != minScale ||
-      oldWidget.car != car;
+      oldWidget.car != car ||
+      oldWidget.tv != tv;
 }
 
 /// Applies the interface scale from [AppState].
@@ -113,8 +122,14 @@ class UiScaling extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool car = carSurfaceOf(context, state.surface);
-    final double floor = dpiScaleFloor(car: car);
+    final DeviceProfile profile = resolveDeviceProfile(
+      state.surface,
+      television: state.deviceIsTelevision,
+      car: detectCarDisplay(context),
+    );
+    final bool car = profile == DeviceProfile.car;
+    final bool tv = profile == DeviceProfile.tv;
+    final double floor = dpiScaleFloor(car: car, tv: tv);
     final double autoScale = profileDpiScale(
       automaticDpiScale(context),
       floor: floor,
@@ -126,22 +141,30 @@ class UiScaling extends StatelessWidget {
     final Widget scaled = scale == kDpiScaleDefault
         ? child
         : _ScaledInterface(scale: scale, child: child);
-    return UiMetrics(
-      scale: scale,
-      autoScale: autoScale,
-      minScale: floor,
-      car: car,
-      child: scaled,
+    return TvScope(
+      // Remote navigation follows the input device, not the density choice: a
+      // television told to use standard density still has no touch screen.
+      active: tv || state.deviceIsTelevision || state.surface == AppSurface.tv,
+      child: UiMetrics(
+        scale: scale,
+        autoScale: autoScale,
+        minScale: floor,
+        car: car,
+        tv: tv,
+        child: scaled,
+      ),
     );
   }
 }
 
-/// Roomier Material metrics for the car profile.
+/// Roomier Material metrics for the car and television profiles.
 ///
 /// The global scale already enlarges everything; this additionally swaps the
 /// compact desktop density Flutter picks by default for an expanded one and
 /// restores the padded 48 px tap target around framework controls (icon
-/// buttons, dropdowns, list tiles) that a moving hand needs.
+/// buttons, dropdowns, list tiles) that a moving hand or a remote needs. On a
+/// television it also strengthens Material's focus wash, which is the only
+/// feedback those controls give when the D-pad lands on them.
 class CarMetrics extends StatelessWidget {
   const CarMetrics({super.key, required this.child});
 
@@ -149,11 +172,18 @@ class CarMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!UiMetrics.carOf(context)) return child;
+    final bool car = UiMetrics.carOf(context);
+    final bool tv = UiMetrics.tvOf(context);
+    final bool remote = TvScope.isActive(context);
+    if (!car && !tv && !remote) return child;
+    final ThemeData theme = Theme.of(context);
     return Theme(
-      data: Theme.of(context).copyWith(
+      data: theme.copyWith(
         visualDensity: const VisualDensity(horizontal: 1, vertical: 1),
         materialTapTargetSize: MaterialTapTargetSize.padded,
+        focusColor: remote
+            ? theme.colorScheme.primary.withValues(alpha: .32)
+            : theme.focusColor,
       ),
       child: child,
     );

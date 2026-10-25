@@ -34,7 +34,11 @@ the new `lib/lyrics` package.
 The desktop composition is an artwork-led split view with a borderless lyric
 canvas. The phone composition uses a compact header and a borderless lyric
 canvas over the darkened artwork. Queue and comments remain shared app views
-but now run inside the new glass panels/sheets.
+but now run inside the new glass panels/sheets. The desktop header also carries
+a download action for the current track: it opens the shared quality and
+destination dialog, shows live progress while the task runs, and switches to
+the download queue once the track is queued or saved. Local files keep the
+action disabled.
 
 ## Lyric motion and layout
 
@@ -145,6 +149,8 @@ player as a same-route overlay over the existing app root:
 - on exit it is disabled before the reverse slide begins;
 - the background never renders the song cover image itself; only the extracted
   multi-hue palette drives the mesh flow;
+- the player canvas ignores the browse backdrop setting: choosing 不使用 or a
+  custom picture in Settings never removes the song's flow from this page;
 - large subtrees are wrapped in `RepaintBoundary` so the slide transforms a
   cached layer.
 
