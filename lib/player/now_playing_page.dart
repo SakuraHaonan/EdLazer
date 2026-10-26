@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -7,6 +8,7 @@ import '../data/models.dart';
 import '../downloads/download_dialog.dart';
 import 'player_backdrop.dart';
 import '../l10n/app_localizations.dart';
+import '../navigation/pull_down_to_close.dart';
 import '../state/app_state.dart';
 import '../state/song_comments_controller.dart';
 import '../state/ui_preferences.dart';
@@ -158,12 +160,22 @@ class NowPlayingPage extends StatefulWidget {
     super.key,
     required this.state,
     this.onClose,
-    this.entranceSettled = true,
+    this.entranceSettled,
+    this.pullDown,
   });
 
   final AppState state;
   final VoidCallback? onClose;
-  final bool entranceSettled;
+
+  /// Flips once the entrance transition has finished. The album flow stays
+  /// still until then, and it follows the notifier directly so the whole page
+  /// does not rebuild on the frame the entrance lands.
+  final ValueListenable<bool>? entranceSettled;
+
+  /// Host of the pull-down dismissal. Only the compact presentation arms the
+  /// gesture: it drags the whole page away from the top half of the screen and
+  /// needs a host that owns the transition.
+  final PlayerPullDown? pullDown;
 
   @override
   State<NowPlayingPage> createState() => _NowPlayingPageState();
@@ -545,15 +557,18 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
           return Stack(
             fit: StackFit.expand,
             children: [
-              AlbumBlurFlow(
-                boundaryKey: _backdropKey,
-                track: track,
-                // The immersive player owns its canvas: browse-page backdrop
-                // settings (including "不使用" or a custom picture) must not
-                // strip the song's album-colour flow from here.
-                mode: LegacyBackgroundMode.nowPlayingDynamic,
-                pageColor: Colors.black,
-                animationsEnabled: widget.entranceSettled,
+              _EntranceGatedBackdrop(
+                settled: widget.entranceSettled,
+                builder: (bool settled) => AlbumBlurFlow(
+                  boundaryKey: _backdropKey,
+                  track: track,
+                  // The immersive player owns its canvas: browse-page backdrop
+                  // settings (including "不使用" or a custom picture) must not
+                  // strip the song's album-colour flow from here.
+                  mode: LegacyBackgroundMode.nowPlayingDynamic,
+                  pageColor: Colors.black,
+                  animationsEnabled: settled,
+                ),
               ),
               if (track == null)
                 _EmptyNowPlaying(onBack: _closePage)
@@ -604,25 +619,50 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                         ),
                       );
                     }
+                    final PlayerPullDown? pullDown = widget.pullDown;
                     return Listener(
                       behavior: HitTestBehavior.translucent,
                       onPointerDown: (_) => _onTouchDown(),
                       onPointerUp: (_) => _armHide(),
                       onPointerCancel: (_) => _armHide(),
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        excludeFromSemantics: true,
-                        onTap: compact && _lyricsMode
-                            ? _stepBackFromLyrics
-                            : null,
-                        child: SafeArea(
-                          child: Column(
-                            children: [
-                              _header(compact),
-                              Expanded(child: _mobile(track)),
-                            ],
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: <Widget>[
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            excludeFromSemantics: true,
+                            onTap: compact && _lyricsMode
+                                ? _stepBackFromLyrics
+                                : null,
+                            child: SafeArea(
+                              child: Column(
+                                children: [
+                                  _header(compact),
+                                  Expanded(child: _mobile(track)),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
+                          // A downward drag from anywhere in the upper half
+                          // pulls the player away; the strip sits above the
+                          // content so it answers the gesture arena first and
+                          // an upward drag still scrolls the lyrics.
+                          if (pullDown != null)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 0,
+                              height: box.maxHeight * .5,
+                              child: PlayerPullDownRegion(
+                                pullDown: pullDown,
+                                travel: box.maxHeight,
+                                enabled:
+                                    !_selectionOpen &&
+                                    !_commentsOpen &&
+                                    !_queueOpen,
+                              ),
+                            ),
+                        ],
                       ),
                     );
                   },
@@ -1052,6 +1092,28 @@ class _EmptyNowPlaying extends StatelessWidget {
           IvoryButton(label: '返回', onPressed: onBack),
         ],
       ),
+    );
+  }
+}
+
+/// Rebuilds only the backdrop when the entrance settles.
+///
+/// Handing the page a plain bool would rebuild the whole player — header,
+/// artwork, lyrics, transport — on the frame the entrance lands, which is a
+/// visible hitch right at the end of the open animation.
+class _EntranceGatedBackdrop extends StatelessWidget {
+  const _EntranceGatedBackdrop({required this.settled, required this.builder});
+
+  final ValueListenable<bool>? settled;
+  final Widget Function(bool settled) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final ValueListenable<bool>? listenable = settled;
+    if (listenable == null) return builder(true);
+    return ValueListenableBuilder<bool>(
+      valueListenable: listenable,
+      builder: (BuildContext context, bool value, Widget? _) => builder(value),
     );
   }
 }

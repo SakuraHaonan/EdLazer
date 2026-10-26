@@ -140,6 +140,24 @@ The redesign keeps the existing performance constraints:
 - Shell rebuilds remain structural only; transport/seek widgets own the
   100 ms tick lane.
 
+### Switching pages
+
+The cross-fade is the moment the frame budget is tightest: two full pages are
+alive and the incoming one is building for the first time. The shell therefore
+mirrors the switcher's own 280 ms motion and uses it to stand down ambient work:
+
+- the album mesh is parked under a `TickerMode` for the length of the switch.
+  It drifts on a ten second time base, so a 280 ms pause is invisible, and it
+  stops repainting the whole window at 30 fps while the transition runs;
+- playback, download and lyric reports that arrive mid-switch are held back and
+  folded into the single rebuild that ends the switch. Rebuilding the incoming
+  page ten times a second while it fades is what makes the animation stutter;
+  nothing is lost, because that rebuild reads the newest state;
+- a state report that arrives outside a switch still rebuilds the shell exactly
+  as before, so pages keep following playback while nothing is animating;
+- `AppleGlass` only inserts a clip layer for rounded panels; the square chrome
+  panels paint the decoration alone.
+
 ## Verification
 
 `flutter analyze` and the full widget/unit suite cover the desktop layout at

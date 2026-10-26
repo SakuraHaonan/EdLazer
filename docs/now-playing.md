@@ -141,12 +141,22 @@ player as a same-route overlay over the existing app root:
 
 - the whole player uses Material's open-upwards motion: a compositor-only
   slide from `Offset(0, 1)` to `Offset.zero`, 300 ms, `fastOutSlowIn`, with
-  the same motion reversed on close;
+  the same motion reversed on close. The easing belongs to the transition
+  animation, so the very same offset can also be driven by a finger;
 - no full-screen clip radius, scale or fade is animated;
-- the shell and player ambient tickers are paused while the transition runs;
-- the album-colour mesh flow is held back until the entrance has settled, then
-  enabled once;
-- on exit it is disabled before the reverse slide begins;
+- the shell's ambient tickers are paused while the player is up. The player's
+  own tickers are not: a `TickerMode` gate on the player made every ticker in
+  it depend on that gate, so unmuting it on the last frame of the entrance
+  rebuilt the whole page exactly when the animation landed;
+- the album-colour mesh flow is held back until the entrance has settled, and
+  it follows a `ValueListenable<bool>` on its own, so the frame it starts on
+  rebuilds the backdrop and nothing else;
+- the player page widget is built once per opening and handed to the tree
+  unchanged: a shell rebuild — a playback report while the player is up, the
+  entrance settling — never rebuilds the player's subtree;
+- the covered browse tree is kept warm, so the frame that opens the player
+  reuses it instead of rebuilding a page the player is about to hide;
+- on exit the mesh is disabled before the reverse slide begins;
 - the background never renders the song cover image itself; only the extracted
   multi-hue palette drives the mesh flow;
 - the player canvas ignores the browse backdrop setting: choosing 不使用 or a
@@ -156,6 +166,27 @@ player as a same-route overlay over the existing app root:
 
 A standalone `NowPlayingRoute` still exists for direct callers and uses the
 same Material open-upwards slide without a full-screen animated clip.
+
+### Pulling the player down
+
+On phones the player also leaves the way a sheet does:
+
+- a downward drag that starts anywhere in the upper half of the window pulls
+  it away: the header, the artwork and the lyrics all arm the gesture;
+- the page tracks the finger one to one over a full window height of travel,
+  and the browse tree is revealed underneath it;
+- an upward drag never claims the gesture, so the lyric canvas keeps its own
+  scrolling inside the same region, and a tap still reaches the header;
+- on release the player closes once it has travelled 22% of the height or was
+  flung downward faster than 900 px/s; otherwise it springs back to the open
+  position;
+- the settle animation is proportional to the distance that is left (80-260
+  ms) instead of replaying the whole transition;
+- the gesture is hosted by whatever owns the player's transition, so the shell
+  overlay and `NowPlayingRoute` share one implementation
+  (`lib/navigation/pull_down_to_close.dart`);
+- the drag strip is a sibling above the page content in the stack, so its
+  recognizer answers the gesture arena before the lyric viewport's.
 
 ### Windows AXTree stability
 

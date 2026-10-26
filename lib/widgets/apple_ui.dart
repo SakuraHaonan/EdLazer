@@ -1,4 +1,4 @@
-import 'dart:ui' as ui;
+﻿import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -40,6 +40,10 @@ class AppleGlass extends StatelessWidget {
         child: child,
       ),
     );
+    // The clip is not decoration: a BackdropFilter applies to the whole
+    // screen when nothing clips it, so dropping it for a square panel blurs
+    // every widget painted before the panel. A zero radius still clips as a
+    // plain rect, so square panels cost no rounded-corner geometry.
     return ClipRRect(borderRadius: borderRadius, child: material);
   }
 }

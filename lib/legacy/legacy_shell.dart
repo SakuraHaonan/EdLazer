@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
@@ -20,6 +21,7 @@ import '../widgets/interaction_feedback.dart';
 import '../widgets/song_comments_view.dart';
 import 'legacy_background.dart';
 import 'legacy_login.dart';
+import '../navigation/pull_down_to_close.dart';
 import '../player/now_playing_page.dart';
 import 'legacy_pages.dart';
 import 'legacy_player_bar.dart';
@@ -54,7 +56,7 @@ class LegacyShell extends StatefulWidget {
 enum _LegacySection { home, search, library, likes, settings }
 
 class _LegacyShellState extends State<LegacyShell>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   _LegacySection _section = _LegacySection.home;
   Playlist? _playlist;
 
@@ -70,7 +72,38 @@ class _LegacyShellState extends State<LegacyShell>
   late final AnimationController _nowPlayingMotion;
   late final Animation<Offset> _nowPlayingSlide;
   bool _nowPlayingOpen = false;
-  bool _nowPlayingSettled = true;
+
+  /// Whether the player's entrance has finished. A notifier rather than a field
+  /// so the album flow can follow it on its own: flipping a plain field would
+  /// rebuild the whole player on the frame the entrance lands.
+  final ValueNotifier<bool> _playerSettled = ValueNotifier<bool>(true);
+  bool get _nowPlayingSettled => _playerSettled.value;
+
+  /// The player page widget, built once per opening and handed to the tree
+  /// unchanged. Rebuilding the shell — a playback report, the entrance
+  /// settling — must not rebuild the player's subtree: it is the most
+  /// expensive tree in the app and it already follows [state] through its own
+  /// listeners, so a new widget instance here is pure cost on the frame the
+  /// open animation is trying to run.
+  Widget? _playerPage;
+
+  /// Hosts the player's pull-down gesture on the same motion that opens it, so
+  /// the page follows the finger and settles from wherever it was left.
+  late final PlayerPullDown _playerPull = _PlayerPull(this);
+
+  /// Drives the shell's own rebuilds. Playback reports ten times a second;
+  /// rebuilding the whole page for every tick while a switch is animating is
+  /// what turns a 280 ms cross-fade into a stutter, so [state] is filtered
+  /// through [_onAppStateChanged] instead of listened to directly.
+  final _ShellRepaint _repaint = _ShellRepaint();
+  bool _stateReportScheduled = false;
+
+  /// Mirrors the page switcher's motion so ambient work can stand down while a
+  /// switch is running: the album mesh alone repaints the whole window at
+  /// 30 fps, which is budget the transition needs.
+  late final AnimationController _contentMotion;
+  bool _contentSwitching = false;
+  String? _shownContentKey;
 
   /// The browse tree is fully covered while the player is up. Caching it
   /// keeps playback notifications (track changes, lyric loads, download
@@ -100,14 +133,21 @@ class _LegacyShellState extends State<LegacyShell>
       duration: const Duration(milliseconds: 300),
       reverseDuration: const Duration(milliseconds: 300),
     )..addStatusListener(_onNowPlayingStatus);
-    _nowPlayingSlide =
-        Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(
-          CurvedAnimation(
-            parent: _nowPlayingMotion,
-            curve: Curves.fastOutSlowIn,
-            reverseCurve: Curves.fastOutSlowIn,
-          ),
-        );
+    // Mirrors the page switcher's duration in [_content].
+    _contentMotion = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    )..addStatusListener(_onContentMotionStatus);
+    state.addListener(_onAppStateChanged);
+    // The first frame is not a switch: only a change from here on is one.
+    _shownContentKey = _contentKey;
+    // Linear on purpose: the pull writes straight into the controller value,
+    // so the page must track the finger one to one. The easing of the open and
+    // close transitions belongs to those animations instead.
+    _nowPlayingSlide = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(_nowPlayingMotion);
     albumDetailRequest.addListener(_onAlbumRequest);
     artistDetailRequest.addListener(_onArtistRequest);
     TvOverlayStack.instance.addListener(_onTvOverlayChanged);
@@ -146,18 +186,102 @@ class _LegacyShellState extends State<LegacyShell>
     });
   }
 
+  /// Playback, downloads and lyrics all report through [state]. Only the
+  /// chrome is rebuilt per report; while a page switch is animating the report
+  /// is held back and folded into the rebuild that ends the switch.
+  void _onAppStateChanged() {
+    if (!mounted) return;
+    if (_contentSwitching && !_nowPlayingOpen) return;
+    // A page can report from its own initState, i.e. while the tree is being
+    // built; marking the shell dirty there throws. Take that report on the
+    // frame that is already running instead.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      if (_stateReportScheduled) return;
+      _stateReportScheduled = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _stateReportScheduled = false;
+        if (mounted) _repaint.ping();
+      });
+      return;
+    }
+    _repaint.ping();
+  }
+
+  /// The switcher is already animating in this frame, so the mirror starts on
+  /// the next one: starting a controller while building would dirty the tree
+  /// from inside the build.
+  void _startContentMotion() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _contentMotion.forward(from: 0);
+    });
+  }
+
+  void _onContentMotionStatus(AnimationStatus status) {
+    if (!mounted) return;
+    if (status == AnimationStatus.completed) {
+      // Reports held back during the switch need no replay: this rebuild
+      // already reads the newest state.
+      setState(() => _contentSwitching = false);
+    }
+  }
+
   void _onNowPlayingStatus(AnimationStatus status) {
     if (!mounted) return;
     if (status == AnimationStatus.completed && !_nowPlayingSettled) {
-      setState(() => _nowPlayingSettled = true);
+      _playerSettled.value = true;
     } else if (status == AnimationStatus.dismissed && _nowPlayingOpen) {
-      setState(() => _nowPlayingOpen = false);
+      // The next opening builds a fresh page with fresh state.
+      setState(() {
+        _nowPlayingOpen = false;
+        _playerPage = null;
+      });
+    }
+  }
+
+  /// The player's overlay wrappers, rebuilt when the entrance lands. The page
+  /// arrives as a prebuilt child so it is not part of that rebuild.
+  Widget _playerOverlay(BuildContext context, bool settled, Widget? page) =>
+      Semantics(
+        key: const ValueKey<String>('now-playing-semantics'),
+        container: true,
+        child: ExcludeSemantics(
+          excluding: !settled,
+          child: RepaintBoundary(
+            // Focus starts on the first control of the player so a remote can
+            // operate it at once.
+            child: TvFocusRegion(focusToken: settled, child: page!),
+          ),
+        ),
+      );
+
+  /// One page instance per opening, reused across shell rebuilds.
+  Widget _playerPageWidget() => _playerPage ??= NowPlayingPage(
+    state: state,
+    onClose: _closeNowPlaying,
+    entranceSettled: _playerSettled,
+    pullDown: _playerPull,
+  );
+
+  @override
+  void didUpdateWidget(covariant LegacyShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.removeListener(_onAppStateChanged);
+      widget.state.addListener(_onAppStateChanged);
+      _playerPage = null;
     }
   }
 
   @override
   void dispose() {
     _updateTimer?.cancel();
+    state.removeListener(_onAppStateChanged);
+    _playerSettled.dispose();
+    _repaint.dispose();
+    _contentMotion
+      ..removeStatusListener(_onContentMotionStatus)
+      ..dispose();
     _nowPlayingMotion
       ..removeStatusListener(_onNowPlayingStatus)
       ..dispose();
@@ -300,20 +424,67 @@ class _LegacyShellState extends State<LegacyShell>
     if (_nowPlayingOpen) return;
     setState(() {
       _nowPlayingOpen = true;
-      _nowPlayingSettled = false;
+      _playerSettled.value = false;
     });
-    _nowPlayingMotion.forward(from: 0);
+    _nowPlayingMotion.value = 0;
+    _nowPlayingMotion.animateTo(
+      1,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.fastOutSlowIn,
+    );
   }
 
   void _closeNowPlaying() {
     if (!_nowPlayingOpen) return;
     setState(() {
-      _nowPlayingSettled = false;
+      _playerSettled.value = false;
       // Rebuild the browse tree once so the uncovered page reflects whatever
       // changed while the player was on top.
       _coveredShellStale = true;
     });
-    _nowPlayingMotion.reverse();
+    // Going down must use animateBack: animateTo keeps the controller pointing
+    // forward, so a finished dismissal would report `completed` and the player
+    // would never be retired.
+    _nowPlayingMotion.animateBack(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.fastOutSlowIn,
+    );
+  }
+
+  /// Settles a finger-driven pull. The player closes when it has been dragged
+  /// far enough, or flung downward; otherwise it returns to the open position.
+  /// The duration follows the distance that is actually left, so a long pull
+  /// does not spend a whole transition on its last few pixels.
+  void _settlePlayerPull(double velocity) {
+    if (!_nowPlayingOpen) return;
+    final double open = _nowPlayingMotion.value.clamp(0.0, 1.0);
+    final double pulled = 1 - open;
+    final bool dismiss = velocity < -900
+        ? false
+        : (velocity > 900 && pulled > .02) || pulled >= .22;
+    final Duration duration = Duration(
+      milliseconds: ((dismiss ? open : pulled) * 260).round().clamp(80, 260),
+    );
+    if (!dismiss) {
+      _nowPlayingMotion.animateTo(
+        1,
+        duration: duration,
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+    unawaited(state.feedback());
+    setState(() {
+      _playerSettled.value = false;
+      // Rebuild the browse tree once so the uncovered page is current.
+      _coveredShellStale = true;
+    });
+    _nowPlayingMotion.animateBack(
+      0,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+    );
   }
 
   bool get _hasOpenDetail =>
@@ -349,8 +520,19 @@ class _LegacyShellState extends State<LegacyShell>
     return Theme(
       data: buildAppleTheme(brightness: brightness, seedAccent: accent),
       child: AnimatedBuilder(
-        animation: state,
+        animation: _repaint,
         builder: (BuildContext context, _) {
+          // The switcher starts its own motion the moment the key changes. A
+          // mirror of it flags the frame and then follows through the
+          // controller, so ambient work stops before the heavy frame is built.
+          final String contentKey = _contentKey;
+          if (_shownContentKey != contentKey) {
+            _shownContentKey = contentKey;
+            if (!(MediaQuery.maybeOf(context)?.disableAnimations ?? false)) {
+              _contentSwitching = true;
+              _startContentMotion();
+            }
+          }
           final AppleSemanticColors apple = AppleSemanticColors.of(context);
           final Size window = MediaQuery.sizeOf(context);
           final bool compact = useCompactLayout(state.uiMode, window.width);
@@ -368,17 +550,24 @@ class _LegacyShellState extends State<LegacyShell>
               ? AppleColors.darkCanvas
               : apple.background;
           final bool backdrop = paintedBackdrop || needsSeed;
-          if (_coveredShell != null &&
-              (_coveredShellBrightness != brightness ||
-                  _coveredShellAccent != accent ||
-                  _coveredShellCompact != compact ||
-                  _coveredShellCompactBar != compactBar ||
-                  _coveredShellBackdrop != backdrop)) {
-            _coveredShellStale = true;
-          }
+          // Everything that decides the browse tree's shape, so a cached copy
+          // is only reused where it would have been rebuilt identically.
+          final bool shellShapeMatches =
+              _coveredShellBrightness == brightness &&
+              _coveredShellAccent == accent &&
+              _coveredShellCompact == compact &&
+              _coveredShellCompactBar == compactBar &&
+              _coveredShellBackdrop == backdrop;
           final Widget? cachedShell = _coveredShell;
+          // Reuse the cached tree while the player covers it. Opening the
+          // player is the expensive frame: rebuilding a page the player is
+          // about to hide would double the work of the transition's first
+          // frame, and the warm copy from the previous frame is the same tree.
           final bool reuseShell =
-              cachedShell != null && _nowPlayingOpen && !_coveredShellStale;
+              _nowPlayingOpen &&
+              cachedShell != null &&
+              shellShapeMatches &&
+              !_coveredShellStale;
           final Widget shell = reuseShell
               ? cachedShell
               : Scaffold(
@@ -387,12 +576,18 @@ class _LegacyShellState extends State<LegacyShell>
                     fit: StackFit.expand,
                     children: <Widget>[
                       if (paintedBackdrop || needsSeed)
-                        LegacyAlbumBackdrop(
-                          track: state.current,
-                          mode: state.legacyBackground,
-                          imagePath: state.legacyBackgroundImagePath,
-                          uiAlpha: state.legacyUiAlpha,
-                          onSeed: state.setLegacySeed,
+                        // The mesh drifts on a ten second time base: freezing
+                        // it for the length of a page switch is invisible and
+                        // hands the frame budget to the transition.
+                        TickerMode(
+                          enabled: !_contentSwitching,
+                          child: LegacyAlbumBackdrop(
+                            track: state.current,
+                            mode: state.legacyBackground,
+                            imagePath: state.legacyBackgroundImagePath,
+                            uiAlpha: state.legacyUiAlpha,
+                            onSeed: state.setLegacySeed,
+                          ),
                         ),
                       // Content sits on a semantic system background from
                       // which the album tint is allowed to breathe through.
@@ -424,7 +619,7 @@ class _LegacyShellState extends State<LegacyShell>
                     ],
                   ),
                 );
-          if (_nowPlayingOpen) {
+          if (!reuseShell) {
             _coveredShell = shell;
             _coveredShellStale = false;
             _coveredShellBrightness = brightness;
@@ -432,8 +627,6 @@ class _LegacyShellState extends State<LegacyShell>
             _coveredShellCompact = compact;
             _coveredShellCompactBar = compactBar;
             _coveredShellBackdrop = backdrop;
-          } else if (_coveredShell != null) {
-            _coveredShell = null;
           }
           return PopScope<void>(
             // Back is handled in-app while a page or the player is open; at
@@ -467,27 +660,14 @@ class _LegacyShellState extends State<LegacyShell>
                     Positioned.fill(
                       child: SlideTransition(
                         position: _nowPlayingSlide,
-                        child: Semantics(
-                          key: const ValueKey<String>('now-playing-semantics'),
-                          container: true,
-                          child: ExcludeSemantics(
-                            excluding: !_nowPlayingSettled,
-                            child: TickerMode(
-                              enabled: _nowPlayingSettled,
-                              child: RepaintBoundary(
-                                // Focus starts on the first control of the
-                                // player so a remote can operate it at once.
-                                child: TvFocusRegion(
-                                  focusToken: _nowPlayingSettled,
-                                  child: NowPlayingPage(
-                                    state: state,
-                                    onClose: _closeNowPlaying,
-                                    entranceSettled: _nowPlayingSettled,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                        // The settle flag only shapes the wrappers below, and
+                        // they take the page as a prebuilt child: flipping it
+                        // rebuilds a handful of widgets instead of the whole
+                        // player on the frame the entrance lands.
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: _playerSettled,
+                          builder: _playerOverlay,
+                          child: _playerPageWidget(),
                         ),
                       ),
                     ),
@@ -1024,6 +1204,7 @@ class _LegacyShellState extends State<LegacyShell>
     final Widget page = _contentPage();
     final bool motion = !MediaQuery.disableAnimationsOf(context);
     return AnimatedSwitcher(
+      // [_contentMotion] mirrors this duration: keep the two in step.
       duration: motion ? const Duration(milliseconds: 280) : Duration.zero,
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
@@ -1440,4 +1621,38 @@ class _RailPlaylistState extends State<_RailPlaylist> {
       ),
     );
   }
+}
+
+/// The shell's side of the player's pull-down: it drives the very motion that
+/// opens the player, so a drag is continuous with the open and close
+/// transitions instead of a separate animation.
+class _PlayerPull implements PlayerPullDown {
+  _PlayerPull(this._shell);
+
+  final _LegacyShellState _shell;
+
+  @override
+  bool get canStart =>
+      _shell._nowPlayingOpen &&
+      _shell._nowPlayingSettled &&
+      !_shell._nowPlayingMotion.isAnimating;
+
+  @override
+  void startPull() => _shell._nowPlayingMotion.stop();
+
+  @override
+  void updatePull(double progress) {
+    // Stay off the lower bound: the controller reports a dismissal as soon as
+    // it reaches zero, and the pull is not committed until the finger lifts.
+    _shell._nowPlayingMotion.value = (1 - progress).clamp(.001, 1);
+  }
+
+  @override
+  void endPull(double velocity) => _shell._settlePlayerPull(velocity);
+}
+
+/// A [ChangeNotifier] the shell pings when it wants a rebuild, so playback
+/// reports can be filtered instead of rebuilding the page ten times a second.
+class _ShellRepaint extends ChangeNotifier {
+  void ping() => notifyListeners();
 }
