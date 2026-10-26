@@ -254,6 +254,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a released pull still animates with reduced motion on', (
+    tester,
+  ) async {
+    // Windows reports this when its animation effects are off, and it is what
+    // turned the settle into a single-frame snap: the controller would have
+    // run its 80-260 ms in 5% of the time.
+    tester.binding.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(
+      tester.binding.platformDispatcher.clearAccessibilityFeaturesTestValue,
+    );
+    await tester.pump();
+
+    await _openPlayer(tester);
+    final TestGesture gesture = await tester.startGesture(
+      const Offset(195, 160),
+    );
+    await tester.pump(const Duration(milliseconds: 40));
+    for (int i = 0; i < 10; i++) {
+      await gesture.moveBy(const Offset(0, 34));
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    final double pulled = _slide(tester);
+    expect(pulled, greaterThan(.3));
+
+    await gesture.up();
+    // A ticker only learns where it started on its first tick, so the frame
+    // after the release cannot move yet.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    final double afterRelease = _slide(tester);
+    expect(
+      find.byType(NowPlayingPage),
+      findsOneWidget,
+      reason: 'the rest of the pull must animate, not disappear',
+    );
+    expect(afterRelease, greaterThan(pulled));
+    expect(afterRelease, lessThan(1));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(NowPlayingPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the desktop player pulls down from the upper half too', (
     tester,
   ) async {

@@ -132,6 +132,12 @@ class _LegacyShellState extends State<LegacyShell>
       vsync: this,
       duration: const Duration(milliseconds: 300),
       reverseDuration: const Duration(milliseconds: 300),
+      // Never let the platform's reduced-motion flag scale this to 5%: the
+      // player is dragged by the finger, so a released pull has to finish the
+      // distance it was left at (80-260 ms) instead of snapping away in a
+      // single frame. The motion is a compositor-only slide, not a vestibular
+      // trigger.
+      animationBehavior: AnimationBehavior.preserve,
     )..addStatusListener(_onNowPlayingStatus);
     // Mirrors the page switcher's duration in [_content].
     _contentMotion = AnimationController(

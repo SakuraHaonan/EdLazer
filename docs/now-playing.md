@@ -144,6 +144,11 @@ player as a same-route overlay over the existing app root:
   the same motion reversed on close. The easing belongs to the transition
   animation, so the very same offset can also be driven by a finger;
 - no full-screen clip radius, scale or fade is animated;
+- the motion keeps its duration even when the platform reports reduced motion
+  (`AnimationBehavior.preserve`). That flag shrinks a controller to 5% of its
+  duration, which skipped the entrance and turned a released pull into a
+  single-frame snap instead of carrying the page the rest of the way out;
+  compositor transforms are not a vestibular trigger;
 - the shell's ambient tickers are paused while the player is up. The player's
   own tickers are not: a `TickerMode` gate on the player made every ticker in
   it depend on that gate, so unmuting it on the last frame of the entrance
