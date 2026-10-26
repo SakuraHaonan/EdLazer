@@ -1,4 +1,4 @@
-﻿# Apple-style adaptive interface
+# Apple-style adaptive interface
 
 The app now ships one interface language across every page: an Apple Music-
 inspired, HIG-shaped design with a desktop and a mobile composition. There is
@@ -78,16 +78,20 @@ flow for the current song, and the browse backdrop setting never removes it.
   controls stay reachable at every height.
 - Login is an Apple-sheet card with QR sign-in and a Cookie escape hatch.
 
-### Television
+### 大屏幕模式 (television)
 
-Android TV gets the same composition at ten feet. `设置 → 界面 → 设备形态` can
-force the `电视` profile; otherwise a Leanback or touch-less Android device
-selects it automatically. The profile keeps the standard interface scale,
-insets chrome for overscan, and turns every custom card, row and transport
-glyph into a D-pad focus stop with a white-on-black focus ring. Back closes the queue or
-volume panel first, then the player, then detail pages. See
-[android-tv.md](android-tv.md) for the manifest, detection and navigation
-details.
+Android TV gets its own composition rather than the desktop shell at ten feet.
+`设置 → 界面 → 设备形态` can force `大屏幕模式`; otherwise a Leanback or
+touch-less Android device selects it automatically and boots into it. The
+large-screen mode draws a floating destination capsule, shelves of captioned
+artwork, a rail-and-grid library and a transport shelf, keeps the standard
+interface scale, insets chrome for overscan, and turns every card, row and
+transport glyph into a D-pad focus stop with a white-on-black focus ring.
+Directional traversal follows the card geometry and bumps a shelf or page when
+the next card has not been built yet. Back closes the queue or volume panel
+first, then the player, then detail pages. See
+[android-tv.md](android-tv.md) for the manifest, detection, layout and
+navigation details.
 
 Breakpoints: mobile below 720 dp, immersive desktop player from 840 dp,
 compact desktop transport below 1000 dp. Settings and artwork grids reflow
@@ -116,7 +120,7 @@ Everything above the pixels remains shared with the existing app:
   export, plus all persisted lyric preferences.
 - Queue (`PlaybackQueueView`) and comments (`SongCommentsView`) are reused in
   modal glass panels/sheets rather than forked.
-- DPI scaling, car-display mode, the Android TV profile, safe areas,
+- DPI scaling, car-display mode, the large-screen profile, safe areas,
   window frame, system media integration and localisation continue to work.
 
 ## Settings and persistence

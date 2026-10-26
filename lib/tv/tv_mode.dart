@@ -75,27 +75,124 @@ void revealTvFocus(
   target.findRenderObject()?.showOnScreen(duration: duration, curve: curve);
 }
 
-/// Replaces the app's reading-order traversal callback on a television.
+/// Whether the ten-foot presentation is in effect.
 ///
-/// The order itself is unchanged — Flutter's default reading order is what
-/// makes the D-pad predictable — but every move now reveals the new focus
-/// minimally and with a short animation.
-class TvTraversalScope extends StatelessWidget {
-  const TvTraversalScope({super.key, required this.child});
+/// The large-screen mode owns both the layout and the input model: it replaces
+/// the source-list shell with the shelf-and-rail composition, and it is exactly
+/// the case where a remote must be able to reach everything. Off a large
+/// screen this is false and every helper in this file collapses to its child.
+bool largeScreenModeOf(BuildContext context) => TvScope.isActive(context);
 
-  final Widget child;
+/// The D-pad traversal used by the large-screen presentation.
+///
+/// Flutter's reading-order policy walks the widget tree, so on a grid of cards
+/// "down" can jump sideways along whatever the build order happens to be. This
+/// policy follows the geometry instead: left/right stay inside a shelf,
+/// up/down land on the item physically above or below, and reversing direction
+/// retraces the path that was just taken. Focus is revealed with
+/// [revealTvFocus], which scrolls only when the target is actually outside its
+/// viewports.
+///
+/// Lazily built lists only create the children near the viewport, so a move at
+/// the edge has no node to land on. Rather than dead-ending there, the nearest
+/// scroll view on the matching axis is nudged in that direction: the classic
+/// "bump to scroll" behaviour of a television. The next press continues from
+/// the items that were just revealed.
+class LargeScreenTraversalPolicy extends ReadingOrderTraversalPolicy {
+  LargeScreenTraversalPolicy()
+    : super(requestFocusCallback: _requestFocusWithReveal);
 
-  static void _requestFocus(
+  static void _requestFocusWithReveal(
     FocusNode node, {
     ScrollPositionAlignmentPolicy? alignmentPolicy,
     double? alignment,
     Duration? duration,
     Curve? curve,
-  }) => revealTvFocus(node);
-
-  static final FocusTraversalPolicy _policy = ReadingOrderTraversalPolicy(
-    requestFocusCallback: _requestFocus,
+  }) => revealTvFocus(
+    node,
+    duration: duration ?? const Duration(milliseconds: 160),
+    curve: curve ?? Curves.easeOutCubic,
   );
+
+  /// Tab (and any helper that walks the order) becomes a vertical step, which
+  /// is the only meaningful order on a shelf-and-rail screen.
+  @override
+  bool next(FocusNode currentNode) =>
+      inDirection(currentNode, TraversalDirection.down);
+
+  @override
+  bool previous(FocusNode currentNode) =>
+      inDirection(currentNode, TraversalDirection.up);
+
+  @override
+  bool inDirection(FocusNode currentNode, TraversalDirection direction) {
+    final bool moved = super.inDirection(currentNode, direction);
+    if (!moved) _scrollToward(currentNode, direction);
+    return moved;
+  }
+
+  /// Scrolls the nearest matching scroll view by most of a viewport.
+  ///
+  /// A vertical press never scrolls a horizontal shelf, and a horizontal press
+  /// never scrolls the page: the axis has to agree with the direction the
+  /// viewer asked for. At the end of the scroll the call is a no-op, so the
+  /// D-pad simply stops instead of overshooting.
+  void _scrollToward(FocusNode node, TraversalDirection direction) {
+    final BuildContext? context = node.context;
+    if (context == null || !context.mounted) return;
+    final Axis wanted =
+        direction == TraversalDirection.up ||
+            direction == TraversalDirection.down
+        ? Axis.vertical
+        : Axis.horizontal;
+    ScrollableState? scrollable;
+    context.visitAncestorElements((Element element) {
+      if (element is StatefulElement && element.state is ScrollableState) {
+        final ScrollableState candidate = element.state as ScrollableState;
+        if (axisDirectionToAxis(candidate.axisDirection) == wanted) {
+          scrollable = candidate;
+          return false;
+        }
+      }
+      return true;
+    });
+    final ScrollableState? target = scrollable;
+    if (target == null) return;
+    final ScrollPosition position = target.position;
+    if (!position.hasContentDimensions || !position.hasViewportDimension) {
+      return;
+    }
+    final bool forward =
+        direction == TraversalDirection.down ||
+        direction == TraversalDirection.right;
+    final bool reversed =
+        target.axisDirection == AxisDirection.up ||
+        target.axisDirection == AxisDirection.left;
+    final double step = position.viewportDimension * .62;
+    final double next =
+        (position.pixels + (forward ? step : -step) * (reversed ? -1 : 1))
+            .clamp(position.minScrollExtent, position.maxScrollExtent);
+    if ((next - position.pixels).abs() < 1) return;
+    unawaited(
+      position.animateTo(
+        next,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+}
+
+/// Installs the large-screen traversal policy for remote navigation.
+///
+/// Off a large screen the child is returned untouched, so desktop and phone
+/// keep Flutter's own traversal.
+class TvTraversalScope extends StatelessWidget {
+  const TvTraversalScope({super.key, required this.child});
+
+  final Widget child;
+
+  static final FocusTraversalPolicy _policy = LargeScreenTraversalPolicy();
 
   @override
   Widget build(BuildContext context) => TvScope.isActive(context)
@@ -240,28 +337,55 @@ class _TvTapTargetState extends State<TvTapTarget> {
 /// The white ring + black halo used for remote focus everywhere.
 ///
 /// White alone disappears over light artwork and black alone disappears over
-/// the dark player, so the two are drawn together: the shadow outlines the
-/// ring on white, and the ring stays crisp on black.
+/// the dark player, so the two are drawn together: the black halo outlines the
+/// ring on white, and the white ring stays crisp on black. Both are strokes —
+/// a filled shadow would darken the whole card through the transparent middle
+/// of its decoration.
 class TvFocusOutline extends StatelessWidget {
   const TvFocusOutline({
     super.key,
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
-    this.width = 2.5,
+    this.width = 3,
   });
 
   final BorderRadius borderRadius;
   final double width;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      borderRadius: borderRadius,
-      border: Border.all(color: Colors.white, width: width),
-      boxShadow: const <BoxShadow>[
-        BoxShadow(color: Color(0xB3000000), blurRadius: 2, spreadRadius: 2),
-      ],
-    ),
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _TvFocusRingPainter(borderRadius: borderRadius, width: width),
   );
+}
+
+class _TvFocusRingPainter extends CustomPainter {
+  const _TvFocusRingPainter({required this.borderRadius, required this.width});
+
+  final BorderRadius borderRadius;
+  final double width;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    // Keep the whole stroke inside the card: half of a centred stroke would be
+    // clipped by the focus target's bounds.
+    final double inset = width / 2 + 2;
+    final RRect ring = borderRadius.toRRect(Offset.zero & size).deflate(inset);
+    final Paint halo = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width + 4
+      ..color = const Color(0xB3000000)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+    final Paint stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..color = Colors.white;
+    canvas.drawRRect(ring, halo);
+    canvas.drawRRect(ring, stroke);
+  }
+
+  @override
+  bool shouldRepaint(_TvFocusRingPainter oldDelegate) =>
+      oldDelegate.borderRadius != borderRadius || oldDelegate.width != width;
 }
 
 /// Moves remote focus into a page when it appears or returns to the front.

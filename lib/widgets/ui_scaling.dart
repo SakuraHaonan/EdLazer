@@ -156,15 +156,16 @@ class UiScaling extends StatelessWidget {
       // Remote navigation follows the input device, not the density choice: a
       // television told to use standard density still has no touch screen.
       active: tv || state.deviceIsTelevision || state.surface == AppSurface.tv,
-      child: TvTraversalScope(
-        child: UiMetrics(
-          scale: scale,
-          autoScale: autoScale,
-          minScale: floor,
-          car: car,
-          tv: tv,
-          child: scaled,
-        ),
+      // The traversal policy itself is installed by the shell, inside the
+      // route: MaterialApp's navigator puts its own traversal group around
+      // every page, so a group at this level would never be consulted.
+      child: UiMetrics(
+        scale: scale,
+        autoScale: autoScale,
+        minScale: floor,
+        car: car,
+        tv: tv,
+        child: scaled,
       ),
     );
   }

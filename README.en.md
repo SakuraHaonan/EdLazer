@@ -48,6 +48,7 @@
 - Apple's design language throughout: semantic system colours and type, translucent navigation, grouped lists, the Apple Music red, and tints pulled from the cover art.
 - Desktop gets a sidebar and the full transport; phones get a tab bar and a mini-player — one page tree and one state, just a different posture.
 - Layout override (desktop / mobile), DPI 80–175%, and a car head-unit profile that starts at 135%.
+- Large screen mode: TVs and projectors start in it, and the D-pad moves by position across shelves, the library grid and the transport.
 - Simplified Chinese, Traditional Chinese, Japanese and English.
 
 **The fussy part**
@@ -114,7 +115,7 @@ artifacts are retained for 30 days. Extract the complete Windows ZIP before
 launching its EXE, run `chmod +x` on a downloaded AppImage, and note that macOS
 Apps are ad-hoc signed while the IPA needs your own signing.
 
-More documentation: [build details](docs/builds.md) · [system media](docs/system-media.md) · [now playing](docs/now-playing.md) · [car head unit](docs/car-head-unit.md) · [Android TV](docs/android-tv.md) · [QR sign-in](docs/login-qr.md) · [SMS sign-in](docs/login-sms.md) · [legacy UI](docs/legacy-ui.md)
+More documentation: [build details](docs/builds.md) · [system media](docs/system-media.md) · [now playing](docs/now-playing.md) · [car head unit](docs/car-head-unit.md) · [large screen mode (Android TV)](docs/android-tv.md) · [QR sign-in](docs/login-qr.md) · [SMS sign-in](docs/login-sms.md) · [legacy UI](docs/legacy-ui.md)
 
 ## References and thanks
 

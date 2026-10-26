@@ -1,8 +1,9 @@
-# Android TV
+# 大屏幕模式 (Large screen mode, Android TV)
 
-The same APK runs on phones, tablets, car head units and Android TV. On a
-television the app keeps the standard interface scale and makes every control
-reachable with a D-pad remote; everywhere else nothing changes.
+The television presentation is called **大屏幕模式** in the interface. The same
+APK runs on phones, tablets, car head units and Android TV; a Leanback or
+touch-less Android device selects 大屏幕模式 by itself, and
+`设置 → 界面 → 设备形态 → 大屏幕模式` forces it anywhere else.
 
 ## Packaging
 
@@ -25,12 +26,11 @@ TV home screen while staying installable on touch devices:
 </application>
 ```
 
-`LEANBACK_LAUNCHER` is what puts the app on the Leanback home screen;
-`@drawable/tv_banner` is the 320×180 banner the launcher shows. Both the
-launcher category and the banner are ignored on phones. Leanback and the touch
-screen are declared optional so one artifact covers every shape.
+`LEANBACK_LAUNCHER` puts the app on the Leanback home screen;
+`@drawable/tv_banner` is the 320×180 banner the launcher shows. Both are
+ignored on phones.
 
-## Detection
+## Detection and the default mode
 
 `lib/tv/tv_mode.dart` asks the platform over `dev.naominet.lazer/tv`.
 `MainActivity.isTelevision()` answers true when any of these hold:
@@ -41,84 +41,103 @@ screen are declared optional so one artifact covers every shape.
 - there is no touch screen and no fake-touch input, so the only way through
   the app is a D-pad.
 
-The last rule covers cheap set-top boxes that ship without the Leanback
-feature flag. The channel has an 800 ms timeout and every failure means "not a
-TV", so desktop, iOS and tests are unaffected.
+The channel has an 800 ms timeout and every failure means "not a TV", so
+desktop, iOS and tests are unaffected.
 
-Detection is separate from the density choice. `TvScope` publishes the input
-model (`active`), while `UiMetrics` publishes the density profile. A TV told to
-use standard density keeps its remote navigation; a touch device can force the
-television surface for testing.
+A detected television **boots into 大屏幕模式**. `AppState.bootstrap` writes
+`surface = AppSurface.tv` when no `lazer_surface` preference exists yet; an
+explicit choice (including `自动选择`) is never overwritten. `TvScope` then
+publishes the remote input model, `UiMetrics` publishes the density profile,
+and the shell draws the large-screen composition.
 
-## Television interface
+## The interface
 
-`设置 → 界面 → 设备形态` offers `自动选择 / 标准 / 车机 / 电视`. The
-television profile:
+The large-screen mode is its own composition, not the desktop shell stretched:
 
-- keeps the **standard interface scale**. Unlike a car head unit, a television
-  panel is already large and viewed at a distance; forcing a density floor
-  would make the interface unnecessarily huge. The DPI slider and the
-  automatic estimate still apply when the user wants a larger interface;
-- uses a **wider browse column** (`adaptiveContentMaxWidth`, 1560 dp instead of
-  the desktop reading measure). The home shortcuts share that width instead of
-  huddling at the left, and the library grid fits more artwork per row without
-  changing any font size;
-- resolves before the car heuristic: both are large, low-density landscape
-  panels, but only a television is driven by a remote
-  (`resolveDeviceProfile`);
-- insets the shell and the immersive player by `tvSafeInsets` — 24×16 dp —
-  because Android TV reports no safe insets yet many panels still overscan.
+- a floating **destination capsule** at the top: 现在就听 / 资料库 / 我喜欢 /
+  设置 / 正在播放 plus a magnifier, with the selected destination inverted
+  (dark-on-light, light-on-dark) and the account avatar at the left. A back
+  pill appears in front of the avatar while a detail is open;
+- **shelves** of large artwork: 为你打造 shortcuts, 精选推荐 cards whose
+  captions sit on a dark plate, 最近播放, 新发行, 排行榜, 猜你喜欢, 网易云编辑精选.
+  Four feature cards fit a 1080p panel; the fifth peeks in to advertise the
+  horizontal scroll;
+- a **library rail** (最近添加 / 播放列表 / 歌手 / 专辑 / 歌曲, then 本地音乐 and
+  我喜欢的音乐) beside a centred artwork grid;
+- a **transport shelf** under the content: cover and title (opens the player),
+  previous / play / next, the seek rail, like, queue and expand;
+- detail pages with a 256 dp hero and 64 dp track rows. Settings, local music
+  and comments reuse their existing controls at a larger reading measure.
+
+The immersive player (正在播放) is intentionally unchanged: it already owns the
+screen and its own focus model.
+
+Metrics live in `LargeScreenMetrics` and the type ramp in `LargeScreenType`
+(`lib/tv/large_screen_widgets.dart`). The deck is a 40 dp display title, a
+26 dp section heading and a 20 dp card title; the desktop ramp is 34/20/17.
 
 ## Remote navigation
 
-Flutter gives every `InkWell` and `IconButton` a focus node, but most of this
-interface is custom artwork, rows and cards drawn with `GestureDetector` — a
-remote can never reach those. `lib/tv/tv_mode.dart` adds three pieces:
+`lib/tv/tv_mode.dart` provides the input pieces:
 
 | Widget | Job |
 | --- | --- |
-| `TvScope` | Publishes whether the remote model is active. Off a TV every helper below collapses to its child. |
-| `TvTapTarget` | Adds a focus stop, `ActivateIntent` (Select/Enter) handling, a slight focus lift and the white-on-black focus ring. Used by rail rows, playlist/track cards, queue rows, transport glyphs and pane tabs. |
-| `TvFocusRegion` | A non-focusable `Focus` node per page. When a page appears or returns to the front (`focusToken`), it focuses the first actionable descendant, so the first D-pad press lands somewhere useful. It retries when a page swaps a loading notice for real controls, and it does not steal focus once the user has moved somewhere. It is not a `FocusScope`, so focus can still leave the content for the sidebar and transport bar. |
-| `TvTraversalScope` | Replaces the default traversal callback with `revealTvFocus`: the new target is focused and its ancestor viewports are asked to `showOnScreen` for 160 ms. Flutter's stock callback aligns every target to the viewport edge, which makes rows jump even when they are already visible; the TV version scrolls only when the target is actually outside. |
+| `TvScope` | Publishes whether the remote model is active. Off a TV every helper collapses to its child. |
+| `LargeScreenTapTarget` | The large-screen control: `TvTapTarget` for the remote (focus stop, `ActivateIntent`, focus ring, slight lift) plus the pointer tap target the cards do not bring themselves. |
+| `TvFocusRegion` | Per-page focus anchor: the first actionable descendant takes focus when a page appears, a section changes or the player closes. It does not steal focus once the user has moved. |
+| `TvTraversalScope` | Installs `LargeScreenTraversalPolicy`. It must sit **inside** the route: MaterialApp's navigator puts its own traversal group around every page, so a group above the MaterialApp is never consulted. The shell therefore wraps its own tree. |
 
-The ring is white with a black halo (`TvFocusOutline`): white alone disappears
-over light artwork and black alone disappears over the dark player.
+`LargeScreenTraversalPolicy` follows the geometry rather than the build order:
 
-Remote behaviour by surface:
+- left/right stay inside a shelf, up/down land on the card physically above or
+  below, and reversing direction retraces the previous path;
+- when a move has no target (a lazily built list only creates children near the
+  viewport), the nearest scroll view on the matching axis is nudged by most of
+  a viewport. The next press continues from the revealed items — "bump to
+  scroll";
+- focus is revealed with `revealTvFocus`, which scrolls only when the target is
+  actually outside its viewports.
 
-- **Seek rail** — left/right steps the playhead by 2% (`LegacyThinSeekBar`,
-  `_nudge`); the preview stays pinned for 900 ms while the engine finishes the
-  seek. Material `Slider`s (the immersive player's rail and the desktop volume
-  slider) already answer to arrow keys when focused.
-- **Volume** — Select opens the vertical volume column; up/down step it; the
-  pending value is committed when the panel closes.
-- **Queue** — Select on the queue glyph opens the floating queue card; rows and
-  the close button are focus stops.
-- **Back** — one `PopScope` in the shell consumes it in this order: overlay
-  panels (queue, volume), the player, detail pages, then the 发现 root. Only at
-  the root does it leave the app. `TvOverlayStack` exists because overlay
-  entries are siblings of the route and never receive a system pop.
-- **Settings** — each dropdown, switch, slider and swatch is a normal focus
-  stop; the D-pad opens dropdowns and moves the slider.
+Other remote behaviour:
+
+- **Select** activates the focused card, chip or glyph. **Back** closes, in
+  order: the queue/volume overlay (`TvOverlayStack`), the player, detail
+  pages, then returns a non-home destination to 现在就听; at the root it leaves
+  the app.
+- **Seek rail** — left/right step the playhead by 2% (`LegacyThinSeekBar`);
+  up/down leave the rail. The rail commits the value as it steps.
+- **Search** — the magnifier chip opens the search page. Its `SearchBar` is a
+  normal focus stop; Select enters text and raises the system IME.
+- **Queue** — Select on the transport's queue glyph opens the floating queue
+  card; its rows and close button are focus stops.
+- **Settings** — every dropdown, switch, slider and swatch remains a focus
+  stop; the D-pad opens dropdowns and moves sliders.
 
 ## Verification
 
-`test/android_tv_test.dart` covers focus + Select activation, the inert
-off-TV path, safe insets, D-pad seek stepping, late-content focus anchoring,
-minimal scroll reveal, overlay close order, and a static check that the
-Leanback category, optional touch/leanback features and the banner ship in the
-manifest. The rest of the suite runs unchanged because every TV helper is a
-no-op outside `TvScope`.
+`test/large_screen_test.dart` covers:
+
+- the rename (`大屏幕模式`), and the television default with and without a stored
+  surface choice;
+- the capsule, shelves, transport, library rail and search page rendering;
+- Select on the page's first focused card, and Up/Down crossing between content
+  and the capsule;
+- geometry-driven D-pad traversal (left/right in a row, down to the card below)
+  and the bump-to-scroll fallback past the built children;
+- reflow at 1280×720 and at a phone-width 800×600 window.
+
+`test/android_tv_test.dart` keeps the packaging checks, the focus target,
+overscan insets, seek stepping and overlay close order.
 
 ## Tuning
 
-- The television profile has no density floor of its own; adjust
-  `kCarScaleMin` only for the car profile, or use the DPI slider for a TV.
-- `tvSafeInsets` — overscan breathing room.
+- `LargeScreenMetrics.pageInset` — page gutter (42–84 dp by width).
+- `LargeScreenMetrics.featureCardWidth` / `artworkCardWidth` — shelf sizing.
+- `LargeScreenMetrics.railWidth` — library rail width.
+- `tvSafeInsets` — 24×16 dp overscan breathing room.
 - `TvFocusRegion.focusToken` — what re-anchors focus when a page changes.
-- `revealTvFocus` — the scroll-into-view duration and curve for every D-pad
-  move.
+- `LargeScreenTraversalPolicy._scrollToward` — the bump distance (62% of a
+  viewport) and duration.
 - `TvTapTarget.focusScale` / `borderRadius` — per-surface focus lift and ring
   shape.
 
@@ -127,7 +146,6 @@ no-op outside `TvScope`.
 - Text entry (search, login) uses the system IME, so a TV needs its on-screen
   keyboard. The app does not draw its own grid keyboard.
 - Remote media keys are handled by the existing `audio_service` integration,
-  not by the TV layer; play/pause/next/previous work while the screen is off,
-  exactly as on a phone.
-- The television profile is selected by the Android TV signal only. Other
-  television platforms keep the standard layout until they report one.
+  not by this layer; play/pause/next/previous work while the screen is off.
+- Detection relies on the Android TV signals above. Other television platforms
+  keep the standard layout until the profile is chosen manually.

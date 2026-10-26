@@ -11,6 +11,9 @@ import '../state/song_comments_controller.dart';
 import '../state/detail_requests.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
+import '../tv/large_screen_chrome.dart';
+import '../tv/large_screen_pages.dart';
+import '../tv/large_screen_widgets.dart';
 import '../tv/tv_mode.dart';
 import '../updates/update_checker.dart';
 import '../updates/update_dialog.dart';
@@ -122,6 +125,7 @@ class _LegacyShellState extends State<LegacyShell>
   bool? _coveredShellCompact;
   bool? _coveredShellCompactBar;
   bool? _coveredShellBackdrop;
+  bool? _coveredShellLargeScreen;
 
   AppState get state => widget.state;
 
@@ -347,6 +351,15 @@ class _LegacyShellState extends State<LegacyShell>
     if (album == null) return;
     albumDetailRequest.value = null;
     if (!mounted) return;
+    _openAlbum(album);
+  }
+
+  /// Opens [album] in the content pane.
+  ///
+  /// The playlist pipeline renders albums as well (they share a cover, title
+  /// and track list), so an album is a playlist with its own metadata rather
+  /// than a second page type.
+  void _openAlbum(Album album) {
     _closeNowPlaying();
     setState(() {
       _album = album;
@@ -541,6 +554,7 @@ class _LegacyShellState extends State<LegacyShell>
           }
           final AppleSemanticColors apple = AppleSemanticColors.of(context);
           final Size window = MediaQuery.sizeOf(context);
+          final bool largeScreen = largeScreenModeOf(context);
           final bool compact = useCompactLayout(state.uiMode, window.width);
           final bool compactBar = window.width < 1_000;
           final bool paintedBackdrop =
@@ -563,7 +577,8 @@ class _LegacyShellState extends State<LegacyShell>
               _coveredShellAccent == accent &&
               _coveredShellCompact == compact &&
               _coveredShellCompactBar == compactBar &&
-              _coveredShellBackdrop == backdrop;
+              _coveredShellBackdrop == backdrop &&
+              _coveredShellLargeScreen == largeScreen;
           final Widget? cachedShell = _coveredShell;
           // Reuse the cached tree while the player covers it. Opening the
           // player is the expensive frame: rebuilding a page the player is
@@ -618,7 +633,9 @@ class _LegacyShellState extends State<LegacyShell>
                         // panel's visible box even though Android reports no
                         // safe insets.
                         minimum: tvSafeInsets(context),
-                        child: compact
+                        child: largeScreen
+                            ? _largeScreenLayout(apple)
+                            : compact
                             ? _compactLayout(apple, compactBar: compactBar)
                             : _desktopLayout(apple, compactBar: compactBar),
                       ),
@@ -633,51 +650,59 @@ class _LegacyShellState extends State<LegacyShell>
             _coveredShellCompact = compact;
             _coveredShellCompactBar = compactBar;
             _coveredShellBackdrop = backdrop;
+            _coveredShellLargeScreen = largeScreen;
           }
-          return PopScope<void>(
-            // Back is handled in-app while a page or the player is open; at
-            // the browse root it keeps the platform's default (leave the app).
-            canPop:
-                !TvOverlayStack.instance.hasOpen &&
-                !_nowPlayingOpen &&
-                !_hasOpenDetail &&
-                _section == _LegacySection.home,
-            onPopInvokedWithResult: (bool didPop, void _) {
-              if (!didPop) _handleBack();
-            },
-            child: Semantics(
-              key: const ValueKey<String>('app-semantics-root'),
-              container: true,
-              label: 'Lazer',
-              child: Stack(
-                fit: StackFit.expand,
-                children: <Widget>[
-                  ExcludeSemantics(
-                    excluding: _nowPlayingOpen,
-                    child: ExcludeFocus(
+          // The traversal policy belongs here, inside the route: MaterialApp's
+          // navigator installs its own FocusTraversalGroup around every page,
+          // so a group above the MaterialApp would never be consulted. Under
+          // the shell it covers the browse tree and the player overlay, which
+          // is exactly the region a remote has to cross.
+          return TvTraversalScope(
+            child: PopScope<void>(
+              // Back is handled in-app while a page or the player is open; at
+              // the browse root it keeps the platform's default (leave the app).
+              canPop:
+                  !TvOverlayStack.instance.hasOpen &&
+                  !_nowPlayingOpen &&
+                  !_hasOpenDetail &&
+                  _section == _LegacySection.home,
+              onPopInvokedWithResult: (bool didPop, void _) {
+                if (!didPop) _handleBack();
+              },
+              child: Semantics(
+                key: const ValueKey<String>('app-semantics-root'),
+                container: true,
+                label: 'Lazer',
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    ExcludeSemantics(
                       excluding: _nowPlayingOpen,
-                      child: TickerMode(
-                        enabled: !_nowPlayingOpen,
-                        child: RepaintBoundary(child: shell),
-                      ),
-                    ),
-                  ),
-                  if (_nowPlayingOpen)
-                    Positioned.fill(
-                      child: SlideTransition(
-                        position: _nowPlayingSlide,
-                        // The settle flag only shapes the wrappers below, and
-                        // they take the page as a prebuilt child: flipping it
-                        // rebuilds a handful of widgets instead of the whole
-                        // player on the frame the entrance lands.
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: _playerSettled,
-                          builder: _playerOverlay,
-                          child: _playerPageWidget(),
+                      child: ExcludeFocus(
+                        excluding: _nowPlayingOpen,
+                        child: TickerMode(
+                          enabled: !_nowPlayingOpen,
+                          child: RepaintBoundary(child: shell),
                         ),
                       ),
                     ),
-                ],
+                    if (_nowPlayingOpen)
+                      Positioned.fill(
+                        child: SlideTransition(
+                          position: _nowPlayingSlide,
+                          // The settle flag only shapes the wrappers below, and
+                          // they take the page as a prebuilt child: flipping it
+                          // rebuilds a handful of widgets instead of the whole
+                          // player on the frame the entrance lands.
+                          child: ValueListenableBuilder<bool>(
+                            valueListenable: _playerSettled,
+                            builder: _playerOverlay,
+                            child: _playerPageWidget(),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           );
@@ -717,6 +742,127 @@ class _LegacyShellState extends State<LegacyShell>
         ),
       ],
     );
+  }
+
+  // -- large screen (ten-foot) ---------------------------------------------
+
+  /// The 大屏幕模式 composition: destinations at the top, shelves in the middle,
+  /// the transport at the bottom. The desktop rail is not drawn here at all —
+  /// a remote cannot use a 236 dp source list, and the navigation capsule is
+  /// what Apple Music itself uses on a television.
+  Widget _largeScreenLayout(AppleSemanticColors apple) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // The shell already sits inside the overscan safe area, so the width
+        // the pages may use is the width they were handed, not the panel's.
+        // Without this the four-across shelf is measured from the panel and
+        // the fifth card sneaks in past the overscan gutter.
+        final MediaQueryData media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(size: constraints.biggest),
+          child: Column(
+            children: <Widget>[
+              LargeScreenNavBar(
+                selected: _largeScreenTab,
+                searchActive:
+                    _section == _LegacySection.search && !_hasOpenDetail,
+                canGoBack: _hasOpenDetail,
+                onBack: _backToRoot,
+                onTab: (LargeScreenTab tab) => _select(switch (tab) {
+                  LargeScreenTab.home => _LegacySection.home,
+                  LargeScreenTab.library => _LegacySection.library,
+                  LargeScreenTab.likes => _LegacySection.likes,
+                  LargeScreenTab.settings => _LegacySection.settings,
+                }),
+                onSearch: () => _select(_LegacySection.search),
+                onNowPlaying: _openNowPlaying,
+                account: _accountButton(apple, radius: 22),
+                playing: state.playing,
+              ),
+              Expanded(child: RepaintBoundary(child: _content())),
+              RepaintBoundary(
+                child: LargeScreenTransport(
+                  state: state,
+                  onOpen: _openNowPlaying,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  LargeScreenTab get _largeScreenTab => switch (_section) {
+    _LegacySection.home || _LegacySection.search => LargeScreenTab.home,
+    _LegacySection.library => LargeScreenTab.library,
+    _LegacySection.likes => LargeScreenTab.likes,
+    _LegacySection.settings => LargeScreenTab.settings,
+  };
+
+  /// Builds the current large-screen page.
+  ///
+  /// The page selection mirrors [_contentPage], but the pages themselves are
+  /// the shelf-and-rail composition instead of the desktop lists. Details that
+  /// are not worth a second implementation on a television (settings, local
+  /// music, comments) are reused at a larger reading measure.
+  Widget _largeScreenPage() {
+    final LargeScreenActions actions = LargeScreenActions(
+      onOpenPlaylist: _openPlaylist,
+      onOpenAlbum: _openAlbum,
+      onOpenArtist: (ArtistRef artist) => artistDetailRequest.value = artist,
+      onOpenChart: _openChart,
+      onOpenLikes: () => _select(_LegacySection.likes),
+      onOpenLocalMusic: _openLocalMusic,
+      onPlayTracks: (List<Track> tracks, int index) =>
+          state.playQueue(tracks, startIndex: index),
+    );
+    if (_comments) {
+      final Track? track = state.current;
+      final SongCommentsController? controller = _commentsController;
+      if (track == null || controller == null) {
+        return const LargeScreenNotice(message: '还没有播放中的歌曲。');
+      }
+      return LargeScreenCommentsPage(
+        state: state,
+        track: track,
+        controller: controller,
+      );
+    }
+    if (_localMusic) return LargeScreenLocalMusicPage(state: state);
+    final MusicChart? chart = _chart;
+    if (chart != null) return LargeScreenChartPage(state: state, chart: chart);
+    final ArtistRef? artist = _artist;
+    if (artist != null) {
+      return LargeScreenArtistPage(state: state, artist: artist);
+    }
+    final Playlist? playlist = _playlist;
+    if (playlist != null) {
+      return LargeScreenCollectionPage(
+        state: state,
+        playlist: playlist,
+        album: _album,
+      );
+    }
+    return switch (_section) {
+      _LegacySection.home => LargeScreenHomePage(
+        state: state,
+        actions: actions,
+      ),
+      _LegacySection.search => LargeScreenSearchPage(
+        state: state,
+        actions: actions,
+      ),
+      _LegacySection.library => LargeScreenLibraryPage(
+        state: state,
+        actions: actions,
+      ),
+      _LegacySection.likes => LargeScreenLikesPage(state: state),
+      _LegacySection.settings => LargeScreenSettingsPage(
+        state: state,
+        onOpenLocalMusic: _openLocalMusic,
+      ),
+    };
   }
 
   Widget _compactLayout(AppleSemanticColors apple, {required bool compactBar}) {
@@ -1277,6 +1423,9 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _contentPage() {
+    // A television gets the ten-foot composition: same state, same catalogue,
+    // same playback — a different page tree.
+    if (largeScreenModeOf(context)) return _largeScreenPage();
     if (_comments) {
       final Track? track = state.current;
       final SongCommentsController? controller = _commentsController;

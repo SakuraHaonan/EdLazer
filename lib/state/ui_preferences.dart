@@ -211,14 +211,14 @@ extension AppSurfaceLabels on AppSurface {
     AppSurface.auto => '自动选择',
     AppSurface.standard => '标准',
     AppSurface.car => '车机',
-    AppSurface.tv => '电视',
+    AppSurface.tv => '大屏幕模式',
   };
 
   String get detail => switch (this) {
-    AppSurface.auto => '在 Android 车机或电视上自动放大；其余设备保持标准密度',
+    AppSurface.auto => '在 Android 车机或电视上自动切换；电视默认进入大屏幕模式',
     AppSurface.standard => '按平台上报的密度显示，桌面与手机默认如此',
     AppSurface.car => '放大界面与控件，适合远距离、行进中的触控',
-    AppSurface.tv => '保持标准缩放，并用遥控器方向键浏览',
+    AppSurface.tv => '十英尺界面：方向键浏览，封面与文字为沙发距离重排',
   };
 
   /// Parses a persisted [name]; unknown or missing values fall back to
@@ -316,5 +316,4 @@ DeviceProfile resolveDeviceProfile(
 /// Only the car profile raises the floor. A television keeps the standard
 /// scale: its panel is already large, and the user can still enlarge it with
 /// the DPI slider.
-double dpiScaleFloor({required bool car}) =>
-    car ? kCarScaleMin : kDpiScaleMin;
+double dpiScaleFloor({required bool car}) => car ? kCarScaleMin : kDpiScaleMin;

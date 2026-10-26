@@ -467,11 +467,11 @@ void main() {
     expect(tester.widget<Slider>(dpiSlider).value, kCarScaleMin);
     expect(find.text('135%'), findsWidgets);
 
-    // Television keeps the standard density: no car-style floor is applied,
+    // 大屏幕模式 keeps the standard density: no car-style floor is applied,
     // while the remote input model is layered on top.
     await tester.tap(surfaceDropdown);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('电视').last);
+    await tester.tap(find.text('大屏幕模式').last);
     await tester.pumpAndSettle();
     expect(state.surface, AppSurface.tv);
     expect(UiMetrics.tvOf(tester.element(surfaceDropdown)), isTrue);

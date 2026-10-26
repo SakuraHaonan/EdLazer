@@ -767,7 +767,14 @@ class AppState extends ChangeNotifier {
         1.0,
       );
       uiMode = AppUiModeLabels.parse(prefs.getString('lazer_ui_mode'));
-      surface = AppSurfaceLabels.parse(prefs.getString('lazer_surface'));
+      final String? storedSurface = prefs.getString('lazer_surface');
+      surface = AppSurfaceLabels.parse(storedSurface);
+      if (deviceIsTelevision && storedSurface == null) {
+        // A television boots straight into 大屏幕模式: its panel, its remote and
+        // its viewing distance are the ones that mode is designed for. An
+        // explicit choice (including 自动选择) is never overwritten.
+        surface = AppSurface.tv;
+      }
       dpiScale = normalizeDpiScale(
         prefs.getDouble('lazer_dpi_scale') ?? kDpiScaleDefault,
       );
