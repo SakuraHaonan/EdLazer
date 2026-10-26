@@ -589,37 +589,44 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                       });
                     }
                     if (!compact) {
-                      return SafeArea(
-                        child: DesktopNowPlaying(
-                          key: const ValueKey('desktop-now-playing'),
-                          state: widget.state,
-                          track: track,
-                          artwork: _cover(track),
-                          lyrics: LyricViewport(
-                            state: widget.state,
-                            backdropKey: _backdropKey,
-                            onSelectionChanged: _selectionChanged,
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: <Widget>[
+                          SafeArea(
+                            child: DesktopNowPlaying(
+                              key: const ValueKey('desktop-now-playing'),
+                              state: widget.state,
+                              track: track,
+                              artwork: _cover(track),
+                              lyrics: LyricViewport(
+                                state: widget.state,
+                                backdropKey: _backdropKey,
+                                onSelectionChanged: _selectionChanged,
+                              ),
+                              comments: SongCommentsView(
+                                state: widget.state,
+                                track: track,
+                                controller: _commentsController,
+                              ),
+                              queue: PlaybackQueueView(
+                                state: widget.state,
+                                showHeader: false,
+                              ),
+                              pane: _desktopPane,
+                              onPaneChanged: _selectDesktopPane,
+                              onBack: _closePage,
+                              onSaveArtwork: () =>
+                                  unawaited(_saveArtwork(track)),
+                              onFullscreen: () =>
+                                  unawaited(_toggleFullscreen()),
+                              controlsVisible: _controlsVisible,
+                              onActivity: _controlsActivity,
+                            ),
                           ),
-                          comments: SongCommentsView(
-                            state: widget.state,
-                            track: track,
-                            controller: _commentsController,
-                          ),
-                          queue: PlaybackQueueView(
-                            state: widget.state,
-                            showHeader: false,
-                          ),
-                          pane: _desktopPane,
-                          onPaneChanged: _selectDesktopPane,
-                          onBack: _closePage,
-                          onSaveArtwork: () => unawaited(_saveArtwork(track)),
-                          onFullscreen: () => unawaited(_toggleFullscreen()),
-                          controlsVisible: _controlsVisible,
-                          onActivity: _controlsActivity,
-                        ),
+                          ?_pullDownLayer(box),
+                        ],
                       );
                     }
-                    final PlayerPullDown? pullDown = widget.pullDown;
                     return Listener(
                       behavior: HitTestBehavior.translucent,
                       onPointerDown: (_) => _onTouchDown(),
@@ -643,25 +650,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                               ),
                             ),
                           ),
-                          // A downward drag from anywhere in the upper half
-                          // pulls the player away; the strip sits above the
-                          // content so it answers the gesture arena first and
-                          // an upward drag still scrolls the lyrics.
-                          if (pullDown != null)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              top: 0,
-                              height: box.maxHeight * .5,
-                              child: PlayerPullDownRegion(
-                                pullDown: pullDown,
-                                travel: box.maxHeight,
-                                enabled:
-                                    !_selectionOpen &&
-                                    !_commentsOpen &&
-                                    !_queueOpen,
-                              ),
-                            ),
+                          ?_pullDownLayer(box),
                         ],
                       ),
                     );
@@ -673,6 +662,28 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       ),
     ),
   );
+
+  /// A downward drag from anywhere in the upper half pulls the player away.
+  ///
+  /// Desktop and phone share it: the strip sits above the page content, so its
+  /// recognizer answers the gesture arena before the content's own drag
+  /// handlers and an upward drag is still left to them, while taps fall
+  /// through to the controls behind it.
+  Widget? _pullDownLayer(BoxConstraints box) {
+    final PlayerPullDown? pullDown = widget.pullDown;
+    if (pullDown == null) return null;
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 0,
+      height: box.maxHeight * .5,
+      child: PlayerPullDownRegion(
+        pullDown: pullDown,
+        travel: box.maxHeight,
+        enabled: !_selectionOpen && !_commentsOpen && !_queueOpen,
+      ),
+    );
+  }
 
   Widget _readingPane(Track track) => RepaintBoundary(
     child: AnimatedSwitcher(

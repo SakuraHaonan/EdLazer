@@ -84,8 +84,8 @@ double _slide(WidgetTester tester) => tester
     .value
     .dy;
 
-Future<void> _openPlayer(WidgetTester tester) async {
-  tester.view.physicalSize = _phone;
+Future<void> _openPlayer(WidgetTester tester, {Size size = _phone}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
@@ -254,29 +254,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the desktop presentation never arms the gesture', (
+  testWidgets('the desktop player pulls down from the upper half too', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1440, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+    await _openPlayer(tester, size: const Size(1280, 800));
+    expect(_slide(tester), 0);
 
-    final AppState state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    await state.setLegacyBackground(LegacyBackgroundMode.off);
-    state.playQueue(const <Track>[_track]);
-    await tester.pumpWidget(_app(LegacyShell(state: state)));
-    await tester.pump(const Duration(milliseconds: 120));
-    await tester.tap(
-      find.descendant(
-        of: find.byType(LegacyPlayerBar),
-        matching: find.text(_track.title),
-      ),
+    // 800 / 2 = 400: the strip spans the header row, the artwork column and
+    // the top of the reading pane.
+    await _slowDrag(
+      tester,
+      const Offset(640, 120),
+      const Offset(0, 480),
+      steps: 16,
     );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 360));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(NowPlayingPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a desktop drag below the upper half leaves the player', (
+    tester,
+  ) async {
+    await _openPlayer(tester, size: const Size(1280, 800));
+
+    // The transport dock lives down here and keeps its own gestures.
+    await _slowDrag(
+      tester,
+      const Offset(640, 700),
+      const Offset(0, 240),
+      steps: 12,
+    );
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(NowPlayingPage), findsOneWidget);
-    expect(find.byType(PlayerPullDownRegion), findsNothing);
+    expect(_slide(tester), 0);
     expect(tester.takeException(), isNull);
   });
 }

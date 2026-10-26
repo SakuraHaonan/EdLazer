@@ -169,7 +169,7 @@ same Material open-upwards slide without a full-screen animated clip.
 
 ### Pulling the player down
 
-On phones the player also leaves the way a sheet does:
+The player also leaves the way a sheet does, on phones and on desktop alike:
 
 - a downward drag that starts anywhere in the upper half of the window pulls
   it away: the header, the artwork and the lyrics all arm the gesture;
@@ -177,6 +177,9 @@ On phones the player also leaves the way a sheet does:
   and the browse tree is revealed underneath it;
 - an upward drag never claims the gesture, so the lyric canvas keeps its own
   scrolling inside the same region, and a tap still reaches the header;
+- the strip is armed on the desktop presentation as well, where a mouse drag
+  closes the player the same way; scrolling a list with a wheel or a trackpad
+  arrives as pointer signals rather than drags, so it is untouched;
 - on release the player closes once it has travelled 22% of the height or was
   flung downward faster than 900 px/s; otherwise it springs back to the open
   position;
