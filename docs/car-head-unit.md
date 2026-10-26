@@ -19,6 +19,14 @@ is laid out in a workspace divided by the scale and painted through a matching
 transform (`lib/widgets/ui_scaling.dart`), so rows, icons, hit targets and the
 custom window title bar grow together and text stays crisp.
 
+Below 100% the workspace is *larger* than the window, so the transform sits
+inside an `OverflowBox`. The box keeps the window as the widget's own size —
+that is the rect which owns the window's hit area — while the child is laid out
+at the workspace size and the transform paints it back over the whole window.
+Without it the child was clamped to the window's size, laid out at window
+density, painted at the smaller scale, and covered only the top-left corner of
+the window with dead space (and dead hit targets) around it.
+
 The floor applies to both scale modes: whether the automatic estimate or the
 slider is in charge, a head unit never drops back to desktop density.
 

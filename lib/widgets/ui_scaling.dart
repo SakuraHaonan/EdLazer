@@ -225,16 +225,24 @@ class _ScaledInterface extends StatelessWidget {
         );
         return MediaQuery(
           data: media.copyWith(size: workspace),
-          child: Align(
+          // Below 1x the workspace is *larger* than the window: loose window
+          // constraints would clamp it, the interface would keep the window's
+          // layout size, and the scaled copy would cover only a corner of the
+          // window. The overflow box keeps the outer box at the window size
+          // while handing the child the workspace size; the transform then
+          // paints that workspace back over the whole window. Overflow box
+          // outside also matters for input: it is the box that owns the window's
+          // hit area, and the transform maps those points onto the workspace.
+          child: OverflowBox(
             alignment: AlignmentDirectional.topStart,
+            minWidth: workspace.width,
+            maxWidth: workspace.width,
+            minHeight: workspace.height,
+            maxHeight: workspace.height,
             child: Transform.scale(
               scale: scale,
               alignment: AlignmentDirectional.topStart,
-              child: SizedBox(
-                width: workspace.width,
-                height: workspace.height,
-                child: child,
-              ),
+              child: child,
             ),
           ),
         );

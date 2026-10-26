@@ -7,6 +7,8 @@ import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/legacy/legacy_pages.dart';
+import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
+import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/ui_preferences.dart';
@@ -120,42 +122,49 @@ void main() {
       expect(profileDpiScale(1, floor: kDpiScaleMin), 1);
     });
 
-    test('a television overrides the car heuristic and keeps the standard floor', () {
-      // The television profile is explicit or detected from Leanback.
-      expect(tvSurfaceActive(AppSurface.tv, detected: false), isTrue);
-      expect(tvSurfaceActive(AppSurface.auto, detected: true), isTrue);
-      expect(tvSurfaceActive(AppSurface.auto, detected: false), isFalse);
-      expect(tvSurfaceActive(AppSurface.car, detected: true), isFalse);
-      expect(tvSurfaceActive(AppSurface.standard, detected: true), isFalse);
-      expect(AppSurfaceLabels.parse('tv'), AppSurface.tv);
-      expect(AppSurfaceLabels.parse('car'), AppSurface.car);
+    test(
+      'a television overrides the car heuristic and keeps the standard floor',
+      () {
+        // The television profile is explicit or detected from Leanback.
+        expect(tvSurfaceActive(AppSurface.tv, detected: false), isTrue);
+        expect(tvSurfaceActive(AppSurface.auto, detected: true), isTrue);
+        expect(tvSurfaceActive(AppSurface.auto, detected: false), isFalse);
+        expect(tvSurfaceActive(AppSurface.car, detected: true), isFalse);
+        expect(tvSurfaceActive(AppSurface.standard, detected: true), isFalse);
+        expect(AppSurfaceLabels.parse('tv'), AppSurface.tv);
+        expect(AppSurfaceLabels.parse('car'), AppSurface.car);
 
-      // Density and input are separate: 自动 picks TV before the car guess.
-      expect(
-        resolveDeviceProfile(AppSurface.auto, television: true, car: true),
-        DeviceProfile.tv,
-      );
-      expect(
-        resolveDeviceProfile(AppSurface.auto, television: false, car: true),
-        DeviceProfile.car,
-      );
-      expect(
-        resolveDeviceProfile(AppSurface.auto, television: false, car: false),
-        DeviceProfile.standard,
-      );
-      expect(
-        resolveDeviceProfile(AppSurface.car, television: true, car: true),
-        DeviceProfile.car,
-        reason: 'an explicit choice still wins',
-      );
-      expect(
-        resolveDeviceProfile(AppSurface.standard, television: true, car: false),
-        DeviceProfile.standard,
-      );
-      // Density keeps the standard floor; only the input model is TV-specific.
-      expect(dpiScaleFloor(car: false), kDpiScaleMin);
-      expect(profileDpiScale(1, floor: kDpiScaleMin), 1);
-    });
+        // Density and input are separate: 自动 picks TV before the car guess.
+        expect(
+          resolveDeviceProfile(AppSurface.auto, television: true, car: true),
+          DeviceProfile.tv,
+        );
+        expect(
+          resolveDeviceProfile(AppSurface.auto, television: false, car: true),
+          DeviceProfile.car,
+        );
+        expect(
+          resolveDeviceProfile(AppSurface.auto, television: false, car: false),
+          DeviceProfile.standard,
+        );
+        expect(
+          resolveDeviceProfile(AppSurface.car, television: true, car: true),
+          DeviceProfile.car,
+          reason: 'an explicit choice still wins',
+        );
+        expect(
+          resolveDeviceProfile(
+            AppSurface.standard,
+            television: true,
+            car: false,
+          ),
+          DeviceProfile.standard,
+        );
+        // Density keeps the standard floor; only the input model is TV-specific.
+        expect(dpiScaleFloor(car: false), kDpiScaleMin);
+        expect(profileDpiScale(1, floor: kDpiScaleMin), 1);
+      },
+    );
 
     test('layout and dpi choices persist and reset together', () async {
       final state = AppState(catalog: _Catalog());
@@ -230,6 +239,99 @@ void main() {
       find.byType(Transform).first,
     );
     expect(transform.transform.getMaxScaleOnAxis(), 1.25);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a scale below 1x still covers the whole window', (tester) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog())
+      ..surface = AppSurface.standard
+      ..autoDpiScale = false
+      ..dpiScale = .8;
+    addTearDown(state.dispose);
+
+    Size? laidOut;
+    bool tappedCorner = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(),
+        home: UiScaling(
+          state: state,
+          child: Scaffold(
+            body: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                laidOut = constraints.biggest;
+                return Stack(
+                  children: <Widget>[
+                    const Positioned.fill(
+                      child: SizedBox.expand(
+                        key: ValueKey<String>('scaled-page'),
+                      ),
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      width: 200,
+                      height: 80,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => tappedCorner = true,
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // The workspace is the window divided by the scale: below 1x it is larger.
+    expect(laidOut, const Size(1600, 900));
+    // Painted through the transform, it lands exactly on the window instead of
+    // a corner of it.
+    final Rect painted = tester.getRect(
+      find.byKey(const ValueKey<String>('scaled-page')),
+    );
+    expect(painted.left, closeTo(0, .01));
+    expect(painted.top, closeTo(0, .01));
+    expect(painted.width, closeTo(1280, .01));
+    expect(painted.height, closeTo(720, .01));
+    // And the bottom-right corner of the window is still a live hit target.
+    await tester.tapAt(const Offset(1276, 716));
+    expect(tappedCorner, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a sub-1x scale fills the shell window', (tester) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog())
+      ..autoDpiScale = false
+      ..dpiScale = .8;
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(),
+        builder: (BuildContext context, Widget? child) =>
+            UiScaling(state: state, child: child!),
+        home: LegacyShell(state: state),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // The bar sits on the window's bottom edge, not on the edge of an
+    // 80%-sized copy floating in the corner.
+    final Rect bar = tester.getRect(find.byType(LegacyPlayerBar));
+    expect(bar.left, closeTo(0, .5));
+    expect(bar.width, closeTo(1280, .5));
+    expect(bar.bottom, closeTo(720, .5));
     expect(tester.takeException(), isNull);
   });
 
