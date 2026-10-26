@@ -102,7 +102,14 @@ class LocalLibrary extends ChangeNotifier {
   Future<Directory?>? _supportFuture;
   bool _loaded = false;
   bool _verifying = false;
+  bool _disposed = false;
   Future<void> _writeChain = Future<void>.value();
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   List<LocalTrack> get tracks => List<LocalTrack>.unmodifiable(_tracks);
   List<String> get scanRoots => List<String>.unmodifiable(_scanRoots);
@@ -159,6 +166,14 @@ class LocalLibrary extends ChangeNotifier {
   Future<void> refreshMissing() async {
     if (_verifying || _tracks.isEmpty) return;
     _verifying = true;
+    // Opening the local music page starts this from `initState`, i.e. while the
+    // framework is building. Reporting there marks every listener dirty in the
+    // middle of that build, and a listener sitting in the subtree that is being
+    // swapped out - the library card's `AnimatedBuilder` - is outside the build
+    // scope, so Flutter throws "setState() or markNeedsBuild() called during
+    // build". Hand the report to the next turn instead.
+    await Future<void>.microtask(() {});
+    if (_disposed) return;
     notifyListeners();
     bool changed = false;
     try {
@@ -173,7 +188,7 @@ class LocalLibrary extends ChangeNotifier {
       }
     } finally {
       _verifying = false;
-      if (changed) notifyListeners();
+      if (changed && !_disposed) notifyListeners();
     }
   }
 

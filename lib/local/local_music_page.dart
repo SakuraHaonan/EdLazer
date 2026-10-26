@@ -203,7 +203,12 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
   void initState() {
     super.initState();
     // Files move while the app runs; re-check the index when the page opens.
-    unawaited(state.localLibrary.refreshMissing());
+    // After the frame, not during it: the check reports through the library,
+    // and a report raised while this page mounts would mark the page it is
+    // replacing as needing to build mid-build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(state.localLibrary.refreshMissing());
+    });
   }
 
   Future<void> _import() async {
