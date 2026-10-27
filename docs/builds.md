@@ -37,8 +37,8 @@ back to the checked-in values in `lib/diagnostics/build_info.dart`.
 ## Publishing an update
 
 1. Set `version:` in `pubspec.yaml` to the tag without its `v` prefix and bump
-   the build number (for example `2.0.0-beta.2+2`).
-2. Commit, then push an annotated tag with the same version (`v2.0.0-beta.2`).
+   the build number (for example `2.0.0-beta.3+3`).
+2. Commit, then push an annotated tag with the same version (`v2.0.0-beta.3`).
 3. The build workflow runs every platform job. Only when all of them pass does
    the release job attach the artifacts; a tag containing `-` becomes a
    pre-release.
