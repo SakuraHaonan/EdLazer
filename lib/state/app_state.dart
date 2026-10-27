@@ -23,6 +23,7 @@ import '../gateway/transport.dart';
 import '../lyrics/imported_lyrics_store.dart';
 import '../updates/release_version.dart';
 import '../updates/update_checker.dart';
+import 'build_safe_notifier.dart';
 import 'listen_together.dart';
 import 'ui_preferences.dart';
 
@@ -116,7 +117,7 @@ class AuthOutcome {
 /// Single source of truth: session (real gateway) + playback engine.
 ///
 /// Playback uses a real [AudioEngine] and stream URL from the gateway.
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with BuildSafeNotifier {
   AppState({
     Catalog? catalog,
     LocalLibrary? localLibrary,
@@ -2394,7 +2395,7 @@ class _PlayReport {
 /// Tick-only heartbeat lane. `notifyListeners()` is @protected, so this thin
 /// subclass exposes [pulse] for the 100 ms position updates that must not
 /// rebuild whole screens (see AppState's transport note).
-class _TickNotifier extends ChangeNotifier {
+class _TickNotifier extends ChangeNotifier with BuildSafeNotifier {
   void pulse() => notifyListeners();
 }
 

@@ -526,12 +526,6 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                 dimension: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-            AccessibleIconButton(
-              tooltip: '一起听',
-              onPressed: () =>
-                  unawaited(showListenTogetherDialog(context, widget.state)),
-              icon: const Icon(Icons.group_rounded),
-            ),
             if (compact)
               AccessibleIconButton(
                 tooltip: '歌词',

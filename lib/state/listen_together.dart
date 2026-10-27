@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'app_state.dart';
+import 'build_safe_notifier.dart';
 
 /// A participant in a listen-together room.
 class ListenTogetherMember {
@@ -23,7 +24,7 @@ class ListenTogetherMember {
 /// the client keeps it alive with a heartbeat that carries the current song,
 /// play status and progress. Creating a room and joining by invite are enough
 /// for the shared session; the playback itself stays on this device.
-class ListenTogetherController extends ChangeNotifier {
+class ListenTogetherController extends ChangeNotifier with BuildSafeNotifier {
   ListenTogetherController({required this.state}) {
     state.addListener(_onPlaybackState);
     state.ticks.addListener(_onPlaybackTick);

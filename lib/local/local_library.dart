@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../data/audio_quality.dart';
 import '../data/models.dart';
+import '../state/build_safe_notifier.dart';
 
 /// Where a file in the local library came from.
 enum LocalTrackSource { download, scan }
@@ -84,12 +85,13 @@ class LocalTrack {
 /// The manifest lives in the application support directory. Downloads are
 /// deleted with their file; scanned/imported files are only removed from the
 /// index so the user's own copy is never touched by a library action.
-class LocalLibrary extends ChangeNotifier {
+class LocalLibrary extends ChangeNotifier with BuildSafeNotifier {
   LocalLibrary({
     Future<Directory> Function()? supportDirectory,
     Future<Directory> Function()? documentsDirectory,
   }) : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
-       _documentsDirectory = documentsDirectory ?? getApplicationDocumentsDirectory;
+       _documentsDirectory =
+           documentsDirectory ?? getApplicationDocumentsDirectory;
 
   static const String _documentsPrefix = 'documents:';
   static const String _manifestName = 'local_library.json';
@@ -135,7 +137,8 @@ class LocalLibrary extends ChangeNotifier {
       final Object? decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map<String, dynamic>) return;
       await _resolveDocumentsPath();
-      for (final Object? value in decoded['tracks'] as List<Object?>? ?? const []) {
+      for (final Object? value
+          in decoded['tracks'] as List<Object?>? ?? const []) {
         if (value is! Map<String, dynamic>) continue;
         final LocalTrack stored = LocalTrack.fromJson(value);
         final LocalTrack entry = LocalTrack(
@@ -150,8 +153,11 @@ class LocalLibrary extends ChangeNotifier {
         if (entry.path.isEmpty) continue;
         _tracks.add(entry);
       }
-      for (final Object? value in decoded['scanRoots'] as List<Object?>? ?? const []) {
-        if (value is String && value.isNotEmpty && !_scanRoots.contains(value)) {
+      for (final Object? value
+          in decoded['scanRoots'] as List<Object?>? ?? const []) {
+        if (value is String &&
+            value.isNotEmpty &&
+            !_scanRoots.contains(value)) {
           _scanRoots.add(value);
         }
       }
@@ -373,10 +379,7 @@ class LocalLibrary extends ChangeNotifier {
       'version': 1,
       'tracks': <Map<String, dynamic>>[
         for (final LocalTrack entry in _tracks)
-          <String, dynamic>{
-            ...entry.toJson(),
-            'path': _encodePath(entry.path),
-          },
+          <String, dynamic>{...entry.toJson(), 'path': _encodePath(entry.path)},
       ],
       'scanRoots': _scanRoots,
     });

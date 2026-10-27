@@ -9,12 +9,21 @@ import '../data/audio_quality.dart';
 import '../data/catalog.dart';
 import '../data/models.dart';
 import '../local/local_library.dart';
+import '../state/build_safe_notifier.dart';
 
 // The download sheets format sizes with the same helper the local library
 // uses; re-exporting keeps their existing imports working.
 export '../utils/byte_format.dart' show formatBytes;
 
-enum DownloadStatus { queued, resolving, downloading, completed, existing, failed, canceled }
+enum DownloadStatus {
+  queued,
+  resolving,
+  downloading,
+  completed,
+  existing,
+  failed,
+  canceled,
+}
 
 /// One song in the download queue. The file name is decided once the rendition
 /// is resolved because the extension follows the format the service returns.
@@ -51,8 +60,7 @@ class DownloadTask {
   bool get isDone =>
       status == DownloadStatus.completed || status == DownloadStatus.existing;
 
-  double? get progress =>
-      total > 0 ? (received / total).clamp(0.0, 1.0) : null;
+  double? get progress => total > 0 ? (received / total).clamp(0.0, 1.0) : null;
 
   String get title => track.title;
 }
@@ -101,7 +109,7 @@ class _DownloadCanceled implements Exception {
 
 /// Downloads resolved renditions into a user-chosen directory and records
 /// completed files in [LocalLibrary].
-class DownloadManager extends ChangeNotifier {
+class DownloadManager extends ChangeNotifier with BuildSafeNotifier {
   DownloadManager({
     Catalog? catalog,
     this.library,
@@ -273,10 +281,7 @@ class DownloadManager extends ChangeNotifier {
       final HttpClientRequest request = await client
           .getUrl(Uri.parse(source.url))
           .timeout(const Duration(seconds: 20));
-      request.headers.set(
-        HttpHeaders.refererHeader,
-        'https://music.163.com/',
-      );
+      request.headers.set(HttpHeaders.refererHeader, 'https://music.163.com/');
       final HttpClientResponse response = await request.close().timeout(
         const Duration(seconds: 20),
       );

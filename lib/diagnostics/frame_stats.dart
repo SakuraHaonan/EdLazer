@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../l10n/app_localizations.dart';
+import '../state/build_safe_notifier.dart';
 import '../theme/tokens.dart';
 
 /// Rolling frame-time statistics from the engine's own timings callback.
@@ -14,7 +15,7 @@ import '../theme/tokens.dart';
 /// and rasterised, including dropped frames, rather than an animation's
 /// nominal duration. The overlay is opt-in because it costs one small card
 /// rebuild four times a second.
-class FrameStats extends ChangeNotifier {
+class FrameStats extends ChangeNotifier with BuildSafeNotifier {
   FrameStats._();
 
   static final FrameStats instance = FrameStats._();

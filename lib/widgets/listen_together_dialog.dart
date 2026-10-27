@@ -24,6 +24,8 @@ class _ListenTogetherDialog extends StatefulWidget {
 }
 
 class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
+  static const double _radius = 24;
+
   final TextEditingController _invite = TextEditingController();
 
   @override
@@ -45,6 +47,12 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
   Widget build(BuildContext context) {
     final ListenTogetherController room = widget.state.listenTogether;
     return Dialog(
+      elevation: 28,
+      shadowColor: Colors.black.withValues(alpha: .55),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_radius),
+      ),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
@@ -211,7 +219,9 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
           decoration: InputDecoration(
             labelText: context.tr('邀请码或邀请链接'),
             hintText: context.tr('例如 123456|7890'),
-            border: const OutlineInputBorder(),
+            border: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(_radius)),
+            ),
             isDense: true,
           ),
           onSubmitted: (_) => _join(room),

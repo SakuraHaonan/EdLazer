@@ -4,10 +4,11 @@ import 'package:flutter/foundation.dart';
 import '../data/song_comments.dart';
 import '../gateway/gateway.dart';
 import '../gateway/transport.dart';
+import 'build_safe_notifier.dart';
 
 /// Comment requests and optimistic likes have their own notification lane.
 /// Paging and reactions never rebuild playback or depend on its clock.
-class SongCommentsController extends ChangeNotifier {
+class SongCommentsController extends ChangeNotifier with BuildSafeNotifier {
   SongCommentsController(this.gateway);
   final NeteaseGateway gateway;
   static const pageSize = 20;

@@ -7,6 +7,7 @@ import '../data/models.dart';
 import '../l10n/app_localizations.dart';
 import '../local/local_music_page.dart';
 import '../state/app_state.dart';
+import '../state/build_safe_notifier.dart';
 import '../state/song_comments_controller.dart';
 import '../state/detail_requests.dart';
 import '../state/ui_preferences.dart';
@@ -1886,6 +1887,6 @@ class _PlayerPull implements PlayerPullDown {
 
 /// A [ChangeNotifier] the shell pings when it wants a rebuild, so playback
 /// reports can be filtered instead of rebuilding the page ten times a second.
-class _ShellRepaint extends ChangeNotifier {
+class _ShellRepaint extends ChangeNotifier with BuildSafeNotifier {
   void ping() => notifyListeners();
 }

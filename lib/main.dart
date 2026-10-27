@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'package:flutter/foundation.dart'
@@ -123,6 +124,7 @@ class LazerApp extends StatefulWidget {
 
 class _LazerAppState extends State<LazerApp> {
   AppState get _state => widget.state;
+  bool _rootRebuildScheduled = false;
 
   @override
   void initState() {
@@ -137,7 +139,23 @@ class _LazerAppState extends State<LazerApp> {
   }
 
   void _onSessionChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // Pages report state from initState/build (the library starting its play
+    // record fetch is one example). Calling setState on the root while the
+    // framework is already building throws; take that report on the frame
+    // that is already running instead.
+    final SchedulerPhase phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks) {
+      if (_rootRebuildScheduled) return;
+      _rootRebuildScheduled = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _rootRebuildScheduled = false;
+        if (mounted) setState(() {});
+      });
+      return;
+    }
+    setState(() {});
   }
 
   @override

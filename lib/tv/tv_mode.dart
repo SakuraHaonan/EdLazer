@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../state/build_safe_notifier.dart';
 import '../theme/apple_design.dart';
 
 /// Native bridge for Android TV recognition.
@@ -208,7 +209,7 @@ class TvTraversalScope extends StatelessWidget {
 /// reaches them: the system pop would leave the app (or navigate the shell)
 /// while the queue card stayed on screen. Panels register a closer here, and
 /// the shell consumes Back with [closeTop] before its own navigation.
-class TvOverlayStack extends ChangeNotifier {
+class TvOverlayStack extends ChangeNotifier with BuildSafeNotifier {
   TvOverlayStack._();
 
   static final TvOverlayStack instance = TvOverlayStack._();
