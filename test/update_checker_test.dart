@@ -144,21 +144,19 @@ void main() {
       final UpdateChecker checker = UpdateChecker(
         fetch: (Uri _) async {
           calls++;
-          return _releases(<Map<String, Object?>>[
-            _release('v2.0.0-beta.3', prerelease: true),
-          ]);
+          return _releases(<Map<String, Object?>>[_release('v2.1.0')]);
         },
       );
       final AppState state = AppState(updateChecker: checker);
       addTearDown(state.dispose);
 
       final AppRelease? release = await state.checkForUpdates();
-      expect(release?.version.normalized, '2.0.0-beta.3');
+      expect(release?.version.normalized, '2.1.0');
       expect(state.updateError, isNull);
       await state.skipUpdate(release!);
-      expect(state.skippedUpdateVersion, '2.0.0-beta.3');
+      expect(state.skippedUpdateVersion, '2.1.0');
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('lazer_skipped_update'), '2.0.0-beta.3');
+      expect(prefs.getString('lazer_skipped_update'), '2.1.0');
 
       // Pretend the daily interval elapsed so the cadence is not what filters.
       state.updateCheckedAt = 0;
@@ -172,9 +170,7 @@ void main() {
       final UpdateChecker checker = UpdateChecker(
         fetch: (Uri _) async {
           calls++;
-          return _releases(<Map<String, Object?>>[
-            _release('v2.0.0-beta.3', prerelease: true),
-          ]);
+          return _releases(<Map<String, Object?>>[_release('v2.1.0')]);
         },
       );
       final AppState state = AppState(updateChecker: checker);
@@ -206,7 +202,7 @@ void main() {
   testWidgets('the update prompt can skip a release', (tester) async {
     final UpdateChecker checker = UpdateChecker(
       fetch: (Uri _) async => _releases(<Map<String, Object?>>[
-        _release('v2.0.0-beta.3', prerelease: true, body: '新内容\n第二行'),
+        _release('v2.1.0', body: '新内容\n第二行'),
       ]),
     );
     final AppState state = AppState(updateChecker: checker);
@@ -229,13 +225,13 @@ void main() {
     expect(find.text('发现新版本'), findsOneWidget);
     expect(find.text('前往下载'), findsOneWidget);
     expect(find.text('跳过此版本'), findsOneWidget);
-    expect(find.textContaining('2.0.0-beta.3'), findsWidgets);
+    expect(find.textContaining('2.1.0'), findsWidgets);
 
     await tester.tap(find.text('跳过此版本'));
     await tester.pumpAndSettle();
-    expect(state.skippedUpdateVersion, '2.0.0-beta.3');
+    expect(state.skippedUpdateVersion, '2.1.0');
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('lazer_skipped_update'), '2.0.0-beta.3');
+    expect(prefs.getString('lazer_skipped_update'), '2.1.0');
     expect(find.textContaining('已跳过'), findsOneWidget);
   });
 }
