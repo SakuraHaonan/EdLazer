@@ -17,7 +17,7 @@ Future<LazerMediaHandler> initializeSystemMedia(AppState state) async {
     builder: () => LazerMediaHandler(state, enabled: false),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'dev.naominet.lazer.audio',
-      androidNotificationChannelName: 'Lazer',
+      androidNotificationChannelName: 'EdLazer',
       androidNotificationIcon: 'drawable/ic_stat_music',
       androidStopForegroundOnPause: false,
       artDownscaleWidth: 512,

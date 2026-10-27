@@ -6,7 +6,7 @@ import '../l10n/app_localizations.dart';
 
 /// Window title shown in the title area — also pushed to the native window so
 /// the taskbar and Alt+Tab agree with the bar.
-const String kWindowTitle = 'Lazer';
+const String kWindowTitle = 'EdLazer';
 
 /// Height of the title area: 40px = 10 × the 4px base unit. Caption buttons are
 /// 46px wide and fill that height, flush to the trailing edge the way native

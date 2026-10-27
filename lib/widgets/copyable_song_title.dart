@@ -51,7 +51,7 @@ Future<void> showCopySongTitleDialog(BuildContext context, String title) async {
                 context.tr('复制歌曲名'),
                 style: Theme.of(
                   context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 10),
               Text(
@@ -60,7 +60,7 @@ Future<void> showCopySongTitleDialog(BuildContext context, String title) async {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(
                   context,
-                ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w400),
               ),
               const SizedBox(height: 6),
               Text(

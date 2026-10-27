@@ -68,7 +68,7 @@ abstract final class AppColors {
 /// (the "jagged" look); MiSans is hinted + antialiased on every platform.
 abstract final class AppFonts {
   /// Bundled family (see pubspec fonts). Weight-mapped via FontWeight:
-  /// w400/w500/w600/w700 resolve to MiSans Regular/Medium/Semibold/Bold.
+  /// w300/w400/w500/w600/w700 → MiSans Light/Regular/Medium/Semibold/Bold.
   static const String sans = 'MiSans';
   static const List<String> sansFallback = <String>[
     'Segoe UI',
@@ -103,6 +103,7 @@ abstract final class AppText {
     fontFamily: AppFonts.sans,
     fontFamilyFallback: AppFonts.sansFallback,
     fontSize: 12,
+    fontWeight: FontWeight.w300,
     height: 1.4,
     letterSpacing: -0.24,
     color: AppColors.slateDark,
@@ -112,6 +113,7 @@ abstract final class AppText {
     fontFamily: AppFonts.sans,
     fontFamilyFallback: AppFonts.sansFallback,
     fontSize: 12,
+    fontWeight: FontWeight.w300,
     height: 1.4,
     letterSpacing: -0.24,
     color: AppColors.cloudMedium,
@@ -121,7 +123,7 @@ abstract final class AppText {
     fontFamily: AppFonts.sans,
     fontFamilyFallback: AppFonts.sansFallback,
     fontSize: 12,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w500,
     height: 1.4,
     letterSpacing: -0.24,
     color: AppColors.slateDark,
@@ -133,6 +135,7 @@ abstract final class AppText {
     fontFamily: AppFonts.sans,
     fontFamilyFallback: AppFonts.sansFallback,
     fontSize: 16,
+    fontWeight: FontWeight.w300,
     height: 1.3,
     letterSpacing: -0.08,
     color: AppColors.slateDark,
@@ -142,6 +145,7 @@ abstract final class AppText {
     fontFamily: AppFonts.sans,
     fontFamilyFallback: AppFonts.sansFallback,
     fontSize: 16,
+    fontWeight: FontWeight.w300,
     height: 1.3,
     letterSpacing: -0.08,
     color: AppColors.cloudMedium,
@@ -152,6 +156,7 @@ abstract final class AppText {
     fontFamily: AppFonts.serif,
     fontFamilyFallback: AppFonts.serifFallback,
     fontSize: 20,
+    fontWeight: FontWeight.w300,
     height: 1.4,
     color: AppColors.slateDark,
   );
@@ -160,27 +165,28 @@ abstract final class AppText {
     fontFamily: AppFonts.serif,
     fontFamilyFallback: AppFonts.serifFallback,
     fontSize: 20,
+    fontWeight: FontWeight.w300,
     height: 1.4,
     color: AppColors.cloudDark,
   );
 
-  // subheading — serif 24px, w600, lh 1.3
+  // subheading — serif 24px, w500, lh 1.3
   static const TextStyle subheading = TextStyle(
     fontFamily: AppFonts.serif,
     fontFamilyFallback: AppFonts.serifFallback,
     fontSize: 24,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w500,
     height: 1.3,
     letterSpacing: -0.05,
     color: AppColors.slateDark,
   );
 
-  // heading — sans 61px, w700, lh 1.1 (declarative statements)
+  // heading — sans 61px, w500, lh 1.1 (declarative statements)
   static const TextStyle heading = TextStyle(
     fontFamily: AppFonts.sans,
     fontFamilyFallback: AppFonts.sansFallback,
     fontSize: 61,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w500,
     height: 1.1,
     letterSpacing: -0.12,
     color: AppColors.slateDark,
@@ -191,6 +197,7 @@ abstract final class AppText {
     fontFamily: AppFonts.serif,
     fontFamilyFallback: AppFonts.serifFallback,
     fontSize: 68,
+    fontWeight: FontWeight.w300,
     height: 1.1,
     color: AppColors.slateDark,
   );
@@ -200,6 +207,7 @@ abstract final class AppText {
     fontFamily: AppFonts.mono,
     fontFamilyFallback: AppFonts.monoFallback,
     fontSize: 16,
+    fontWeight: FontWeight.w300,
     height: 1.4,
     color: AppColors.slateDark,
   );
@@ -208,16 +216,17 @@ abstract final class AppText {
     fontFamily: AppFonts.mono,
     fontFamilyFallback: AppFonts.monoFallback,
     fontSize: 12,
+    fontWeight: FontWeight.w300,
     height: 1.4,
     color: AppColors.cloudDark,
   );
 
-  /// Wordmark style — nav logo: sans 12px w700, all caps, letter-spaced.
+  /// Wordmark style — nav logo: sans 12px w500, all caps, letter-spaced.
   static const TextStyle wordmark = TextStyle(
     fontFamily: AppFonts.sans,
     fontFamilyFallback: AppFonts.sansFallback,
     fontSize: 12,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w500,
     letterSpacing: 3.2,
     height: 1.0,
     color: AppColors.slateDark,

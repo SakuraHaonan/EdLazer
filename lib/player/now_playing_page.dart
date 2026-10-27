@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../data/audio_quality.dart';
 import '../data/models.dart';
 import '../downloads/download_dialog.dart';
 import 'player_backdrop.dart';
@@ -154,6 +155,70 @@ Future<void> showPlaybackQueue(BuildContext context, AppState state) async {
         onClose: () => Navigator.pop(context),
       ),
     ),
+  );
+}
+
+/// Opens a picker for [AppState.playbackQuality] and reloads the current
+/// track when the tier changes (see [AppState.setPlaybackQuality]).
+Future<void> showPlaybackQualityPicker(
+  BuildContext context,
+  AppState state,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: context.colors.ivoryLight,
+    showDragHandle: true,
+    builder: (BuildContext sheetContext) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  sheetContext.tr('播放音质'),
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
+              ),
+              AnimatedBuilder(
+                animation: state,
+                builder: (BuildContext context, _) {
+                  return Column(
+                    children: <Widget>[
+                      for (final AudioQuality quality in AudioQuality.values)
+                        ListTile(
+                          key: ValueKey<String>(
+                            'playback-quality-${quality.name}',
+                          ),
+                          leading: Icon(
+                            state.playbackQuality == quality
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_off_rounded,
+                            color: state.playbackQuality == quality
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                          ),
+                          title: Text(
+                            '${context.tr(quality.label)}  ${quality.bitrateLabel}',
+                          ),
+                          subtitle: Text(context.tr(quality.detail)),
+                          onTap: () {
+                            unawaited(state.setPlaybackQuality(quality));
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    },
   );
 }
 
@@ -508,18 +573,42 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     ),
   );
 
+  /// Compact hit targets so six trailing actions still fit on ~390dp phones.
+  static const BoxConstraints _headerActionConstraints = BoxConstraints(
+    minWidth: 40,
+    minHeight: 40,
+  );
+
+  Widget _headerAction({
+    required String tooltip,
+    required VoidCallback? onPressed,
+    required Widget icon,
+    bool isSelected = false,
+  }) => AccessibleIconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    isSelected: isSelected,
+    visualDensity: VisualDensity.compact,
+    constraints: _headerActionConstraints,
+    padding: EdgeInsets.zero,
+    icon: icon,
+  );
+
   Widget _header(bool compact) => IgnorePointer(
     ignoring: compact && !_controlsVisible,
     child: AnimatedOpacity(
       opacity: compact && !_controlsVisible ? 0 : 1,
       duration: const Duration(milliseconds: 200),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
         child: Row(
           children: [
             AccessibleIconButton(
               tooltip: '返回',
               onPressed: _closePage,
+              visualDensity: VisualDensity.compact,
+              constraints: _headerActionConstraints,
+              padding: EdgeInsets.zero,
               icon: const Icon(Icons.keyboard_arrow_down_rounded),
             ),
             const Spacer(),
@@ -529,13 +618,13 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             if (compact)
-              AccessibleIconButton(
+              _headerAction(
                 tooltip: '歌词',
                 onPressed: _toggleLyrics,
                 isSelected: _lyricsMode,
                 icon: const Icon(Icons.lyrics_outlined),
               ),
-            AccessibleIconButton(
+            _headerAction(
               tooltip: '添加到歌单',
               onPressed: int.tryParse(widget.state.current?.id ?? '') == null
                   ? null
@@ -548,7 +637,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     ),
               icon: const Icon(Icons.playlist_add_rounded),
             ),
-            AccessibleIconButton(
+            _headerAction(
               tooltip: '下载歌曲',
               onPressed: widget.state.current == null
                   ? null
@@ -559,12 +648,19 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     ),
               icon: const Icon(Icons.download_rounded),
             ),
-            AccessibleIconButton(
+            _headerAction(
+              tooltip: '播放音质',
+              onPressed: () => unawaited(
+                showPlaybackQualityPicker(context, widget.state),
+              ),
+              icon: const Icon(Icons.high_quality_outlined),
+            ),
+            _headerAction(
               tooltip: '查看评论',
               onPressed: () => unawaited(_openComments()),
               icon: const Icon(Icons.chat_bubble_outline_rounded),
             ),
-            AccessibleIconButton(
+            _headerAction(
               tooltip: '播放队列',
               onPressed: _queue,
               icon: const Icon(Icons.queue_music_rounded),

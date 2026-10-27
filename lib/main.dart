@@ -177,7 +177,7 @@ class _LazerAppState extends State<LazerApp> {
     return InteractionFeedback(
       state: _state,
       child: MaterialApp(
-        title: 'Lazer · Field Player',
+        title: 'EdLazer',
         debugShowCheckedModeBanner: false,
         // One Apple surface theme drives the custom window frame, root
         // dialogs and the adaptive shell. Pages refine their local player

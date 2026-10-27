@@ -4763,7 +4763,7 @@ class LegacySettingsPage extends StatelessWidget {
               child: Column(
                 children: <Widget>[
                   AppleListTile(
-                    title: 'Lazer',
+                    title: 'EdLazer',
                     subtitle: context.tr('提交 ${BuildInfo.shortCommit}'),
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(7),
