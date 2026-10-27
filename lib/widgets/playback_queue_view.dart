@@ -7,6 +7,7 @@ import '../theme/apple_design.dart';
 import '../theme/tokens.dart';
 import '../tv/tv_mode.dart';
 import 'accessible_controls.dart';
+import 'copyable_song_title.dart';
 import 'interaction_feedback.dart';
 import 'plate_art.dart';
 
@@ -222,15 +223,18 @@ class _QueueRowState extends State<_QueueRow> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: <Widget>[
-                            Text(
-                              widget.track.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: current ? apple.accent : apple.label,
-                                fontWeight: current
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
+                            CopyableSongTitle(
+                              title: widget.track.title,
+                              child: Text(
+                                widget.track.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: current ? apple.accent : apple.label,
+                                  fontWeight: current
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 2),

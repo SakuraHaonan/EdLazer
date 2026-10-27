@@ -14,6 +14,7 @@ import '../theme/app_palette.dart';
 import '../tv/tv_mode.dart';
 import '../widgets/accessible_controls.dart';
 import '../widgets/animated_notice.dart';
+import '../widgets/copyable_song_title.dart';
 import '../widgets/player_seek_bar.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/listen_together_dialog.dart';
@@ -338,13 +339,16 @@ class _Presentation extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Text(
-              track.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: context.type.heading.copyWith(
-                fontSize: compact ? 22 : 30,
-                height: 1.2,
+            child: CopyableSongTitle(
+              title: track.title,
+              child: Text(
+                track.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.heading.copyWith(
+                  fontSize: compact ? 22 : 30,
+                  height: 1.2,
+                ),
               ),
             ),
           ),

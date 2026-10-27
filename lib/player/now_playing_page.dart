@@ -22,6 +22,7 @@ import '../widgets/accessible_controls.dart';
 import '../widgets/animated_notice.dart';
 import '../widgets/animated_track_cover.dart';
 import '../widgets/catalog_links.dart';
+import '../widgets/copyable_song_title.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/listen_together_dialog.dart';
 import '../widgets/lyric_viewport.dart';
@@ -865,12 +866,15 @@ class _TrackDetails extends StatelessWidget {
       Row(
         children: [
           Expanded(
-            child: Text(
-              track.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: context.type.subheading.copyWith(
-                fontSize: MediaQuery.sizeOf(context).width < 720 ? 24 : 28,
+            child: CopyableSongTitle(
+              title: track.title,
+              child: Text(
+                track.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.subheading.copyWith(
+                  fontSize: MediaQuery.sizeOf(context).width < 720 ? 24 : 28,
+                ),
               ),
             ),
           ),

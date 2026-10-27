@@ -8,6 +8,7 @@ import '../widgets/interaction_feedback.dart';
 import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/artwork_image.dart';
+import '../widgets/copyable_song_title.dart';
 
 /// `mm:ss` for transport labels.
 String legacyDuration(Duration value) {
@@ -336,15 +337,18 @@ class _LegacyTrackRowState extends State<LegacyTrackRow> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(
-                        widget.track.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: titleColor,
-                          fontWeight: widget.current
-                              ? FontWeight.w600
-                              : FontWeight.w500,
+                      CopyableSongTitle(
+                        title: widget.track.title,
+                        child: Text(
+                          widget.track.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: titleColor,
+                            fontWeight: widget.current
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                          ),
                         ),
                       ),
                       if (translated != null && translated.isNotEmpty)

@@ -498,5 +498,9 @@
   "请先登录后再一起听": "Sign in first to listen together.",
   "创建一起听房间失败，请稍后重试。": "Couldn't create the room. Try again later.",
   "邀请码无效。": "That invite code is invalid.",
-  "加入一起听失败，请检查邀请码。": "Couldn't join. Check the invite code."
+  "加入一起听失败，请检查邀请码。": "Couldn't join. Check the invite code.",
+  "复制歌曲名": "Copy song title",
+  "是否复制歌曲名？": "Copy this song title?",
+  "复制": "Copy",
+  "已复制歌曲名": "Song title copied"
 }

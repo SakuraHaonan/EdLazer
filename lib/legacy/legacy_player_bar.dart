@@ -10,6 +10,7 @@ import '../state/app_state.dart';
 import '../theme/apple_design.dart';
 import '../tv/tv_mode.dart';
 import '../widgets/apple_ui.dart';
+import '../widgets/copyable_song_title.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/playback_queue_view.dart';
 import 'legacy_widgets.dart';
@@ -284,12 +285,22 @@ class _NowPlayingTileState extends State<_NowPlayingTile> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            track?.title ?? context.tr('未选择曲目'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall,
-                          ),
+                          track == null
+                              ? Text(
+                                  context.tr('未选择曲目'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleSmall,
+                                )
+                              : CopyableSongTitle(
+                                  title: track.title,
+                                  child: Text(
+                                    track.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleSmall,
+                                  ),
+                                ),
                           if (track?.translatedTitle?.trim().isNotEmpty ??
                               false)
                             Text(

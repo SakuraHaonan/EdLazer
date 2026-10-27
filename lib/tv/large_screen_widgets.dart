@@ -16,6 +16,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../l10n/app_localizations.dart';
 import '../theme/apple_design.dart';
 import '../tv/tv_mode.dart';
+import '../widgets/copyable_song_title.dart';
 import '../utils/artwork.dart';
 import '../widgets/artwork_image.dart';
 import '../widgets/interaction_feedback.dart';
@@ -663,15 +664,18 @@ class _LargeScreenTrackRowState extends State<LargeScreenTrackRow> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    widget.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: LargeScreenType.rowTitle(context).copyWith(
-                      color: widget.current ? apple.accent : apple.label,
-                      fontWeight: widget.current || _focused
-                          ? FontWeight.w600
-                          : FontWeight.w500,
+                  CopyableSongTitle(
+                    title: widget.title,
+                    child: Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LargeScreenType.rowTitle(context).copyWith(
+                        color: widget.current ? apple.accent : apple.label,
+                        fontWeight: widget.current || _focused
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),

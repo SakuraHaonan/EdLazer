@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../theme/apple_design.dart';
+import '../widgets/copyable_song_title.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/interaction_feedback.dart';
 import 'large_screen_widgets.dart';
@@ -381,12 +382,22 @@ class _TransportMeta extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: LargeScreenType.rowTitle(context),
-                  ),
+                  state.current == null
+                      ? Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: LargeScreenType.rowTitle(context),
+                        )
+                      : CopyableSongTitle(
+                          title: title,
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: LargeScreenType.rowTitle(context),
+                          ),
+                        ),
                   const SizedBox(height: 2),
                   Text(
                     artist,
