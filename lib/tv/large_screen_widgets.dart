@@ -8,7 +8,6 @@
 /// are the single place where those sizes are decided.
 library;
 
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -556,8 +555,7 @@ class LargeScreenShelf extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             padding: EdgeInsets.symmetric(horizontal: inset),
             itemCount: itemCount,
-            scrollCacheExtent: const ScrollCacheExtent.pixels(600),
-            addAutomaticKeepAlives: false,
+            scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
             itemBuilder: (BuildContext context, int index) => Padding(
               padding: EdgeInsets.only(
                 right: index == itemCount - 1 ? 0 : LargeScreenMetrics.cardGap,
@@ -944,60 +942,4 @@ class LargeScreenPageTitle extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Pauses the page's own tickers while any shelf is being scrolled.
-///
-/// The moving cover mosaics are the heaviest continuous animation on the
-/// browse page. They do not need to run while the listener is flinging a row:
-/// freezing them for the gesture keeps the scroll at frame rate, and the
-/// short settle delay stops a fling's tail from re-arming them frame by frame.
-class ScrollTickerGate extends StatefulWidget {
-  const ScrollTickerGate({
-    super.key,
-    required this.child,
-    this.settle = const Duration(milliseconds: 160),
-  });
-
-  final Widget child;
-  final Duration settle;
-
-  @override
-  State<ScrollTickerGate> createState() => _ScrollTickerGateState();
-}
-
-class _ScrollTickerGateState extends State<ScrollTickerGate> {
-  bool _scrolling = false;
-  Timer? _timer;
-
-  void _onScroll(ScrollNotification notification) {
-    if (notification is ScrollStartNotification) {
-      _timer?.cancel();
-      if (!_scrolling) setState(() => _scrolling = true);
-    } else if (notification is ScrollEndNotification) {
-      _timer?.cancel();
-      _timer = Timer(widget.settle, () {
-        if (mounted) setState(() => _scrolling = false);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      NotificationListener<ScrollNotification>(
-        onNotification: (ScrollNotification notification) {
-          _onScroll(notification);
-          return false;
-        },
-        child: TickerMode(
-          enabled: !_scrolling,
-          child: RepaintBoundary(child: widget.child),
-        ),
-      );
 }

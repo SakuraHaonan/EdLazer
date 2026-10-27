@@ -98,11 +98,6 @@ Large-screen motion is deliberately non-linear — fast first, slow on arrival:
 
 ## Performance
 
-- Large-screen lists cap their cache extent at 600 px (500 px for the artist
-  row) and disable automatic keep-alives; a focus bump-to-scroll still builds
-  the next row, but flinging does not retain a screenful of off-screen cards.
-- `ScrollTickerGate` mutes the browse page's mosaics while a shelf is scrolling
-  and for 160 ms after it settles.
 - Playback position ticks no longer rebuild the browse page: `LegacyShell`
   filters state reports through a structural signature (track, playing, queue,
   collections, play record, charts, surface) while a shelf page is visible. The

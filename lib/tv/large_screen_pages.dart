@@ -467,17 +467,15 @@ class _LargeScreenHomePageState extends State<LargeScreenHomePage> {
       );
     }
 
-    return ScrollTickerGate(
-      child: SingleChildScrollView(
-        key: const PageStorageKey<String>('large-screen-home'),
-        padding: const EdgeInsets.only(
-          top: 18,
-          bottom: LargeScreenMetrics.floatingBarInset,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: sections,
-        ),
+    return SingleChildScrollView(
+      key: const PageStorageKey<String>('large-screen-home'),
+      padding: const EdgeInsets.only(
+        top: 18,
+        bottom: LargeScreenMetrics.floatingBarInset,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: sections,
       ),
     );
   }
@@ -846,8 +844,7 @@ class _LibraryPane extends StatelessWidget {
             LargeScreenMetrics.floatingBarInset,
           ),
           itemCount: songs.length,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(600),
-          addAutomaticKeepAlives: false,
+          scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
           itemBuilder: (BuildContext context, int index) {
             final Track track = songs[index];
             final int? plays = playCounts[track.id];
@@ -950,8 +947,7 @@ class _ArtworkGrid extends StatelessWidget {
             mainAxisExtent: cell + 96,
           ),
           itemCount: itemCount,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(600),
-          addAutomaticKeepAlives: false,
+          scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
           itemBuilder: (BuildContext context, int index) =>
               builder(context, index, cell),
         );
@@ -1174,7 +1170,6 @@ class _LargeScreenCollectionPageState extends State<LargeScreenCollectionPage> {
             padding: EdgeInsets.symmetric(horizontal: inset),
             sliver: SliverList.builder(
               itemCount: tracks.length,
-              addAutomaticKeepAlives: false,
               itemBuilder: (BuildContext context, int index) {
                 final Track track = tracks[index];
                 return LargeScreenTrackRow(
@@ -1402,8 +1397,7 @@ class _LargeScreenArtistPageState extends State<LargeScreenArtistPage> {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: _albums.length,
-                  scrollCacheExtent: const ScrollCacheExtent.pixels(500),
-                  addAutomaticKeepAlives: false,
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(1200),
                   itemBuilder: (BuildContext context, int index) {
                     final Album album = _albums[index];
                     return Padding(
@@ -1592,7 +1586,6 @@ class _LargeScreenChartPageState extends State<LargeScreenChartPage> {
           padding: EdgeInsets.symmetric(horizontal: inset),
           sliver: SliverList.builder(
             itemCount: _chart.entries.length,
-            addAutomaticKeepAlives: false,
             itemBuilder: (BuildContext context, int index) {
               final ChartEntry entry = _chart.entries[index];
               final Track? track = entry.track;
@@ -1799,8 +1792,7 @@ class _LargeScreenSearchPageState extends State<LargeScreenSearchPage> {
             LargeScreenMetrics.floatingBarInset,
           ),
           itemCount: _results.tracks.length,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(600),
-          addAutomaticKeepAlives: false,
+          scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
           itemBuilder: (BuildContext context, int index) {
             final Track track = _results.tracks[index];
             return LargeScreenTrackRow(
@@ -1917,8 +1909,7 @@ class _SearchGrid extends StatelessWidget {
             mainAxisExtent: cell + 96,
           ),
           itemCount: itemCount,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(600),
-          addAutomaticKeepAlives: false,
+          scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
           itemBuilder: (BuildContext context, int index) =>
               builder(context, index, cell),
         );
