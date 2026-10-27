@@ -15,7 +15,7 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "LazerHaptics") else { return }
-    let channel = FlutterMethodChannel(name: "dev.naominet.lazer/haptics", binaryMessenger: registrar.messenger())
+    let channel = FlutterMethodChannel(name: "org.haonan.edlazer/haptics", binaryMessenger: registrar.messenger())
     hapticsChannel = channel
     channel.setMethodCallHandler { call, result in
       guard call.method == "impact" else { result(FlutterMethodNotImplemented); return }
@@ -43,7 +43,7 @@ import UIKit
     // and only needs this one call.
     guard let updatesRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "LazerUpdates") else { return }
     let updates = FlutterMethodChannel(
-      name: "dev.naominet.lazer/updates",
+      name: "org.haonan.edlazer/updates",
       binaryMessenger: updatesRegistrar.messenger()
     )
     updatesChannel = updates

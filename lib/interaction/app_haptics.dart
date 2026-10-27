@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 /// Semantic actions only. Each UI control calls this after recognizing a tap.
 class AppHaptics {
   AppHaptics({DateTime Function()? now}) : _now = now ?? DateTime.now;
-  static const channel = MethodChannel('dev.naominet.lazer/haptics');
+  static const channel = MethodChannel('org.haonan.edlazer/haptics');
   final DateTime Function() _now;
   DateTime? _last;
 

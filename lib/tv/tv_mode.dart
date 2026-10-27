@@ -13,7 +13,7 @@ import '../theme/apple_design.dart';
 /// needs to know whether the device it runs on is actually a television: a TV
 /// has no touch screen and is driven by a D-pad remote, so every tappable
 /// surface also has to be reachable with directional focus.
-const MethodChannel _tvChannel = MethodChannel('dev.naominet.lazer/tv');
+const MethodChannel _tvChannel = MethodChannel('org.haonan.edlazer/tv');
 
 /// Whether the Android device under this app is a television.
 ///

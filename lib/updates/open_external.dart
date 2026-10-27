@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 const MethodChannel _updatesChannel = MethodChannel(
-  'dev.naominet.lazer/updates',
+  'org.haonan.edlazer/updates',
 );
 
 /// Opens an http(s) link in the system browser.

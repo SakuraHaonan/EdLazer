@@ -8,7 +8,7 @@ class LocalMediaPermission {
   const LocalMediaPermission();
 
   static const MethodChannel _channel = MethodChannel(
-    'dev.naominet.lazer/local_media',
+    'org.haonan.edlazer/local_media',
   );
 
   Future<bool> hasAccess() async {

@@ -45,7 +45,7 @@ the release page URL:
 
 - **前往下载** opens the page in the system browser. Desktop starts
   `rundll32`/`open`/`xdg-open`; Android and iOS answer a small
-  `dev.naominet.lazer/updates` channel. No `url_launcher` dependency is needed.
+  `org.haonan.edlazer/updates` channel. No `url_launcher` dependency is needed.
 - **稍后** closes the dialog for this session. The next launch may offer the
   same release again after the daily interval.
 - **跳过此版本** persists the normalised version in

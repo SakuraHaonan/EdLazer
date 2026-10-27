@@ -1,4 +1,4 @@
-package dev.naominet.lazer
+package org.haonan.edlazer
 
 import android.Manifest
 import android.app.UiModeManager
@@ -176,10 +176,10 @@ class MainActivity : AudioServiceActivity() {
     }
 
     private companion object {
-        const val HAPTICS_CHANNEL = "dev.naominet.lazer/haptics"
-        const val LOCAL_MEDIA_CHANNEL = "dev.naominet.lazer/local_media"
-        const val TV_CHANNEL = "dev.naominet.lazer/tv"
-        const val UPDATES_CHANNEL = "dev.naominet.lazer/updates"
+        const val HAPTICS_CHANNEL = "org.haonan.edlazer/haptics"
+        const val LOCAL_MEDIA_CHANNEL = "org.haonan.edlazer/local_media"
+        const val TV_CHANNEL = "org.haonan.edlazer/tv"
+        const val UPDATES_CHANNEL = "org.haonan.edlazer/updates"
         const val TELEVISION_FEATURE = "android.hardware.type.television"
         const val PERMISSION_REQUEST = 4101
     }

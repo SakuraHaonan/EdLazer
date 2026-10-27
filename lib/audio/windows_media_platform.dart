@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 /// SMTC with timeline/seek support. All commands use the same AudioHandler as
 /// Android, Apple platforms and MPRIS; native callbacks arrive on the UI thread.
 class WindowsMediaPlatform extends AudioServicePlatform {
-  static const channel = MethodChannel('dev.naominet.lazer/system_media');
+  static const channel = MethodChannel('org.haonan.edlazer/system_media');
   AudioHandlerCallbacks? _callbacks;
   Duration _duration = Duration.zero;
   bool _enabled = true;

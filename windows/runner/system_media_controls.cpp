@@ -70,7 +70,7 @@ struct SystemMediaControls::Impl {
   explicit Impl(flutter::BinaryMessenger* messenger, HWND window) {
     target->window = window;
     channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-      messenger, "dev.naominet.lazer/system_media", &flutter::StandardMethodCodec::GetInstance());
+      messenger, "org.haonan.edlazer/system_media", &flutter::StandardMethodCodec::GetInstance());
     channel->SetMethodCallHandler([this](const auto& call, auto result) {
       try {
         if (call.method_name() == "initialize") Initialize();
@@ -160,7 +160,7 @@ struct SystemMediaControls::Impl {
     auto display = controls.DisplayUpdater();
     display.ClearAll();
     display.Type(winrt::Windows::Media::MediaPlaybackType::Music);
-    display.AppMediaId(L"dev.naominet.lazer");
+    display.AppMediaId(L"org.haonan.edlazer");
     display.MusicProperties().Title(winrt::to_hstring(String(args, "title")));
     display.MusicProperties().Artist(winrt::to_hstring(String(args, "artist")));
     display.MusicProperties().AlbumTitle(winrt::to_hstring(String(args, "album")));
