@@ -180,6 +180,25 @@ void main() {
       );
     });
 
+    test('maps the play record and the weblog upload', () {
+      final NeteaseRequest record = buildNeteaseRequest(
+        '/v1/play/record',
+        <String, String>{'uid': '42', 'type': '0'},
+      );
+      expect(record.path, '/api/v1/play/record');
+      expect(record.encoding, NeteaseEncoding.weapi);
+      expect(record.payload['uid'], '42');
+      expect(record.payload['type'], '0');
+
+      final NeteaseRequest upload = buildNeteaseRequest(
+        '/feedback/weblog',
+        <String, String>{'logs': '[]'},
+      );
+      expect(upload.path, '/api/feedback/weblog');
+      expect(upload.encoding, NeteaseEncoding.weapi);
+      expect(upload.payload['logs'], '[]');
+    });
+
     test('maps paged artist songs onto the native artist endpoint', () {
       final NeteaseRequest request = buildNeteaseRequest(
         '/artist/songs',

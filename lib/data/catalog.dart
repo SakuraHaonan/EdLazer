@@ -561,6 +561,35 @@ class Catalog {
     ];
   }
 
+  /// Uploads one qualified play to the account's cloud play record.
+  Future<void> reportPlayback({
+    required int songId,
+    required int playedSeconds,
+  }) => gateway.reportPlayback(songId: songId, playedSeconds: playedSeconds);
+
+  // -- listen together -----------------------------------------------------
+
+  Future<Map<String, dynamic>> listenTogetherCreateRoom() =>
+      gateway.listenTogetherCreateRoom();
+
+  Future<Map<String, dynamic>> listenTogetherAccept(
+    String roomId,
+    int inviterId,
+  ) => gateway.listenTogetherAccept(roomId, inviterId);
+
+  Future<Map<String, dynamic>> listenTogetherRoomCheck(String roomId) =>
+      gateway.listenTogetherRoomCheck(roomId);
+
+  Future<Map<String, dynamic>> listenTogetherEnd(String roomId) =>
+      gateway.listenTogetherEnd(roomId);
+
+  Future<Map<String, dynamic>> listenTogetherHeartbeat(
+    String roomId,
+    int songId,
+    String playStatus,
+    int progress,
+  ) => gateway.listenTogetherHeartbeat(roomId, songId, playStatus, progress);
+
   Future<List<Track>> artistStationTracks(ArtistRef seed) async {
     if (seed.id <= 0) return const <Track>[];
     final similar = await gateway.similarArtists(seed.id);

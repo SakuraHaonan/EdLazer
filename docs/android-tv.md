@@ -122,6 +122,23 @@ its end, and falls back to the liked list when the service returns no
 recommendation. The queue is replaced (list loop is disabled) and the switch is
 announced with 已切换至心动模式.
 
+## Play reporting and 一起听
+
+- A play is uploaded to the account's cloud record once, when the session ends
+  (track change, stop or completion) and only after the qualifying listen
+  (half the song, capped at 30 seconds). The `feedback/weblog` payload carries
+  the song id and the seconds actually heard, measured from position deltas so
+  buffering and seeks never inflate the time. Failed uploads stay in a small
+  in-memory queue and are retried on the next track boundary or library
+  refresh; `flutter_test` covers the route mapping.
+- **一起听** has an entry in the player header on every platform and in
+  设置 → 账户. The room sheet creates a room, shows the invite code
+  (`roomId|inviterId`), copies it, joins a friend's room by code or invite
+  link, lists the participants parsed from the room response, and keeps the
+  room alive with a five-second heartbeat carrying the current song, play
+  status and progress. Ending the session calls the server before clearing the
+  local room state.
+
 Metrics live in `LargeScreenMetrics` and the type ramp in `LargeScreenType`
 (`lib/tv/large_screen_widgets.dart`). The deck is a 40 dp display title, a
 26 dp section heading and a 20 dp card title; the desktop ramp is 34/20/17.

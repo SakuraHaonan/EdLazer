@@ -26,6 +26,7 @@ import '../widgets/app_scroll_behavior.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
+import '../widgets/listen_together_dialog.dart';
 import '../state/detail_requests.dart';
 import '../tv/tv_mode.dart';
 import '../updates/update_dialog.dart';
@@ -4485,6 +4486,15 @@ class LegacySettingsPage extends StatelessWidget {
                             onPressed: state.signOut,
                             child: const TrText('退出登录'),
                           ),
+                  ),
+                  _LegacySettingRow(
+                    label: '一起听',
+                    subtitle: '和朋友同步听歌',
+                    trailing: OutlinedButton(
+                      onPressed: () =>
+                          unawaited(showListenTogetherDialog(context, state)),
+                      child: const TrText('打开'),
+                    ),
                   ),
                   _LegacySettingRow(
                     label: '刷新曲库',

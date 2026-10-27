@@ -1087,6 +1087,39 @@ class NeteaseGateway {
         : int.tryParse(value is String ? value : '');
   }
 
+  /// Reports one qualified play to the account's play record.
+  ///
+  /// This is the upload half of the play-count / listening-time sync: the
+  /// official client posts an `play` action to the weblog endpoint, and the
+  /// account's record (read back by [playRecord]) gains both the play and the
+  /// listened seconds. [playedSeconds] is the time actually heard in this
+  /// session, not the track duration.
+  Future<void> reportPlayback({
+    required int songId,
+    required int playedSeconds,
+  }) async {
+    if (songId <= 0 || playedSeconds <= 0) return;
+    final String logs = jsonEncode(<Map<String, Object?>>[
+      <String, Object?>{
+        'action': 'play',
+        'json': <String, Object?>{
+          'id': songId,
+          'type': 'song',
+          'time': playedSeconds,
+          'end': 'playend',
+          'wifi': 0,
+          'source': 'list',
+          'mainsite': 1,
+          'download': 0,
+          'content': '',
+        },
+      },
+    ]);
+    await _transport.request('/feedback/weblog', <String, String>{
+      'logs': logs,
+    });
+  }
+
   Future<List<GatewaySong>> personalFm() async {
     final Map<String, dynamic> body = await _transport.request(
       '/personal_fm',

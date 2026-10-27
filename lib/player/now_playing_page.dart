@@ -23,6 +23,7 @@ import '../widgets/animated_notice.dart';
 import '../widgets/animated_track_cover.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
+import '../widgets/listen_together_dialog.dart';
 import '../widgets/lyric_viewport.dart';
 import '../widgets/playback_queue_view.dart';
 import '../widgets/player_seek_bar.dart';
@@ -525,6 +526,12 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                 dimension: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
+            AccessibleIconButton(
+              tooltip: '一起听',
+              onPressed: () =>
+                  unawaited(showListenTogetherDialog(context, widget.state)),
+              icon: const Icon(Icons.group_rounded),
+            ),
             if (compact)
               AccessibleIconButton(
                 tooltip: '歌词',
@@ -872,6 +879,12 @@ class _TrackDetails extends StatelessWidget {
                 fontSize: MediaQuery.sizeOf(context).width < 720 ? 24 : 28,
               ),
             ),
+          ),
+          AccessibleIconButton(
+            tooltip: '一起听',
+            onPressed: () =>
+                unawaited(showListenTogetherDialog(context, state)),
+            icon: const Icon(Icons.group_rounded),
           ),
           AccessibleIconButton(
             tooltip: state.signedIn ? '收藏歌曲' : '登录后收藏',

@@ -23,6 +23,7 @@ import '../gateway/transport.dart';
 import '../lyrics/imported_lyrics_store.dart';
 import '../updates/release_version.dart';
 import '../updates/update_checker.dart';
+import 'listen_together.dart';
 import 'ui_preferences.dart';
 
 /// How the session was authenticated.
@@ -316,6 +317,9 @@ class AppState extends ChangeNotifier {
   static const int _recentTracksLimit = 60;
 
   final Catalog catalog;
+  late final ListenTogetherController listenTogether = ListenTogetherController(
+    state: this,
+  );
   StreamSubscription<void>? _completionSubscription;
   StreamSubscription<int>? _indexSubscription;
   static const playbackInterval = Duration(milliseconds: 100);
@@ -719,6 +723,9 @@ class AppState extends ChangeNotifier {
     playStatsError = null;
     notifyListeners();
     try {
+      // Push anything queued offline before reading the record back, so the
+      // counts the library shows include this device's latest plays.
+      await _flushPlayUploads();
       final List<TrackPlayStat> loaded = await catalog.playStats(uid);
       if (user.userId != uid) return;
       playStats = loaded;
@@ -1172,10 +1179,14 @@ class AppState extends ChangeNotifier {
   }
 
   /// Back to the guest session — stay in the shell, drop the credentials.
-  void signOut() {
+  Future<void> signOut() async {
     collections = UserCollections.empty;
     collectionsLoading = false;
     collectionsError = null;
+    _finishPlaySession();
+    await _flushPlayUploads();
+    _playUploads.clear();
+    unawaited(listenTogether.leave());
     pause();
     _stationLoader = null;
     _stationLoading = false;
@@ -1272,6 +1283,20 @@ class AppState extends ChangeNotifier {
   bool _realActive = false;
   int _generation = 0;
   int trackChangeDirection = 1;
+
+  /// The current play-report session.
+  ///
+  /// A play is uploaded once, when the session ends (track change, stop or
+  /// completion), and only if it was listened to for the qualification time.
+  /// [played] is measured from position deltas, so buffering pauses and seeks
+  /// never inflate the listening time.
+  Track? _playSessionTrack;
+  Duration _playSessionTime = Duration.zero;
+  Duration _playSessionPosition = Duration.zero;
+  bool _playSessionQualified = false;
+  bool _playSessionSent = false;
+  final List<_PlayReport> _playUploads = <_PlayReport>[];
+  bool _playUploadInFlight = false;
 
   /// App queue index of the track already appended to the engine's queue.
   ///
@@ -1384,6 +1409,7 @@ class AppState extends ChangeNotifier {
 
   void _replaceQueue(List<Track> tracks, {int startIndex = 0}) {
     if (tracks.isEmpty) return;
+    _finishPlaySession();
     trackChangeDirection = 1;
     _queue = List<Track>.of(tracks);
     _queueIndex = startIndex.clamp(0, tracks.length - 1);
@@ -1433,10 +1459,12 @@ class AppState extends ChangeNotifier {
     _playing = false;
     _ticker?.cancel();
     if (_realActive) unawaited(audioEngine!.pause());
+    _flushQualifiedSession();
     notifyListeners();
   }
 
   void stop() {
+    _finishPlaySession();
     ++_generation;
     _playing = false;
     _realActive = false;
@@ -1451,6 +1479,7 @@ class AppState extends ChangeNotifier {
 
   void next() {
     if (_queue.isEmpty) return;
+    _finishPlaySession();
     if (_stationLoader != null && _queueIndex >= _queue.length - 1) {
       unawaited(_advanceStationFromTail());
       return;
@@ -1463,6 +1492,7 @@ class AppState extends ChangeNotifier {
 
   void previous() {
     if (_queue.isEmpty) return;
+    _finishPlaySession();
     playbackError = null;
     // Classic transport behavior: >3s in, "previous" restarts the track.
     if (_position.inSeconds > 3) {
@@ -1482,6 +1512,7 @@ class AppState extends ChangeNotifier {
   /// it only has to cross the boundary; otherwise the URL is loaded afresh.
   void _moveTo(int index, {required int direction, bool gapless = false}) {
     if (_queue.isEmpty) return;
+    _finishPlaySession();
     trackChangeDirection = direction;
     playbackError = null;
     _queueIndex = index.clamp(0, _queue.length - 1);
@@ -1626,6 +1657,7 @@ class AppState extends ChangeNotifier {
 
   void playTrackAt(int index) {
     if (index < 0 || index >= _queue.length) return;
+    _finishPlaySession();
     trackChangeDirection = index < _queueIndex ? -1 : 1;
     playbackError = null;
     _queueIndex = index;
@@ -1773,6 +1805,7 @@ class AppState extends ChangeNotifier {
   /// Everything the load path would have done still has to happen (index,
   /// persistence, lyrics, artwork), only the audio is already playing.
   void _onEngineAdvanced(int _) {
+    _finishPlaySession();
     final int? target = _queuedNextIndex;
     if (!_realActive || !_playing || target == null) return;
     _queuedNextIndex = null;
@@ -2113,6 +2146,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _onEngineCompleted() {
+    _finishPlaySession();
     if (!_realActive || !_playing) return;
     // Consume the terminal state before seeking/loading; some backends emit
     // both a completed event and a final position update for the same source.
@@ -2179,6 +2213,7 @@ class AppState extends ChangeNotifier {
     if (t == null || !_playing) return;
     if (_realActive) {
       _position = audioEngine!.position;
+      _trackPlaySession(t);
       // A native duration/position is a second completion signal for backends
       // that omit the terminal processing-state event. Never use metadata or
       // an estimated clock here: unavailable/buffering songs must not advance.
@@ -2196,6 +2231,100 @@ class AppState extends ChangeNotifier {
       return;
     }
     // The URL is still loading. Do not invent elapsed time.
+  }
+
+  /// Accumulates how much of [track] was actually heard.
+  ///
+  /// Position deltas are used instead of wall-clock time: a buffering stall
+  /// reports the same position and a seek jumps by minutes, neither of which
+  /// should count as listening. A delta above five seconds is treated as a
+  /// seek and ignored for that tick.
+  void _trackPlaySession(Track track) {
+    if (_playSessionTrack?.id != track.id) {
+      _finishPlaySession();
+      _playSessionTrack = track;
+      _playSessionTime = Duration.zero;
+      _playSessionPosition = _position;
+      _playSessionQualified = false;
+      _playSessionSent = false;
+      return;
+    }
+    final Duration delta = _position - _playSessionPosition;
+    _playSessionPosition = _position;
+    if (delta <= Duration.zero || delta > const Duration(seconds: 5)) return;
+    _playSessionTime += delta;
+    if (!_playSessionQualified && _playSessionTime >= _qualifyTime(track)) {
+      _playSessionQualified = true;
+    }
+  }
+
+  /// The official play record qualifies a play after half the song, capped at
+  /// 30 seconds. A new play starts counting immediately for very short tracks.
+  Duration _qualifyTime(Track track) {
+    final Duration half = track.duration ~/ 2;
+    if (half <= Duration.zero) return const Duration(seconds: 30);
+    return half < const Duration(seconds: 30)
+        ? half
+        : const Duration(seconds: 30);
+  }
+
+  void _finishPlaySession() {
+    _flushQualifiedSession();
+    _playSessionTrack = null;
+    _playSessionTime = Duration.zero;
+    _playSessionPosition = Duration.zero;
+    _playSessionQualified = false;
+    _playSessionSent = false;
+  }
+
+  /// Sends a qualified play without ending the session.
+  ///
+  /// A pause is a natural upload boundary, but resuming the same song must not
+  /// count as a second play; the sent flag lives until the track changes.
+  void _flushQualifiedSession() {
+    final Track? track = _playSessionTrack;
+    if (track == null || !_playSessionQualified || _playSessionSent) return;
+    _playSessionSent = true;
+    unawaited(_uploadPlay(track, _playSessionTime));
+  }
+
+  Future<void> _uploadPlay(Track track, Duration played) async {
+    final int? songId = int.tryParse(track.id);
+    if (songId == null || songId <= 0 || !signedIn) return;
+    final int durationSeconds = track.duration.inSeconds;
+    final int seconds = played.inSeconds.clamp(
+      1,
+      durationSeconds > 0
+          ? durationSeconds
+          : played.inSeconds.clamp(1, 1 << 20),
+    );
+    if (_playUploads.length >= 50) _playUploads.removeAt(0);
+    _playUploads.add(_PlayReport(songId: songId, seconds: seconds));
+    await _flushPlayUploads();
+  }
+
+  /// Drains the upload queue. A failed request stays at the head and is retried
+  /// on the next track boundary or the next library refresh, so an offline
+  /// spell does not silently lose plays.
+  Future<void> _flushPlayUploads() async {
+    if (_playUploadInFlight || !signedIn) return;
+    _playUploadInFlight = true;
+    try {
+      while (_playUploads.isNotEmpty) {
+        final _PlayReport report = _playUploads.first;
+        try {
+          await catalog.reportPlayback(
+            songId: report.songId,
+            playedSeconds: report.seconds,
+          );
+          _playUploads.removeAt(0);
+        } catch (_) {
+          break;
+        }
+      }
+    } finally {
+      _playUploadInFlight = false;
+    }
   }
 
   final int _seedState = DateTime.now().millisecondsSinceEpoch;
@@ -2244,12 +2373,21 @@ class AppState extends ChangeNotifier {
     _indexSubscription?.cancel();
     _ticker?.cancel();
     _tickNotifier.dispose();
+    listenTogether.dispose();
     if (_ownsDownloadManager) downloadManager.dispose();
     super.dispose();
   }
 }
 
 enum LoopMode { off, all, one }
+
+/// One queued upload for the account's play record.
+class _PlayReport {
+  const _PlayReport({required this.songId, required this.seconds});
+
+  final int songId;
+  final int seconds;
+}
 
 /// Tick-only heartbeat lane. `notifyListeners()` is @protected, so this thin
 /// subclass exposes [pulse] for the 100 ms position updates that must not

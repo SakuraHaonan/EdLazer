@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,6 +7,7 @@ import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
 import 'package:lazer_nextgen/player/now_playing_page.dart';
+import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
@@ -23,7 +24,10 @@ const Track _track = Track(
 
 class _Catalog extends Catalog {
   @override
-  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics(
     lrc: '[00:00.00]First lyric\n[00:05.00]Second lyric\n[00:10.00]Third lyric',
@@ -54,9 +58,7 @@ void main() {
       ),
     );
     await tester.pump();
-    final rootFinder = find.byKey(
-      const ValueKey<String>('app-semantics-root'),
-    );
+    final rootFinder = find.byKey(const ValueKey<String>('app-semantics-root'));
     final rootBefore = tester.getSemantics(rootFinder);
     await tester.tap(find.byTooltip('歌词'));
     await tester.pump();
@@ -72,11 +74,7 @@ void main() {
       reason: 'the player must start below the window',
     );
     await tester.pump(const Duration(milliseconds: 100));
-    final midY = tester
-        .widget<SlideTransition>(playerSlide)
-        .position
-        .value
-        .dy;
+    final midY = tester.widget<SlideTransition>(playerSlide).position.value.dy;
     expect(midY, greaterThan(0));
     expect(midY, lessThan(1));
     expect(find.byType(NowPlayingPage), findsOneWidget);
@@ -104,5 +102,42 @@ void main() {
     await tester.pump();
     await tester.pumpWidget(const SizedBox.shrink());
     semanticsHandle.dispose();
+  });
+
+  testWidgets('the player header opens the listen-together entry', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    await state.setLegacyBackground(LegacyBackgroundMode.off);
+    state.playQueue(<Track>[_track]);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLegacyTheme(),
+        home: LegacyShell(state: state),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(LegacyPlayerBar),
+        matching: find.text(_track.title),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 340));
+
+    expect(find.byType(NowPlayingPage), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.group_rounded).first);
+    await tester.pumpAndSettle();
+    expect(find.text('登录后可以和朋友一起听歌'), findsOneWidget);
+
+    await tester.tapAt(const Offset(6, 6));
+    await tester.pumpAndSettle();
+    expect(find.text('登录后可以和朋友一起听歌'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

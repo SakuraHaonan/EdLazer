@@ -375,6 +375,18 @@ NeteaseRequest buildNeteaseRequest(
           'count': value('count', '1'),
         },
       );
+    case '/v1/play/record':
+      return request(
+        '/api/v1/play/record',
+        web: true,
+        body: <String, Object?>{'uid': id('uid'), 'type': value('type', '0')},
+      );
+    case '/feedback/weblog':
+      return request(
+        '/api/feedback/weblog',
+        web: true,
+        body: <String, Object?>{'logs': value('logs')},
+      );
     case '/likelist':
       return request(
         '/api/song/like/get',

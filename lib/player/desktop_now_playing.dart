@@ -16,6 +16,7 @@ import '../widgets/accessible_controls.dart';
 import '../widgets/animated_notice.dart';
 import '../widgets/player_seek_bar.dart';
 import '../widgets/interaction_feedback.dart';
+import '../widgets/listen_together_dialog.dart';
 import '../widgets/volume_control.dart';
 
 enum DesktopNowPlayingPane { lyrics, comments, queue }
@@ -346,6 +347,12 @@ class _Presentation extends StatelessWidget {
                 height: 1.2,
               ),
             ),
+          ),
+          AccessibleIconButton(
+            tooltip: '一起听',
+            onPressed: () =>
+                unawaited(showListenTogetherDialog(context, state)),
+            icon: const Icon(Icons.group_rounded),
           ),
           AccessibleIconButton(
             tooltip: state.signedIn ? '收藏歌曲' : '登录后收藏',

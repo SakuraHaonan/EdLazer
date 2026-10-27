@@ -1,0 +1,230 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import 'app_state.dart';
+
+/// A participant in a listen-together room.
+class ListenTogetherMember {
+  const ListenTogetherMember({
+    required this.userId,
+    required this.name,
+    this.avatarUrl,
+  });
+
+  final int userId;
+  final String name;
+  final String? avatarUrl;
+}
+
+/// The account's listen-together room.
+///
+/// NetEase models this as a server-side room with a room id and an inviter id;
+/// the client keeps it alive with a heartbeat that carries the current song,
+/// play status and progress. Creating a room and joining by invite are enough
+/// for the shared session; the playback itself stays on this device.
+class ListenTogetherController extends ChangeNotifier {
+  ListenTogetherController({required this.state});
+
+  final AppState state;
+
+  bool loading = false;
+  bool active = false;
+  String? roomId;
+  int? inviterId;
+  String? error;
+  List<ListenTogetherMember> members = const <ListenTogetherMember>[];
+  Timer? _heartbeat;
+  bool _disposed = false;
+
+  bool get ready => active && (roomId?.isNotEmpty ?? false);
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _heartbeat?.cancel();
+    super.dispose();
+  }
+
+  Future<bool> create() async {
+    if (!state.signedIn) {
+      error = '请先登录后再一起听'; // i18n:key
+      _notify();
+      return false;
+    }
+    loading = true;
+    error = null;
+    _notify();
+    try {
+      final Map<String, dynamic> body = await state.catalog
+          .listenTogetherCreateRoom();
+      final Map<String, dynamic> data = _dataOf(body);
+      final String id = '${data['roomId'] ?? data['roomid'] ?? ''}'.trim();
+      if (id.isEmpty) {
+        error = '创建一起听房间失败，请稍后重试。'; // i18n:key
+        return false;
+      }
+      roomId = id;
+      inviterId =
+          int.tryParse('${data['inviterId'] ?? data['userId'] ?? ''}') ??
+          state.user.userId;
+      active = true;
+      members = _membersOf(body);
+      _startHeartbeat();
+      return true;
+    } catch (_) {
+      error = '创建一起听房间失败，请稍后重试。'; // i18n:key
+      return false;
+    } finally {
+      loading = false;
+      _notify();
+    }
+  }
+
+  Future<bool> join(String rawCode) async {
+    final (String? room, int? inviter) = parseInvite(rawCode);
+    if (room == null || inviter == null || inviter <= 0) {
+      error = '邀请码无效。'; // i18n:key
+      _notify();
+      return false;
+    }
+    if (!state.signedIn) {
+      error = '请先登录后再一起听'; // i18n:key
+      _notify();
+      return false;
+    }
+    loading = true;
+    error = null;
+    _notify();
+    try {
+      final Map<String, dynamic> body = await state.catalog
+          .listenTogetherAccept(room, inviter);
+      final int code = (body['code'] as num?)?.toInt() ?? 200;
+      if (code != 200) {
+        error = '加入一起听失败，请检查邀请码。'; // i18n:key
+        return false;
+      }
+      roomId = room;
+      inviterId = inviter;
+      active = true;
+      members = _membersOf(body);
+      await refresh();
+      _startHeartbeat();
+      return true;
+    } catch (_) {
+      error = '加入一起听失败，请检查邀请码。'; // i18n:key
+      return false;
+    } finally {
+      loading = false;
+      _notify();
+    }
+  }
+
+  Future<void> refresh() async {
+    final String? id = roomId;
+    if (id == null || id.isEmpty) return;
+    try {
+      final Map<String, dynamic> body = await state.catalog
+          .listenTogetherRoomCheck(id);
+      final List<ListenTogetherMember> found = _membersOf(body);
+      if (found.isNotEmpty) members = found;
+      _notify();
+    } catch (_) {
+      // A failed status poll must not tear the room down; the heartbeat will
+      // retry on the next tick.
+    }
+  }
+
+  Future<void> leave() async {
+    final String? id = roomId;
+    _heartbeat?.cancel();
+    _heartbeat = null;
+    active = false;
+    roomId = null;
+    inviterId = null;
+    members = const <ListenTogetherMember>[];
+    error = null;
+    _notify();
+    if (id != null && id.isNotEmpty && state.signedIn) {
+      try {
+        await state.catalog.listenTogetherEnd(id);
+      } catch (_) {
+        // Leaving locally is what matters; the server expires an idle room.
+      }
+    }
+  }
+
+  /// Accepts the forms the APK's invite share produces: a link with
+  /// `roomId`/`inviterId` query parameters, `roomId|inviterId`, or two
+  /// whitespace-separated values.
+  static (String?, int?) parseInvite(String raw) {
+    final String text = raw.trim();
+    if (text.isEmpty) return (null, null);
+    final Uri? uri = Uri.tryParse(text);
+    if (uri != null && uri.queryParameters.isNotEmpty) {
+      final String? room =
+          uri.queryParameters['roomId'] ?? uri.queryParameters['roomid'];
+      final String? inviter =
+          uri.queryParameters['inviterId'] ?? uri.queryParameters['inviterid'];
+      if (room != null && inviter != null) {
+        return (room, int.tryParse(inviter));
+      }
+    }
+    final List<String> parts = text.split(RegExp(r'[|,\s]+'));
+    if (parts.length >= 2) {
+      return (parts.first.trim(), int.tryParse(parts[1].trim()));
+    }
+    return (null, null);
+  }
+
+  void _startHeartbeat() {
+    _heartbeat?.cancel();
+    _heartbeat = Timer.periodic(const Duration(seconds: 5), (_) => _beat());
+    _beat();
+  }
+
+  void _beat() {
+    final String? id = roomId;
+    if (!active || id == null || id.isEmpty || _disposed) return;
+    final int songId = int.tryParse(state.current?.id ?? '') ?? 0;
+    unawaited(
+      state.catalog
+          .listenTogetherHeartbeat(
+            id,
+            songId,
+            state.playing ? 'play' : 'pause',
+            state.position.inMilliseconds,
+          )
+          .catchError((_) => <String, dynamic>{}),
+    );
+  }
+
+  static Map<String, dynamic> _dataOf(Map<String, dynamic> body) {
+    final dynamic data = body['data'];
+    return data is Map<String, dynamic> ? data : body;
+  }
+
+  static List<ListenTogetherMember> _membersOf(Map<String, dynamic> body) {
+    final Map<String, dynamic> data = _dataOf(body);
+    final dynamic list =
+        data['members'] ?? data['users'] ?? data['participants'];
+    if (list is! List) return const <ListenTogetherMember>[];
+    final List<ListenTogetherMember> members = <ListenTogetherMember>[];
+    for (final item in list.whereType<Map<String, dynamic>>()) {
+      final dynamic rawId = item['userId'] ?? item['uid'];
+      if (rawId is! num) continue;
+      members.add(
+        ListenTogetherMember(
+          userId: rawId.toInt(),
+          name: '${item['nickname'] ?? item['name'] ?? item['userName'] ?? ''}',
+          avatarUrl: item['avatarUrl'] as String? ?? item['avatar'] as String?,
+        ),
+      );
+    }
+    return members;
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+}
