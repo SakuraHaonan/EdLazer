@@ -108,7 +108,7 @@ class _LegacyShellState extends State<LegacyShell>
 
   /// Drives the shell's own rebuilds. Playback reports ten times a second;
   /// rebuilding the whole page for every tick while a switch is animating is
-  /// what turns a 280 ms cross-fade into a stutter, so [state] is filtered
+  /// what turns a 420 ms cross-fade into a stutter, so [state] is filtered
   /// through [_onAppStateChanged] instead of listened to directly.
   final _ShellRepaint _repaint = _ShellRepaint();
   bool _stateReportScheduled = false;
@@ -158,7 +158,7 @@ class _LegacyShellState extends State<LegacyShell>
     // Mirrors the page switcher's duration in [_content].
     _contentMotion = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 420),
     )..addStatusListener(_onContentMotionStatus);
     state.addListener(_onAppStateChanged);
     // The first frame is not a switch: only a change from here on is one.
@@ -1437,7 +1437,7 @@ class _LegacyShellState extends State<LegacyShell>
     final bool largeScreen = largeScreenModeOf(context);
     return AnimatedSwitcher(
       // [_contentMotion] mirrors this duration: keep the two in step.
-      duration: motion ? const Duration(milliseconds: 320) : Duration.zero,
+      duration: motion ? const Duration(milliseconds: 420) : Duration.zero,
       switchInCurve: Curves.easeOutQuart,
       switchOutCurve: Curves.easeInCubic,
       layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
@@ -1457,7 +1457,7 @@ class _LegacyShellState extends State<LegacyShell>
             ),
           // Pause the incoming page's own tickers for the duration of the
           // switch too: on a television the cover mosaics are the heaviest
-          // animation in the tree, and they can wait 280 ms for the page to
+          // animation in the tree, and they can wait 420 ms for the page to
           // land.
           if (current != null)
             TickerMode(

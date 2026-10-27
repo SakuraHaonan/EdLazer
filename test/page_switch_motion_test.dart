@@ -87,7 +87,7 @@ Future<AppState> _phoneShell(WidgetTester tester) async {
 Future<void> _settleSwitch(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 16));
-  await tester.pump(const Duration(milliseconds: 320));
+  await tester.pump(const Duration(milliseconds: 420));
 }
 
 Future<void> _openSearch(WidgetTester tester) async {
