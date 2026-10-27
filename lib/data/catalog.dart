@@ -590,6 +590,11 @@ class Catalog {
     int progress,
   ) => gateway.listenTogetherHeartbeat(roomId, songId, playStatus, progress);
 
+  Future<Map<String, dynamic>> listenTogetherPlayCommand(
+    String roomId,
+    Map<String, Object?> commandInfo,
+  ) => gateway.listenTogetherPlayCommand(roomId, commandInfo);
+
   Future<List<Track>> artistStationTracks(ArtistRef seed) async {
     if (seed.id <= 0) return const <Track>[];
     final similar = await gateway.similarArtists(seed.id);

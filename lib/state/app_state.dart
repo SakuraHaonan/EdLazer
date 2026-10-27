@@ -2369,11 +2369,13 @@ class AppState extends ChangeNotifier {
   void dispose() {
     ++_generation;
     ++_lyricGeneration;
+    // Detach the room controller before the tick lane it listens to is
+    // disposed: the controller is lazy, so this may be its first access.
+    listenTogether.dispose();
     _completionSubscription?.cancel();
     _indexSubscription?.cancel();
     _ticker?.cancel();
     _tickNotifier.dispose();
-    listenTogether.dispose();
     if (_ownsDownloadManager) downloadManager.dispose();
     super.dispose();
   }

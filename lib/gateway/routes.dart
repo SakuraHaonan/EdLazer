@@ -449,6 +449,7 @@ NeteaseRequest buildNeteaseRequest(
           'songId': value('songId', '0'),
           'playStatus': value('playStatus'),
           'progress': value('progress'),
+          'playlistVersion': value('playlistVersion', '[]'),
         },
       );
     case '/listentogether/play/command':

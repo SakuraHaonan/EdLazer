@@ -138,6 +138,13 @@ announced with 已切换至心动模式.
   room alive with a five-second heartbeat carrying the current song, play
   status and progress. Ending the session calls the server before clearing the
   local room state.
+- Playback commands follow the APK's `PlayCommand`: uppercase `PLAY` / `PAUSE`
+  / `PROGRESS`, a millisecond `progress`, `MANUAL`/`AUTO` trigger, current
+  `targetSongId`, previous `formerSongId`, `clientSeq`, `userId` and
+  `ignoreUserId`. A track hand-off is sent as `PLAY` with the new target; a
+  seek is detected from the 100 ms tick lane (a jump over 1.5 s) and sent as
+  `PROGRESS`, throttled to twice a second. The heartbeat's `playStatus` is the
+  same uppercase `PLAY`/`PAUSE` pair the APK uses.
 
 Metrics live in `LargeScreenMetrics` and the type ramp in `LargeScreenType`
 (`lib/tv/large_screen_widgets.dart`). The deck is a 40 dp display title, a

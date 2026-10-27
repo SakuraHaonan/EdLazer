@@ -199,6 +199,37 @@ void main() {
       expect(upload.payload['logs'], '[]');
     });
 
+    test('maps listen-together play commands and heartbeat', () {
+      final NeteaseRequest command = buildNeteaseRequest(
+        '/listentogether/play/command',
+        <String, String>{
+          'roomId': '42',
+          'commandInfo': '{"commandType":"PLAY","progress":1500}',
+        },
+      );
+      expect(command.path, '/api/listen/together/play/command/report');
+      expect(command.encoding, NeteaseEncoding.eapi);
+      expect(command.mobileClient, isTrue);
+      expect(command.payload['roomId'], '42');
+      expect(
+        command.payload['commandInfo'],
+        '{"commandType":"PLAY","progress":1500}',
+      );
+
+      final NeteaseRequest heartbeat = buildNeteaseRequest(
+        '/listentogether/heartbeat',
+        <String, String>{
+          'roomId': '42',
+          'songId': '7',
+          'playStatus': 'PAUSE',
+          'progress': '1500',
+        },
+      );
+      expect(heartbeat.path, '/api/listen/together/heartbeat');
+      expect(heartbeat.payload['playStatus'], 'PAUSE');
+      expect(heartbeat.payload['playlistVersion'], '[]');
+    });
+
     test('maps paged artist songs onto the native artist endpoint', () {
       final NeteaseRequest request = buildNeteaseRequest(
         '/artist/songs',

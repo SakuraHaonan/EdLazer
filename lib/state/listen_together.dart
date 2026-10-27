@@ -24,7 +24,10 @@ class ListenTogetherMember {
 /// play status and progress. Creating a room and joining by invite are enough
 /// for the shared session; the playback itself stays on this device.
 class ListenTogetherController extends ChangeNotifier {
-  ListenTogetherController({required this.state});
+  ListenTogetherController({required this.state}) {
+    state.addListener(_onPlaybackState);
+    state.ticks.addListener(_onPlaybackTick);
+  }
 
   final AppState state;
 
@@ -37,12 +40,23 @@ class ListenTogetherController extends ChangeNotifier {
   Timer? _heartbeat;
   bool _disposed = false;
 
+  // Play-command bookkeeping. The values mirror the APK's PlayCommand:
+  // commandType is PLAY / PAUSE / PROGRESS, progress is in milliseconds and
+  // triggerType is MANUAL for local input or AUTO for a track hand-off.
+  int _clientSeq = 0;
+  int? _lastSongId;
+  bool? _lastPlaying;
+  int _lastPositionMs = 0;
+  DateTime _lastProgressCommand = DateTime.fromMillisecondsSinceEpoch(0);
+
   bool get ready => active && (roomId?.isNotEmpty ?? false);
 
   @override
   void dispose() {
     _disposed = true;
     _heartbeat?.cancel();
+    state.removeListener(_onPlaybackState);
+    state.ticks.removeListener(_onPlaybackTick);
     super.dispose();
   }
 
@@ -71,6 +85,8 @@ class ListenTogetherController extends ChangeNotifier {
       active = true;
       members = _membersOf(body);
       _startHeartbeat();
+      _primePlayback();
+      _sendPlayCommand(state.playing ? 'PLAY' : 'PAUSE');
       return true;
     } catch (_) {
       error = '创建一起听房间失败，请稍后重试。'; // i18n:key
@@ -110,6 +126,9 @@ class ListenTogetherController extends ChangeNotifier {
       members = _membersOf(body);
       await refresh();
       _startHeartbeat();
+      // Joining follows the room; the current position is only the baseline
+      // against which the next local pause/seek/track change is compared.
+      _primePlayback();
       return true;
     } catch (_) {
       error = '加入一起听失败，请检查邀请码。'; // i18n:key
@@ -144,6 +163,9 @@ class ListenTogetherController extends ChangeNotifier {
     inviterId = null;
     members = const <ListenTogetherMember>[];
     error = null;
+    _lastSongId = null;
+    _lastPlaying = null;
+    _lastPositionMs = 0;
     _notify();
     if (id != null && id.isNotEmpty && state.signedIn) {
       try {
@@ -183,6 +205,98 @@ class ListenTogetherController extends ChangeNotifier {
     _beat();
   }
 
+  void _primePlayback() {
+    _lastSongId = int.tryParse(state.current?.id ?? '');
+    _lastPlaying = state.playing;
+    _lastPositionMs = state.position.inMilliseconds;
+  }
+
+  /// Sends PLAY / PAUSE / PROGRESS as the local transport changes.
+  ///
+  /// The APK's PlayCommand uses uppercase PLAY / PAUSE / PROGRESS (plus
+  /// NEXT / PREVIOUS / GOTO), a millisecond progress and a MANUAL/AUTO trigger.
+  /// A track hand-off is sent as PLAY with the new target so the room never
+  /// has to guess which queue entry came next.
+  void _onPlaybackState() {
+    if (!ready) return;
+    final int? songId = int.tryParse(state.current?.id ?? '');
+    if (songId == null || songId <= 0) return;
+    final bool playing = state.playing;
+    if (_lastSongId != songId) {
+      final int former = _lastSongId ?? songId;
+      _lastSongId = songId;
+      _lastPlaying = playing;
+      _lastPositionMs = state.position.inMilliseconds;
+      _sendPlayCommand('PLAY', formerSongId: former, trigger: 'AUTO');
+      return;
+    }
+    if (_lastPlaying == null) {
+      _lastPlaying = playing;
+      _lastPositionMs = state.position.inMilliseconds;
+      return;
+    }
+    if (_lastPlaying != playing) {
+      _lastPlaying = playing;
+      _lastPositionMs = state.position.inMilliseconds;
+      _sendPlayCommand(playing ? 'PLAY' : 'PAUSE');
+    }
+  }
+
+  /// Detects a seek by a jump in the 100 ms tick lane and reports PROGRESS.
+  void _onPlaybackTick() {
+    if (!ready) return;
+    final int? songId = int.tryParse(state.current?.id ?? '');
+    if (songId == null || songId != _lastSongId) {
+      _lastSongId = songId;
+      _lastPositionMs = state.position.inMilliseconds;
+      return;
+    }
+    final int position = state.position.inMilliseconds;
+    final int delta = position - _lastPositionMs;
+    _lastPositionMs = position;
+    if (delta.abs() < 1500) return;
+    final DateTime now = DateTime.now();
+    if (now.difference(_lastProgressCommand) <
+        const Duration(milliseconds: 500)) {
+      return;
+    }
+    _lastProgressCommand = now;
+    _sendPlayCommand('PROGRESS', progressMs: position, trigger: 'MANUAL');
+  }
+
+  void _sendPlayCommand(
+    String type, {
+    int? formerSongId,
+    int? progressMs,
+    String trigger = 'MANUAL',
+  }) {
+    final String? id = roomId;
+    final int songId = int.tryParse(state.current?.id ?? '') ?? 0;
+    if (!ready || id == null || songId <= 0 || !state.signedIn) return;
+    final int position = (progressMs ?? state.position.inMilliseconds).clamp(
+      0,
+      1 << 62,
+    );
+    final int userId = state.user.userId;
+    final Map<String, Object?> command = <String, Object?>{
+      'clientSeq': ++_clientSeq,
+      'commandType': type,
+      'formerSongId': '${formerSongId ?? songId}',
+      'ignoreUserId': <int>[userId],
+      'playStatus': state.playing ? 'PLAY' : 'PAUSE',
+      'progress': position,
+      'serverSeq': 0,
+      'targetSongId': '$songId',
+      'triggerType': trigger,
+      'userId': userId,
+    };
+    unawaited(
+      state.catalog
+          .listenTogetherPlayCommand(id, command)
+          .catchError((Object _) => <String, dynamic>{}),
+    );
+  }
+
   void _beat() {
     final String? id = roomId;
     if (!active || id == null || id.isEmpty || _disposed) return;
@@ -192,7 +306,7 @@ class ListenTogetherController extends ChangeNotifier {
           .listenTogetherHeartbeat(
             id,
             songId,
-            state.playing ? 'play' : 'pause',
+            state.playing ? 'PLAY' : 'PAUSE',
             state.position.inMilliseconds,
           )
           .catchError((_) => <String, dynamic>{}),
