@@ -81,6 +81,114 @@ extension LegacyBackgroundModeLabels on LegacyBackgroundMode {
       );
 }
 
+// ---------------------------------------------------------------------------
+// Dynamic background precision
+// ---------------------------------------------------------------------------
+
+/// Mesh the flowing album canvas is authored at full precision: 28x18 quads,
+/// i.e. 551 warped vertices over the whole page.
+const int kFlowMeshColumns = 28;
+const int kFlowMeshRows = 18;
+
+/// Update cadence at full precision. The mesh drifts on a ten second time
+/// base, so 30 updates per second already read as continuous motion.
+const Duration kFlowFrameIntervalFull = Duration(milliseconds: 33);
+
+/// Update cadence at the lowest precision — three times cheaper, still a
+/// drifting canvas.
+const Duration kFlowFrameIntervalLow = Duration(milliseconds: 100);
+
+/// Smallest precision the `动态背景渲染精度` slider offers.
+const double kDynamicBackgroundQualityMin = 0.1;
+
+/// Largest precision: the mesh exactly as it is authored.
+const double kDynamicBackgroundQualityMax = 1;
+
+/// One slider notch, five percent.
+const double kDynamicBackgroundQualityStep = 0.05;
+
+/// Default precision. 80% draws the same colour field with 22x14 vertices and
+/// an update just under every 50 ms — indistinguishable from the authored
+/// mesh, and it leaves the GPU headroom the now-playing entrance needs.
+const double kDynamicBackgroundQualityDefault = 0.8;
+
+/// Clamps to the supported range and snaps to [kDynamicBackgroundQualityStep],
+/// so the slider and a persisted value always agree.
+double normalizeDynamicBackgroundQuality(double value) {
+  if (!value.isFinite) return kDynamicBackgroundQualityDefault;
+  final double snapped =
+      (value / kDynamicBackgroundQualityStep).roundToDouble() *
+      kDynamicBackgroundQualityStep;
+  final double clamped = snapped.clamp(
+    kDynamicBackgroundQualityMin,
+    kDynamicBackgroundQualityMax,
+  );
+  return (clamped * 100).roundToDouble() / 100;
+}
+
+/// What one precision setting actually draws: the mesh geometry handed to
+/// `drawVertices` and the interval between two mesh updates.
+///
+/// This is the whole meaning of the setting — there is no hidden second knob.
+/// At 10% the canvas is a 4x3 field refreshed about ten times per second; at
+/// 100% it is the 28x18 field refreshed thirty times per second.
+class DynamicBackgroundPrecision {
+  const DynamicBackgroundPrecision({
+    required this.quality,
+    required this.columns,
+    required this.rows,
+    required this.frameInterval,
+  });
+
+  /// The normalized 0.1 … 1.0 setting this plan was derived from.
+  final double quality;
+
+  /// Mesh quads across and down the canvas.
+  final int columns;
+  final int rows;
+
+  /// Delay between two mesh updates.
+  final Duration frameInterval;
+
+  factory DynamicBackgroundPrecision.of(double quality) {
+    final double q = normalizeDynamicBackgroundQuality(quality);
+    final double t =
+        (q - kDynamicBackgroundQualityMin) /
+        (kDynamicBackgroundQualityMax - kDynamicBackgroundQualityMin);
+    final int span =
+        kFlowFrameIntervalLow.inMicroseconds -
+        kFlowFrameIntervalFull.inMicroseconds;
+    return DynamicBackgroundPrecision(
+      quality: q,
+      // Four quads across and three down is the floor: below that the warp
+      // stops reading as a mesh and the vertices become visible corners.
+      columns: math.max(4, (kFlowMeshColumns * q).round()),
+      rows: math.max(3, (kFlowMeshRows * q).round()),
+      frameInterval: Duration(
+        microseconds: (kFlowFrameIntervalLow.inMicroseconds - span * t).round(),
+      ),
+    );
+  }
+
+  /// Vertices the painter uploads per frame.
+  int get vertexCount => (columns + 1) * (rows + 1);
+
+  /// Mesh updates per second.
+  double get updatesPerSecond =>
+      Duration.microsecondsPerSecond / frameInterval.inMicroseconds;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DynamicBackgroundPrecision &&
+      other.quality == quality &&
+      other.columns == columns &&
+      other.rows == rows &&
+      other.frameInterval == frameInterval;
+
+  @override
+  int get hashCode => Object.hash(quality, columns, rows, frameInterval);
+}
+
 /// How the shell picks between the desktop and the mobile presentation.
 enum AppUiMode {
   /// Follow the window width — the desktop shell on wide windows, the compact

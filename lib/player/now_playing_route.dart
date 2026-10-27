@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../navigation/pull_down_to_close.dart';
 import '../state/app_state.dart';
+import '../theme/tokens.dart';
 import 'now_playing_page.dart';
 
 /// Material open-upwards presentation: the player rises from the window
@@ -23,13 +24,26 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
   /// Time the pull takes to cover its whole travel when it settles.
   static const Duration _settleDuration = Duration(milliseconds: 260);
 
+  /// Push and pop decelerate: fast on the way out of the tap, slow on arrival.
+  static const Curve _transitionCurve = AppMotion.standardCurve;
+
+  /// Whether a finger owns the transition right now.
+  ///
+  /// The drag writes [controller] directly, so the offset has to stay linear
+  /// with the finger; only the push, the pop and the settle after a released
+  /// pull are shaped by [_transitionCurve].
+  bool _dragging = false;
+
   /// A pull may only begin once the route has finished presenting itself.
   @override
   bool get canStart =>
       isCurrent && animation?.status == AnimationStatus.completed;
 
   @override
-  void startPull() => controller?.stop();
+  void startPull() {
+    _dragging = true;
+    controller?.stop();
+  }
 
   @override
   void updatePull(double progress) {
@@ -39,6 +53,7 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
 
   @override
   void endPull(double velocity) {
+    _dragging = false;
     final double open = controller?.value ?? 1;
     final double pulled = 1 - open;
     final bool dismiss = velocity < -900
@@ -57,7 +72,7 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
           260,
         ),
       ),
-      curve: Curves.easeOutCubic,
+      curve: _transitionCurve,
     );
   }
 
@@ -94,14 +109,22 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
     Widget child,
   ) {
     if (MediaQuery.disableAnimationsOf(context)) return child;
-    // Linear on purpose: the pull drives this same animation, so a curve here
-    // would leave the page trailing the finger.
-    return SlideTransition(
-      position: Tween<Offset>(
-        begin: const Offset(0, 1),
-        end: Offset.zero,
-      ).animate(animation),
+    // A finger-driven pull stays linear — the drag writes the controller value
+    // itself, so a curve here would leave the page trailing behind the finger.
+    // Every other frame is shaped by the decelerating curve: the page leaves
+    // fast and settles into place instead of easing away and stopping dead.
+    return AnimatedBuilder(
+      animation: animation,
       child: RepaintBoundary(child: child),
+      builder: (BuildContext context, Widget? child) {
+        final double travelled = _dragging
+            ? animation.value
+            : _transitionCurve.transform(animation.value);
+        return FractionalTranslation(
+          translation: Offset(0, 1 - travelled),
+          child: child,
+        );
+      },
     );
   }
 }

@@ -227,10 +227,49 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('最近添加'), findsWidgets);
-      expect(find.text('播放列表'), findsOneWidget);
-      expect(find.text('歌手'), findsOneWidget);
-      expect(find.text('测试专辑'), findsWidgets);
+      expect(find.text('最近添加'), findsNothing);
+      expect(find.text('专辑'), findsNothing);
+      expect(find.text('播放列表'), findsWidgets);
+      expect(find.text('歌手'), findsWidgets);
+      expect(find.text('歌曲'), findsWidgets);
+      expect(find.text('测试歌单'), findsWidgets);
+      expect(find.text('测试专辑'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('settings rows show the remote selection', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final AppState state = AppState(catalog: _Catalog());
+      addTearDown(state.dispose);
+      await tester.pumpWidget(_largeScreenApp(state));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('large-screen-tab-settings')),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+
+      // The page anchor can be the scroll view; once focus is on a dropdown,
+      // switch or slider, its row carries the TV wash and ring. Material's own
+      // faint focus overlay is not enough at ten feet.
+      expect(
+        find.descendant(
+          of: find.byType(TvFocusHighlight),
+          matching: find.byType(TvFocusOutline),
+        ),
+        findsWidgets,
+      );
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<TvFocusHighlight>(),
+        isNotNull,
+      );
       expect(tester.takeException(), isNull);
     });
 
@@ -280,6 +319,42 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('the large-screen page switch cross-fades', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final AppState state = AppState(catalog: _Catalog());
+      addTearDown(state.dispose);
+      // Unlike the other tests this one must keep motion enabled: the point is
+      // that a switch draws both pages for the length of the transition.
+      await tester.pumpWidget(
+        TvScope(
+          active: true,
+          child: MaterialApp(
+            theme: buildLegacyTheme(brightness: Brightness.dark),
+            home: LegacyShell(state: state),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('精选推荐'), findsOneWidget);
+
+      await tester.tap(find.text('资料库'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      // The outgoing browse page is still composited while the library fades
+      // in; the switch is not silently zero-length.
+      expect(find.text('精选推荐'), findsOneWidget);
+      expect(find.text('播放列表'), findsWidgets);
+
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('精选推荐'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('the D-pad crosses from content to the capsule and back', (
       WidgetTester tester,
     ) async {
@@ -297,14 +372,25 @@ void main() {
         isA<LargeScreenTraversalPolicy>(),
         reason: 'the shell must own the directional policy inside the route',
       );
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-      await tester.pumpAndSettle();
-      final FocusNode chrome = FocusManager.instance.primaryFocus!;
+      // Walk up the page until the capsule is reached; from a bottom control
+      // the D-pad has to cross the shelves first, from the top row it is one
+      // press.
+      FocusNode chrome = contentFocus;
+      for (int step = 0; step < 4; step++) {
+        if (chrome.context
+                ?.findAncestorWidgetOfExactType<LargeScreenNavBar>() !=
+            null) {
+          break;
+        }
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        chrome = FocusManager.instance.primaryFocus!;
+      }
       expect(chrome, isNot(contentFocus));
       expect(
         chrome.context!.findAncestorWidgetOfExactType<LargeScreenNavBar>(),
         isNotNull,
-        reason: 'up from the top shelf must reach the destination capsule',
+        reason: 'up from the shelves must reach the destination capsule',
       );
 
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);

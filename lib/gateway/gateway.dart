@@ -210,6 +210,14 @@ class GatewaySong {
   }
 }
 
+/// One row of the listener's play record: a song and how often it was played.
+class GatewayPlayRecord {
+  const GatewayPlayRecord({required this.song, required this.playCount});
+
+  final GatewaySong song;
+  final int playCount;
+}
+
 class GatewaySongUrl {
   const GatewaySongUrl({
     required this.id,
@@ -1047,6 +1055,36 @@ class NeteaseGateway {
         .map(GatewaySong.fromJson)
         .where((song) => song.id > 0)
         .toList();
+  }
+
+  /// The all-time play record behind 听歌排行.
+  ///
+  /// The response carries `playCount` per song; the UI joins that with the
+  /// song duration to show both the number of plays and the listening time
+  /// the official app reports.
+  Future<List<GatewayPlayRecord>> playRecord(int uid) async {
+    if (uid <= 0) return const <GatewayPlayRecord>[];
+    final body = await _transport.request('/v1/play/record', {
+      'uid': '$uid',
+      'type': '0',
+    });
+    final dynamic all = body['allData'];
+    if (all is! List) return const <GatewayPlayRecord>[];
+    return <GatewayPlayRecord>[
+      for (final item in all.whereType<Map<String, dynamic>>())
+        if (item['song'] is Map<String, dynamic> && _countOf(item) != null)
+          GatewayPlayRecord(
+            song: GatewaySong.fromJson(item['song'] as Map<String, dynamic>),
+            playCount: _countOf(item)!,
+          ),
+    ];
+  }
+
+  static int? _countOf(Map<String, dynamic> item) {
+    final dynamic value = item['playCount'];
+    return value is num
+        ? value.toInt()
+        : int.tryParse(value is String ? value : '');
   }
 
   Future<List<GatewaySong>> personalFm() async {

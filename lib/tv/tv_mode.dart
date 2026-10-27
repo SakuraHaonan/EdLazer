@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/apple_design.dart';
+
 /// Native bridge for Android TV recognition.
 ///
 /// The manifest marks the app `LEANBACK_LAUNCHER`-capable, but Flutter still
@@ -388,6 +390,77 @@ class _TvFocusRingPainter extends CustomPainter {
       oldDelegate.borderRadius != borderRadius || oldDelegate.width != width;
 }
 
+/// Draws a TV selection wash and ring around a group of Material controls.
+///
+/// Material's own focus overlay is a faint tint that disappears at ten feet,
+/// and a dropdown or switch owns its focus node, so a [TvTapTarget] cannot be
+/// placed around it without stealing the key handling. This wrapper watches
+/// focus in its subtree without becoming a focus stop itself: the control
+/// keeps its own Select/arrow behaviour while the whole row shows where the
+/// remote is.
+class TvFocusHighlight extends StatefulWidget {
+  const TvFocusHighlight({
+    super.key,
+    required this.child,
+    this.borderRadius = const BorderRadius.all(Radius.circular(12)),
+  });
+
+  final Widget child;
+  final BorderRadius borderRadius;
+
+  @override
+  State<TvFocusHighlight> createState() => _TvFocusHighlightState();
+}
+
+class _TvFocusHighlightState extends State<TvFocusHighlight> {
+  final FocusNode _watcher = FocusNode(
+    debugLabel: 'tv-focus-highlight',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+  bool _focused = false;
+
+  @override
+  void dispose() {
+    _watcher.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!TvScope.isActive(context)) return widget.child;
+    return Focus(
+      focusNode: _watcher,
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (bool value) {
+        if (mounted && value != _focused) setState(() => _focused = value);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 130),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: _focused
+              ? AppleSemanticColors.of(context).fill
+              : Colors.transparent,
+          borderRadius: widget.borderRadius,
+        ),
+        child: Stack(
+          children: <Widget>[
+            widget.child,
+            if (_focused)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: TvFocusOutline(borderRadius: widget.borderRadius),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Moves remote focus into a page when it appears or returns to the front.
 ///
 /// A remote starts with no pointer and therefore no focus: without an anchor
@@ -419,7 +492,11 @@ class _TvFocusRegionState extends State<TvFocusRegion> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (TvScope.isActive(context)) _schedule();
+    // Dependencies change on the first frame as well as when the theme or the
+    // large-screen scope updates. Only fill an empty focus here: revealing the
+    // first control through showOnScreen would scroll a freshly opened page
+    // away from its top.
+    if (TvScope.isActive(context)) _scheduleInitial();
   }
 
   @override
@@ -470,7 +547,10 @@ class _TvFocusRegionState extends State<TvFocusRegion> {
       final FocusNode? primary = FocusManager.instance.primaryFocus;
       if (primary != null && primary is! FocusScopeNode) return;
       final FocusNode? first = _firstControl();
-      if (first != null) revealTvFocus(first);
+      // The opening anchor must not scroll: a page that starts with the top
+      // shelf above the viewport looks like it opened halfway down. Later
+      // anchors (a closed player, a new section) still reveal their target.
+      if (first != null) first.requestFocus();
     });
   }
 

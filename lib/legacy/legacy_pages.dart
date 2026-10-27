@@ -847,6 +847,28 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
     }
   }
 
+  Future<void> _startHeartMode() async {
+    if (_startingStation) return;
+    setState(() => _startingStation = true);
+    try {
+      final bool started = await widget.state.startHeartMode();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr(started ? '已切换至心动模式' : '暂时没有可播放的歌曲')),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.tr('播放队列加载失败，请稍后重试'))));
+      }
+    } finally {
+      if (mounted) setState(() => _startingStation = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final HomeFeed? feed = widget.state.home;
@@ -882,7 +904,7 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
               padding: EdgeInsets.fromLTRB(inset, 8, inset, 0),
               sliver: SliverList(
                 delegate: SliverChildListDelegate(<Widget>[
-                  _HomeActionShelf(
+                  HomeActionShelf(
                     busy: _startingStation,
                     covers: <String?>[
                       ...recent.map((track) => track.coverUrl),
@@ -899,11 +921,7 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
                         : null,
                     onHeart: widget.state.collections.liked == null
                         ? null
-                        : () => _playStation(
-                            () => widget.state.catalog.heartModeTracks(
-                              widget.state.collections.liked!,
-                            ),
-                          ),
+                        : () => unawaited(_startHeartMode()),
                     onReplay: recent.isEmpty
                         ? null
                         : () => widget.state.playQueue(recent),
@@ -943,13 +961,13 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
                   const LegacySectionHeader(title: '排行榜'),
                   const SizedBox(height: 14),
                   if (widget.state.discoveryCharts.isNotEmpty)
-                    _ChartShelf(
+                    ChartShelf(
                       charts: widget.state.discoveryCharts,
                       onOpen: widget.onOpenChart,
                       compact: compact,
                     )
                   else
-                    _ChartLoadCard(
+                    ChartLoadCard(
                       loading: widget.state.discoveryChartsLoading,
                       message: widget.state.discoveryChartsError,
                       onRetry: () => unawaited(
@@ -989,11 +1007,7 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
                           }),
                     onHeart: widget.state.collections.liked == null
                         ? null
-                        : () => _playStation(
-                            () => widget.state.catalog.heartModeTracks(
-                              widget.state.collections.liked!,
-                            ),
-                          ),
+                        : () => unawaited(_startHeartMode()),
                     artistName: stationArtist?.name,
                     onArtist: stationArtist == null
                         ? null
@@ -1014,14 +1028,22 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
   }
 }
 
-class _HomeActionShelf extends StatelessWidget {
-  const _HomeActionShelf({
+/// The 为你打造 shortcuts on the browse page.
+///
+/// Shared by the desktop/phone home and the large-screen home. Every platform
+/// renders the same filled card as the 电台 strip: the cover mosaic, gradient
+/// and two caption lines cover the whole tile, so the four shortcuts read as
+/// artwork rather than as a second navigation bar.
+class HomeActionShelf extends StatelessWidget {
+  const HomeActionShelf({
+    super.key,
     required this.busy,
     required this.covers,
     this.onDaily,
     this.onFm,
     this.onHeart,
     this.onReplay,
+    this.large = false,
   });
 
   final bool busy;
@@ -1031,68 +1053,67 @@ class _HomeActionShelf extends StatelessWidget {
   final VoidCallback? onHeart;
   final VoidCallback? onReplay;
 
+  /// Ten-foot layout: four larger cards across the browse width.
+  final bool large;
+
   @override
   Widget build(BuildContext context) {
     final items =
-        <
-          ({
-            String title,
-            String subtitle,
-            IconData icon,
-            List<Color> colors,
-            VoidCallback? tap,
-          })
-        >[
+        <({String title, String subtitle, IconData icon, VoidCallback? tap})>[
           (
             title: '每日推荐', // i18n:key
             subtitle: '今日限定好歌', // i18n:key
             icon: Icons.calendar_today_rounded,
-            colors: const <Color>[Color(0xFFFF375F), Color(0xFFFF7A45)],
             tap: onDaily,
           ),
           (
             title: '私人漫游', // i18n:key
             subtitle: '发现没听过的音乐', // i18n:key
             icon: Icons.waves_rounded,
-            colors: const <Color>[Color(0xFF7357FF), Color(0xFF35A7FF)],
             tap: onFm,
           ),
           (
             title: '心动模式', // i18n:key
             subtitle: '红心与相似推荐', // i18n:key
             icon: Icons.favorite_rounded,
-            colors: const <Color>[Color(0xFFE5488A), Color(0xFF8C52FF)],
             tap: onHeart,
           ),
           (
             title: '反复聆听', // i18n:key
             subtitle: '回到你爱的歌', // i18n:key
             icon: Icons.replay_rounded,
-            colors: const <Color>[Color(0xFF087E8B), Color(0xFF42C98B)],
             tap: onReplay,
           ),
         ];
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        // On a television the four shortcuts share the full browse width
-        // instead of huddling at the left of a wide row. The clamp keeps the
-        // cards from becoming billboards on an ultrawide panel.
+        // The four shortcuts share the browse width on a television instead of
+        // huddling at the left. The large-screen home asks for bigger tiles so
+        // the artwork reads from the sofa.
+        final double gap = large ? 18 : 14;
         final double cardWidth =
             TvScope.isActive(context) && constraints.maxWidth.isFinite
-            ? ((constraints.maxWidth - 3 * 14) / 4).clamp(228.0, 372.0)
+            ? ((constraints.maxWidth - 3 * gap) / 4).clamp(
+                large ? 300.0 : 228.0,
+                large ? 480.0 : 372.0,
+              )
             : 228.0;
+        final double tileHeight = large ? 216 : 154;
         return _PagedHorizontalShelf(
           key: const ValueKey<String>('home-actions'),
-          height: 164,
+          height: tileHeight,
+          showArrows: !TvScope.isActive(context),
+          gap: gap,
           itemCount: items.length,
           itemBuilder: (context, index) {
             final item = items[index];
-            return _HomeActionCard(
+            return FilledCoverCard(
               width: cardWidth,
+              height: tileHeight,
+              large: large,
               title: item.title,
-              subtitle: item.subtitle,
+              detail: item.subtitle,
               icon: item.icon,
-              colors: item.colors,
               covers: covers.isEmpty
                   ? const <String?>[]
                   : <String?>[
@@ -1108,135 +1129,6 @@ class _HomeActionShelf extends StatelessWidget {
   }
 }
 
-class _HomeActionCard extends StatefulWidget {
-  const _HomeActionCard({
-    required this.width,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.colors,
-    required this.covers,
-    this.onTap,
-  });
-  final double width;
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final List<Color> colors;
-  final List<String?> covers;
-  final VoidCallback? onTap;
-
-  @override
-  State<_HomeActionCard> createState() => _HomeActionCardState();
-}
-
-class _HomeActionCardState extends State<_HomeActionCard> {
-  bool _hover = false;
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bool raised = (_hover || _focused) && widget.onTap != null;
-    return MouseRegion(
-      cursor: widget.onTap == null
-          ? SystemMouseCursors.basic
-          : SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: TvTapTarget(
-        onTap: widget.onTap == null
-            ? null
-            : feedbackAction(context, widget.onTap!),
-        onFocusChange: (bool value) => setState(() => _focused = value),
-        borderRadius: BorderRadius.circular(18),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap == null
-              ? null
-              : feedbackAction(context, widget.onTap!),
-          child: AnimatedScale(
-            scale: raised ? 1.015 : 1,
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOutCubic,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: Container(
-                width: widget.width,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: widget.onTap == null
-                        ? widget.colors
-                              .map((color) => color.withValues(alpha: .42))
-                              .toList()
-                        : widget.colors,
-                  ),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: widget.colors.last.withValues(
-                        alpha: raised ? .28 : .16,
-                      ),
-                      blurRadius: raised ? 24 : 16,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    Opacity(
-                      opacity: widget.onTap == null ? .28 : .52,
-                      child: _MovingCoverMosaic(covers: widget.covers),
-                    ),
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: <Color>[Color(0x18000000), Color(0xD9000000)],
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Icon(widget.icon, color: Colors.white, size: 26),
-                          const Spacer(),
-                          Text(
-                            context.tr(widget.title),
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -.35,
-                                ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            context.tr(widget.subtitle),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Colors.white.withValues(alpha: .78),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _PagedHorizontalShelf extends StatefulWidget {
   const _PagedHorizontalShelf({
     super.key,
@@ -1244,12 +1136,16 @@ class _PagedHorizontalShelf extends StatefulWidget {
     required this.itemCount,
     required this.itemBuilder,
     this.gap = 14,
+    this.showArrows = true,
   });
 
   final double height;
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
   final double gap;
+
+  /// Hides the paging chevrons where the remote already pages by focus.
+  final bool showArrows;
 
   @override
   State<_PagedHorizontalShelf> createState() => _PagedHorizontalShelfState();
@@ -1325,7 +1221,7 @@ class _PagedHorizontalShelfState extends State<_PagedHorizontalShelf> {
               itemBuilder: widget.itemBuilder,
             ),
           ),
-          if (desktop)
+          if (desktop && widget.showArrows)
             Positioned.fill(
               child: AnimatedBuilder(
                 animation: _controller,
@@ -1669,26 +1565,34 @@ class _EditorialPlaylistShelf extends StatelessWidget {
   );
 }
 
-class _ChartShelf extends StatelessWidget {
-  const _ChartShelf({
+/// The chart shelf on the browse page.
+///
+/// Shared with the large-screen home; [large] enlarges the card, its logo and
+/// its top-three list without changing the mosaic or the paging logic.
+class ChartShelf extends StatelessWidget {
+  const ChartShelf({
+    super.key,
     required this.charts,
     required this.onOpen,
-    required this.compact,
+    this.compact = false,
+    this.large = false,
   });
   final List<MusicChart> charts;
   final ValueChanged<MusicChart> onOpen;
   final bool compact;
+  final bool large;
 
   @override
   Widget build(BuildContext context) => _PagedHorizontalShelf(
     key: const ValueKey<String>('charts'),
-    height: compact ? 274 : 294,
+    height: large ? 344 : (compact ? 274 : 294),
     itemCount: charts.length,
-    gap: 16,
+    gap: large ? 22 : 16,
+    showArrows: !large,
     itemBuilder: (context, index) {
       final chart = charts[index];
       return SizedBox(
-        width: compact ? 246 : 278,
+        width: large ? 336 : (compact ? 246 : 278),
         child: Material(
           color: Colors.black,
           borderRadius: BorderRadius.circular(18),
@@ -1723,11 +1627,16 @@ class _ChartShelf extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                  padding: EdgeInsets.fromLTRB(
+                    large ? 22 : 18,
+                    large ? 22 : 18,
+                    large ? 22 : 18,
+                    large ? 20 : 16,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      _ChartLogo(chart: chart),
+                      _ChartLogo(chart: chart, large: large),
                       const Spacer(),
                       Text(
                         chart.title,
@@ -1735,6 +1644,7 @@ class _ChartShelf extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(
+                              fontSize: large ? 27 : null,
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -.6,
@@ -1742,21 +1652,23 @@ class _ChartShelf extends StatelessWidget {
                       ),
                       TrText(
                         chart.issueLabel,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: large ? 16 : null,
+                          color: Colors.white70,
+                        ),
                       ),
-                      const SizedBox(height: 9),
+                      SizedBox(height: large ? 12 : 9),
                       for (final entry in chart.entries.take(3))
                         Padding(
-                          padding: const EdgeInsets.only(top: 5),
+                          padding: EdgeInsets.only(top: large ? 7 : 5),
                           child: Row(
                             children: <Widget>[
                               SizedBox(
-                                width: 24,
+                                width: large ? 32 : 24,
                                 child: Text(
                                   '${entry.rank}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
+                                    fontSize: large ? 17 : null,
                                     color: Colors.white60,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -1767,7 +1679,8 @@ class _ChartShelf extends StatelessWidget {
                                   entry.title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
+                                    fontSize: large ? 17 : null,
                                     color: Colors.white,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -1952,7 +1865,9 @@ class _StationStrip extends StatelessWidget {
       itemCount: stations.length,
       itemBuilder: (context, index) {
         final station = stations[index];
-        return _StationCard(
+        return FilledCoverCard(
+          width: 272,
+          height: 154,
           title: station.title,
           detail: station.detail,
           icon: station.icon,
@@ -1969,124 +1884,193 @@ class _StationStrip extends StatelessWidget {
   }
 }
 
-class _StationCard extends StatelessWidget {
-  const _StationCard({
+/// A card filled edge to edge with artwork.
+///
+/// This is the 电台 strip's card, and the same renderer now draws 为你打造 on
+/// every platform: a moving cover mosaic under a dark gradient, the category
+/// glyph and a play mark on the top row, and the title/detail pair on two
+/// caption lines. A television gets the usual focus ring through
+/// [TvTapTarget]; a pointer gets the same tap target without a second widget.
+class FilledCoverCard extends StatelessWidget {
+  const FilledCoverCard({
+    super.key,
+    required this.width,
+    required this.height,
     required this.title,
     required this.detail,
     required this.icon,
     required this.covers,
     this.onTap,
+    this.large = false,
   });
+
+  final double width;
+  final double height;
   final String title;
   final String detail;
   final IconData icon;
   final List<String?> covers;
   final VoidCallback? onTap;
 
+  /// Ten-foot sizing: a wider card, a larger caption and a two-row mosaic of
+  /// bigger covers, used by the large-screen shortcuts.
+  final bool large;
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 272,
-    child: InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap == null ? null : feedbackAction(context, onTap!),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            ColoredBox(
-              color: AppleSemanticColors.of(context).secondaryGroupedBackground,
-              child: Opacity(
-                opacity: onTap == null ? .18 : .58,
-                child: _MovingCoverMosaic(covers: covers),
-              ),
-            ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[Color(0x22000000), Color(0xE0000000)],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    final VoidCallback? tap = onTap == null
+        ? null
+        : feedbackAction(context, onTap!);
+    final BorderRadius radius = BorderRadius.circular(large ? 18 : 16);
+    return SizedBox(
+      width: width,
+      height: height,
+      child: MouseRegion(
+        cursor: tap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
+        child: TvTapTarget(
+          onTap: tap,
+          borderRadius: radius,
+          focusScale: 1.02,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: tap,
+            child: ClipRRect(
+              borderRadius: radius,
+              child: Stack(
+                fit: StackFit.expand,
                 children: <Widget>[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      Icon(icon, color: Colors.white, size: 22),
-                      const Icon(
-                        Icons.play_circle_fill_rounded,
-                        color: Colors.white,
-                        size: 29,
+                  ColoredBox(
+                    color: AppleSemanticColors.of(
+                      context,
+                    ).secondaryGroupedBackground,
+                    child: Opacity(
+                      opacity: tap == null ? .18 : .58,
+                      child: _MovingCoverMosaic(
+                        covers: covers,
+                        tile: large ? 104 : 76,
                       ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Text(
-                    context.tr(title),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  Text(
-                    context.tr(detail),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: <Color>[Color(0x22000000), Color(0xE0000000)],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.all(large ? 20 : 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: <Widget>[
+                            Icon(
+                              icon,
+                              color: Colors.white,
+                              size: large ? 27 : 22,
+                            ),
+                            Icon(
+                              Icons.play_circle_fill_rounded,
+                              color: Colors.white,
+                              size: large ? 35 : 29,
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        Text(
+                          context.tr(title),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontSize: large ? 21 : null,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                        Text(
+                          context.tr(detail),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                fontSize: large ? 15.5 : null,
+                                color: Colors.white70,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-class _ChartLoadCard extends StatelessWidget {
-  const _ChartLoadCard({
+/// The placeholder shown while the charts are loading or after a failure.
+class ChartLoadCard extends StatelessWidget {
+  const ChartLoadCard({
+    super.key,
     required this.loading,
     required this.message,
     required this.onRetry,
+    this.large = false,
   });
   final bool loading;
   final String? message;
   final VoidCallback onRetry;
+  final bool large;
 
   @override
-  Widget build(BuildContext context) => Container(
-    height: 112,
-    padding: const EdgeInsets.symmetric(horizontal: 18),
-    decoration: BoxDecoration(
-      color: AppleSemanticColors.of(context).secondaryGroupedBackground,
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Row(
-      children: <Widget>[
-        if (loading)
-          const SizedBox.square(
-            dimension: 22,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
-        else
-          const Icon(Icons.leaderboard_rounded),
-        const SizedBox(width: 13),
-        Expanded(
-          child: Text(context.tr(loading ? '正在载入排行榜…' : message ?? '暂无榜单数据')),
-        ),
-        if (!loading) TextButton(onPressed: onRetry, child: TrText('重试')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final TextStyle? label = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(fontSize: large ? 18 : null);
+    return Container(
+      height: large ? 140 : 112,
+      padding: EdgeInsets.symmetric(horizontal: large ? 24 : 18),
+      decoration: BoxDecoration(
+        color: AppleSemanticColors.of(context).secondaryGroupedBackground,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: <Widget>[
+          if (loading)
+            SizedBox.square(
+              dimension: large ? 26 : 22,
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Icon(Icons.leaderboard_rounded, size: large ? 28 : 24),
+          SizedBox(width: large ? 16 : 13),
+          Expanded(
+            child: Text(
+              context.tr(loading ? '正在载入排行榜…' : message ?? '暂无榜单数据'),
+              style: label,
+            ),
+          ),
+          if (!loading)
+            TextButton(
+              onPressed: onRetry,
+              child: Text(
+                context.tr('重试'),
+                style: large ? const TextStyle(fontSize: 17) : null,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class LegacyChartPage extends StatefulWidget {
@@ -2240,9 +2224,9 @@ class _LegacyChartPageState extends State<LegacyChartPage> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(inset, 0, inset, 16),
-                  child: _ChartLoadCard(
+                  child: ChartLoadCard(
                     loading: false,
-                    message: '这些歌曲暂时匹配不到网易云，可以重新匹配',
+                    message: '这些歌曲暂时匹配不到网易云，可以重新匹配', // i18n:key
                     onRetry: () => unawaited(_retryMatching()),
                   ),
                 ),
@@ -3385,25 +3369,22 @@ class _PlaylistHeader extends StatelessWidget {
     BuildContext context,
     String note, {
     required bool isData,
-  }) =>
-      showDialog<void>(
-        context: context,
-        builder: (BuildContext context) => AlertDialog(
-          title: const TrText('专辑简介'),
-          content: SizedBox(
-            width: 460,
-            child: SingleChildScrollView(
-              child: isData ? Text(note) : TrText(note),
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const TrText('关闭'),
-            ),
-          ],
+  }) => showDialog<void>(
+    context: context,
+    builder: (BuildContext context) => AlertDialog(
+      title: const TrText('专辑简介'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(child: isData ? Text(note) : TrText(note)),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const TrText('关闭'),
         ),
-      );
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -3880,6 +3861,8 @@ class LegacySettingsPage extends StatelessWidget {
     final double minScale = UiMetrics.minScaleOf(context);
     final double shownScale = UiMetrics.scaleOf(context);
     final bool car = UiMetrics.carOf(context);
+    final DynamicBackgroundPrecision flowPrecision =
+        DynamicBackgroundPrecision.of(state.dynamicBackgroundQuality);
     final double inset = _pageInset(context);
     return Center(
       child: ConstrainedBox(
@@ -4100,6 +4083,37 @@ class LegacySettingsPage extends StatelessWidget {
                         ? null
                         : (double value) =>
                               unawaited(state.setLegacyUiAlpha(value)),
+                  ),
+                  // The flowing canvas is the app's only continuously
+                  // repainting surface, so its precision is the setting a
+                  // struggling GPU needs. Both halves of it are shown —
+                  // the mesh it draws and how often it redraws it — so the
+                  // value is verifiable rather than a blind percentage.
+                  _LegacySliderRow(
+                    key: const ValueKey('dynamic-background-quality'),
+                    label: '动态背景渲染精度',
+                    valueText:
+                        '${(state.dynamicBackgroundQuality * 100).round()}%',
+                    // One literal on purpose: the translation table matches
+                    // it as a single pattern key.
+                    subtitle:
+                        '网格 ${flowPrecision.columns}×${flowPrecision.rows}，每 ${flowPrecision.frameInterval.inMilliseconds} ms 刷新一次',
+                    value: state.dynamicBackgroundQuality,
+                    min: kDynamicBackgroundQualityMin,
+                    max: kDynamicBackgroundQualityMax,
+                    divisions:
+                        ((kDynamicBackgroundQualityMax -
+                                    kDynamicBackgroundQualityMin) /
+                                kDynamicBackgroundQualityStep)
+                            .round(),
+                    onChanged: (double value) =>
+                        unawaited(state.setDynamicBackgroundQuality(value)),
+                    action: TextButton(
+                      key: const ValueKey('dynamic-background-quality-reset'),
+                      onPressed: () =>
+                          unawaited(state.resetDynamicBackgroundQuality()),
+                      child: const TrText('恢复默认'),
+                    ),
                   ),
                 ],
               ),
@@ -4602,34 +4616,37 @@ class _LegacySettingRow extends StatelessWidget {
         ],
       ],
     );
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      child: stacked
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                heading,
-                const SizedBox(height: 8),
-                Align(alignment: Alignment.centerLeft, child: trailing),
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: <Widget>[
-                Expanded(flex: 4, child: heading),
-                const SizedBox(width: 12),
-                Flexible(
-                  flex: 9,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: trailing,
+    return TvFocusHighlight(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: stacked
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  heading,
+                  const SizedBox(height: 8),
+                  Align(alignment: Alignment.centerLeft, child: trailing),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Expanded(flex: 4, child: heading),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    flex: 9,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: trailing,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -4686,59 +4703,62 @@ class _LegacySliderRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 13, 12, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  context.tr(label),
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: apple.label,
+    return TvFocusHighlight(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 13, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    context.tr(label),
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: apple.label,
+                    ),
                   ),
                 ),
-              ),
-              if (action != null) ...<Widget>[
-                action!,
-                const SizedBox(width: 4),
+                if (action != null) ...<Widget>[
+                  action!,
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  context.tr(valueText),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: apple.secondaryLabel,
+                    fontFeatures: const <FontFeature>[
+                      FontFeature.tabularFigures(),
+                    ],
+                  ),
+                ),
               ],
+            ),
+            if (subtitle != null) ...<Widget>[
+              const SizedBox(height: 2),
               Text(
-                context.tr(valueText),
-                style: theme.textTheme.bodyMedium?.copyWith(
+                context.tr(subtitle!),
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: apple.secondaryLabel,
-                  fontFeatures: const <FontFeature>[
-                    FontFeature.tabularFigures(),
-                  ],
                 ),
               ),
             ],
-          ),
-          if (subtitle != null) ...<Widget>[
-            const SizedBox(height: 2),
-            Text(
-              context.tr(subtitle!),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: apple.secondaryLabel,
-              ),
+            AccessibleSlider(
+              semanticLabel: label,
+              label: valueText,
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: divisions,
+              detentFeedback: onChanged != null,
+              onChanged: onChanged,
             ),
           ],
-          AccessibleSlider(
-            semanticLabel: label,
-            label: valueText,
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: divisions,
-            detentFeedback: onChanged != null,
-            onChanged: onChanged,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -4765,59 +4785,62 @@ class _LegacyChoiceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 13, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  context.tr(label),
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: apple.label,
-                  ),
-                ),
-              ),
-              Text(
-                context.tr(valueText),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: apple.secondaryLabel,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              for (final int choice in choices)
-                ChoiceChip(
-                  label: Text(
-                    context.tr(labelOf(choice)),
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.values[choice ~/ 100 - 1],
-                      color: selected == choice ? apple.accent : apple.label,
+    return TvFocusHighlight(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: apple.separator, width: .5)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    context.tr(label),
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: apple.label,
                     ),
                   ),
-                  showCheckmark: false,
-                  selected: selected == choice,
-                  selectedColor: apple.accentSoft,
-                  backgroundColor: apple.fill,
-                  side: BorderSide.none,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  onSelected: (_) => onSelected(choice),
                 ),
-            ],
-          ),
-        ],
+                Text(
+                  context.tr(valueText),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: apple.secondaryLabel,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                for (final int choice in choices)
+                  ChoiceChip(
+                    label: Text(
+                      context.tr(labelOf(choice)),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.values[choice ~/ 100 - 1],
+                        color: selected == choice ? apple.accent : apple.label,
+                      ),
+                    ),
+                    showCheckmark: false,
+                    selected: selected == choice,
+                    selectedColor: apple.accentSoft,
+                    backgroundColor: apple.fill,
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    onSelected: (_) => onSelected(choice),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

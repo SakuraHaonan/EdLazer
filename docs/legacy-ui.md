@@ -84,10 +84,12 @@ Android TV gets its own composition rather than the desktop shell at ten feet.
 `设置 → 界面 → 设备形态` can force `大屏幕模式`; otherwise a Leanback or
 touch-less Android device selects it automatically and boots into it. The
 large-screen mode draws a floating destination capsule, shelves of captioned
-artwork, a rail-and-grid library and a rounded transport dock, keeps the
+artwork (为你打造 and 排行榜 reuse the desktop/mobile cards), a rail-and-grid
+library and a rounded transport card that floats over the page, keeps the
 standard interface scale, insets chrome for overscan, and turns every card,
 row and transport glyph into a D-pad focus stop with a white-on-black focus
-ring.
+ring. Settings rows wash and ring around whichever Material control the remote
+is on.
 Directional traversal follows the card geometry and bumps a shelf or page when
 the next card has not been built yet. Back closes the queue or volume panel
 first, then the player, then detail pages. See
@@ -127,16 +129,22 @@ Everything above the pixels remains shared with the existing app:
 ## Settings and persistence
 
 Settings still exposes every preference from the previous shell: accent,
-device profile, layout mode, DPI scale (manual + automatic), album backdrop
-and opacity, theme, language, independent playback, haptics, lyric timing,
-size, weight, blur, follow delay, scroll inertia/acceleration, frame overlay,
-account and catalogue refresh. Persistence keys are unchanged.
+device profile, layout mode, DPI scale (manual + automatic), album backdrop,
+content opacity and dynamic-background render precision, theme, language,
+independent playback, haptics, lyric timing, size, weight, blur, follow
+delay, scroll inertia/acceleration, frame overlay, account and catalogue
+refresh. Persistence keys are unchanged; the new one is
+`lazer_dynamic_background_quality`.
 
 ## Performance
 
 The redesign keeps the existing performance constraints:
 
 - `CustomPaint` album flow, no per-frame widget transforms in the background.
+  Its `动态背景渲染精度` slider (0.1 … 1.0, default 0.8) scales the mesh — a
+  4×3 quad grid at 10%, the authored 28×18 at 100% — and the update cadence
+  — 100 ms at 10%, 33 ms at 100% — and the slider's subtitle prints both, so
+  the value it stores is verifiable rather than a blind percentage;
 - Lyric rows repaint on the playback tick lane only; inactive rows stay cached.
 - Track lists use `SliverList.builder` where they can grow.
 - Artwork requests the smallest CDN rendition covering its painted size.

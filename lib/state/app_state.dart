@@ -458,6 +458,28 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  /// `动态背景渲染精度` — how dense and how often the flowing album canvas is
+  /// redrawn, 0.1 … 1.0. It is the one knob a slow GPU needs: at 1.0 the mesh
+  /// paints 551 warped vertices thirty times a second.
+  double dynamicBackgroundQuality = kDynamicBackgroundQualityDefault;
+
+  /// Applies a precision setting, snapped to the slider grid and clamped to
+  /// the supported range.
+  Future<void> setDynamicBackgroundQuality(double value) async {
+    final double next = normalizeDynamicBackgroundQuality(value);
+    if (dynamicBackgroundQuality == next) return;
+    dynamicBackgroundQuality = next;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setDouble(
+      'lazer_dynamic_background_quality',
+      next,
+    );
+  }
+
+  /// Restores the tuned default.
+  Future<void> resetDynamicBackgroundQuality() =>
+      setDynamicBackgroundQuality(kDynamicBackgroundQualityDefault);
+
   Future<void> setSurface(AppSurface value) async {
     if (surface == value) return;
     surface = value;
@@ -675,6 +697,43 @@ class AppState extends ChangeNotifier {
   String? collectionsError;
   int? _collectionsPendingUid;
 
+  /// All-time play counts, joined with song durations for 听歌排行.
+  List<TrackPlayStat> playStats = const <TrackPlayStat>[];
+  bool playStatsLoading = false;
+  String? playStatsError;
+  int? _playStatsUid;
+
+  /// Loads the play record once per account. The library asks for it lazily;
+  /// a guest never issues the request.
+  Future<void> loadPlayStats({bool force = false}) async {
+    final int uid = user.userId;
+    if (uid <= 0) {
+      playStats = const <TrackPlayStat>[];
+      playStatsError = null;
+      return;
+    }
+    if (playStatsLoading) return;
+    if (!force && _playStatsUid == uid && playStats.isNotEmpty) return;
+    _playStatsUid = uid;
+    playStatsLoading = true;
+    playStatsError = null;
+    notifyListeners();
+    try {
+      final List<TrackPlayStat> loaded = await catalog.playStats(uid);
+      if (user.userId != uid) return;
+      playStats = loaded;
+    } catch (_) {
+      if (user.userId == uid) {
+        playStatsError = '播放记录加载失败，请稍后重试。'; // i18n:key
+      }
+    } finally {
+      if (user.userId == uid) {
+        playStatsLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
   Future<void> refreshCollections({bool force = false}) async {
     final uid = user.userId;
     if (uid <= 0) {
@@ -765,6 +824,10 @@ class AppState extends ChangeNotifier {
       legacyUiAlpha = (prefs.getDouble('lazer_legacy_ui_alpha') ?? 0.7).clamp(
         0.4,
         1.0,
+      );
+      dynamicBackgroundQuality = normalizeDynamicBackgroundQuality(
+        prefs.getDouble('lazer_dynamic_background_quality') ??
+            kDynamicBackgroundQualityDefault,
       );
       uiMode = AppUiModeLabels.parse(prefs.getString('lazer_ui_mode'));
       final String? storedSurface = prefs.getString('lazer_surface');
@@ -1134,6 +1197,9 @@ class AppState extends ChangeNotifier {
     _likedSongIds = <int>{};
     likeError = null;
     _qrConfirmed = false;
+    playStats = const <TrackPlayStat>[];
+    playStatsError = null;
+    _playStatsUid = null;
     gateway.clearSession();
     unawaited(_forgetSession());
     unawaited(refreshHome());
@@ -1287,6 +1353,33 @@ class AppState extends ChangeNotifier {
     _repeat = LoopMode.off;
     _replaceQueue(tracks);
     unawaited(_ensureStationBuffer());
+  }
+
+  /// Starts the 心动 mode: a station seeded by the playing song.
+  ///
+  /// The official app replaces the list with intelligence recommendations and
+  /// asks for the next batch whenever the queue nears its end. The first batch
+  /// is seeded by the song that is playing; each later batch continues from
+  /// the last recommendation, so a refill advances the list instead of asking
+  /// for the same sample again.
+  Future<bool> startHeartMode() async {
+    final Playlist? liked = collections.liked;
+    if (liked == null) return false;
+    int? seed;
+    Future<List<Track>> load() async {
+      final int? currentSong = int.tryParse(current?.id ?? '');
+      final List<Track> batch = await catalog.heartModeTracks(
+        liked,
+        seedSongId: seed ?? currentSong,
+      );
+      if (batch.isNotEmpty) seed = int.tryParse(batch.last.id) ?? seed;
+      return batch;
+    }
+
+    final List<Track> first = await load();
+    if (first.isEmpty) return false;
+    playStationQueue(first, loadMore: load);
+    return true;
   }
 
   void _replaceQueue(List<Track> tracks, {int startIndex = 0}) {

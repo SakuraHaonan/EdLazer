@@ -339,7 +339,7 @@ void main() {
 
   testWidgets('the legacy settings expose every preference', (tester) async {
     // Tall enough that the lazy list builds every row, About included.
-    tester.view.physicalSize = const Size(1280, 3000);
+    tester.view.physicalSize = const Size(1280, 3400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final AppState state = AppState(catalog: _Catalog());
@@ -359,6 +359,7 @@ void main() {
       '自动调节 DPI 缩放',
       '背景',
       '内容不透明度',
+      '动态背景渲染精度',
       '主题',
       '语言',
       '震动反馈',
@@ -374,6 +375,10 @@ void main() {
       expect(find.text(label), findsOneWidget, reason: 'missing $label');
     }
     expect(find.text('70%'), findsOneWidget);
+    // The precision slider reads its stored percentage and reports the mesh
+    // that setting draws.
+    expect(find.text('80%'), findsOneWidget);
+    expect(find.textContaining('网格 22×14'), findsOneWidget);
     // DPI 100% and the default scroll acceleration both read 100%.
     expect(find.text('100%'), findsWidgets);
     final Finder aboutTile = find.ancestor(

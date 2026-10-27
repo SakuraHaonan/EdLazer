@@ -58,21 +58,69 @@ The large-screen mode is its own composition, not the desktop shell stretched:
   设置 / 正在播放 plus a magnifier, with the selected destination inverted
   (dark-on-light, light-on-dark) and the account avatar at the left. A back
   pill appears in front of the avatar while a detail is open;
-- **shelves** of large artwork: 为你打造 shortcuts, 精选推荐 cards whose
-  captions sit on a dark plate, 最近播放, 新发行, 排行榜, 猜你喜欢, 网易云编辑精选.
-  Four feature cards fit a 1080p panel; the fifth peeks in to advertise the
-  horizontal scroll;
-- a **library rail** (最近添加 / 播放列表 / 歌手 / 专辑 / 歌曲, then 本地音乐 and
-  我喜欢的音乐) beside a centred artwork grid;
-- a floating **transport dock**: a rounded card lifted off the bottom edge by
-  a shadow, with the playing metadata on the left (opens the player), the
-  previous / play / next controls centred, and like / queue / expand on the
-  right. The seek rail lives in the immersive player rather than here;
+- **shelves** of large artwork: 为你打造 shortcuts (four larger cards across,
+  drawn with the same edge-to-edge cover mosaic, gradient and two-line caption
+  as the 电台 strip, so the shortcut row reads as artwork rather than a second
+  navigation bar), 精选推荐 cards whose captions sit on a dark plate,
+  最近播放, 新发行, 排行榜 (the desktop/mobile chart shelf with its logo and
+  top three), 猜你喜欢, 网易云编辑精选. Four feature cards fit a 1080p panel;
+  the fifth peeks in to advertise the horizontal scroll;
+- a **library rail** (播放列表 / 歌手 / 歌曲, then 本地音乐 and 我喜欢的音乐)
+  beside a centred artwork grid;
+- a floating **transport card**: a rounded glass panel lifted off the bottom
+  edge by a shadow, with the playing metadata on the left (opens the player),
+  the previous / play / next controls centred, and like / queue / expand on
+  the right. The page scrolls underneath it, so pages reserve
+  `floatingBarInset` at the bottom. The seek rail lives in the immersive
+  player rather than here;
 - detail pages with a 256 dp hero and 64 dp track rows. Settings, local music
-  and comments reuse their existing controls at a larger reading measure.
+  and comments reuse their existing controls at a larger reading measure;
+- the library's **歌曲** pane syncs the account's all-time play record: each
+  recent row gains its play count, and the header shows the accumulated plays
+  and listening time (`TrackPlayStat`). A guest never issues the request.
 
-The immersive player (正在播放) is intentionally unchanged: it already owns the
-screen and its own focus model.
+The immersive player (正在播放) keeps its existing composition and controls. A
+track change dissolves the artwork (a 420 ms cross-fade) instead of sliding it.
+
+## Motion
+
+Large-screen motion is deliberately non-linear — fast first, slow on arrival:
+
+- **Page switches** cross-fade while the incoming page rises a few pixels over
+  320 ms, on a `Cubic(0.32, 0.72, 0, 1)` curve. The outgoing page is
+  ticker-muted, and the incoming page's own tickers wait until the switch
+  lands, so the transition is not competing with a dozen cover mosaics. A page
+  that has no work to reveal cannot be "dropped" for being late.
+- **Track changes in the player** dissolve the cover over 420 ms with a
+  symmetric ease-in-out and a 1.2% scale settle, so one artwork melts into the
+  next rather than sliding across.
+- **The player slide** keeps its 300 ms decelerating curve.
+
+## Performance
+
+- Large-screen lists cap their cache extent at 600 px (500 px for the artist
+  row) and disable automatic keep-alives; a focus bump-to-scroll still builds
+  the next row, but flinging does not retain a screenful of off-screen cards.
+- `ScrollTickerGate` mutes the browse page's mosaics while a shelf is scrolling
+  and for 160 ms after it settles.
+- Playback position ticks no longer rebuild the browse page: `LegacyShell`
+  filters state reports through a structural signature (track, playing, queue,
+  collections, play record, charts, surface) while a shelf page is visible. The
+  transport and player own their own `AppState` listeners.
+- `HomeActionShelf` and the 电台 strip share `FilledCoverCard`; the large-screen
+  variant only changes metrics (480 dp max width, 216 dp tall, 104 dp mosaic
+  tiles), not the renderer.
+
+## Heart mode
+
+心动模式 follows the official queue behaviour: the first batch is seeded by the
+liked playlist, then every refill is seeded by the song that is current when the
+request is made. `Catalog.heartModeTracks` calls the intelligence-list endpoint
+and `AppState.startHeartMode` installs the result as a station loader, which
+dedupes against everything already queued, appends batches as the queue nears
+its end, and falls back to the liked list when the service returns no
+recommendation. The queue is replaced (list loop is disabled) and the switch is
+announced with 已切换至心动模式.
 
 Metrics live in `LargeScreenMetrics` and the type ramp in `LargeScreenType`
 (`lib/tv/large_screen_widgets.dart`). The deck is a 40 dp display title, a
@@ -87,6 +135,7 @@ Metrics live in `LargeScreenMetrics` and the type ramp in `LargeScreenType`
 | `TvScope` | Publishes whether the remote model is active. Off a TV every helper collapses to its child. |
 | `LargeScreenTapTarget` | The large-screen control: `TvTapTarget` for the remote (focus stop, `ActivateIntent`, focus ring, slight lift) plus the pointer tap target the cards do not bring themselves. |
 | `TvFocusRegion` | Per-page focus anchor: the first actionable descendant takes focus when a page appears, a section changes or the player closes. It does not steal focus once the user has moved. |
+| `TvFocusHighlight` | Watches focus in a Material control subtree and paints the TV wash and ring around the whole settings row. It never becomes a focus stop, so dropdowns, switches and sliders keep their own key handling. |
 | `TvTraversalScope` | Installs `LargeScreenTraversalPolicy`. It must sit **inside** the route: MaterialApp's navigator puts its own traversal group around every page, so a group above the MaterialApp is never consulted. The shell therefore wraps its own tree. |
 
 `LargeScreenTraversalPolicy` follows the geometry rather than the build order:
@@ -114,7 +163,9 @@ Other remote behaviour:
 - **Queue** — Select on the transport's queue glyph opens the floating queue
   card; its rows and close button are focus stops.
 - **Settings** — every dropdown, switch, slider and swatch remains a focus
-  stop; the D-pad opens dropdowns and moves sliders.
+  stop. The row around the focused control lights up with the TV wash and ring
+  (`TvFocusHighlight`), because Material's own focus tint disappears at ten
+  feet; the D-pad opens dropdowns and moves sliders.
 
 ## Verification
 
@@ -122,9 +173,11 @@ Other remote behaviour:
 
 - the rename (`大屏幕模式`), and the television default with and without a stored
   surface choice;
-- the capsule, shelves, transport, library rail and search page rendering;
+- the capsule, shelves, transport, library rail and search page rendering,
+  including the library rail without 最近添加 / 专辑;
 - Select on the page's first focused card, and Up/Down crossing between content
   and the capsule;
+- the settings row wash and ring appearing around the focused Material control;
 - geometry-driven D-pad traversal (left/right in a row, down to the card below)
   and the bump-to-scroll fallback past the built children;
 - reflow at 1280×720 and at a phone-width 800×600 window.

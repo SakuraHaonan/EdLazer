@@ -110,8 +110,6 @@ String _countForFilter(
   LargeScreenLibraryFilter.songs => _countSongs(context, count),
   LargeScreenLibraryFilter.playlists => _countPlaylists(context, count),
   LargeScreenLibraryFilter.artists => _countArtists(context, count),
-  LargeScreenLibraryFilter.albums ||
-  LargeScreenLibraryFilter.recentlyAdded => _countAlbums(context, count),
 };
 
 // ---------------------------------------------------------------------------
@@ -162,6 +160,28 @@ class _LargeScreenHomePageState extends State<LargeScreenHomePage> {
     }
   }
 
+  Future<void> _startHeartMode() async {
+    if (_startingStation) return;
+    setState(() => _startingStation = true);
+    try {
+      final bool started = await _state.startHeartMode();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr(started ? '已切换至心动模式' : '暂时没有可播放的歌曲')),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.tr('播放队列加载失败，请稍后重试'))));
+      }
+    } finally {
+      if (mounted) setState(() => _startingStation = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final HomeFeed? feed = _state.home;
@@ -179,12 +199,19 @@ class _LargeScreenHomePageState extends State<LargeScreenHomePage> {
       );
     }
     final double width = MediaQuery.sizeOf(context).width;
+    final double inset = LargeScreenMetrics.pageInset(width);
     final double featureWidth = LargeScreenMetrics.featureCardWidth(width);
     final double artWidth = LargeScreenMetrics.artworkCardWidth(width);
-    final double chartWidth = (artWidth * 1.34).clamp(238.0, 318.0);
     final List<Track> recent = _state.recentTracks;
     final List<Playlist> recommendations = _uniquePlaylists(feed.recommended);
     final List<MusicChart> charts = _state.discoveryCharts;
+    // The mosaic on the 为你打造 cards uses the same cover pool as the desktop
+    // home: recent tracks, today's picks and the recommended albums.
+    final List<String?> covers = <String?>[
+      ...recent.map((Track track) => track.coverUrl),
+      ...feed.quick.map((Track track) => track.coverUrl),
+      ...feed.albums.map((Album album) => album.coverUrl),
+    ];
 
     final List<_FeatureEntry> features = <_FeatureEntry>[];
     final Set<String> seen = <String>{};
@@ -262,24 +289,41 @@ class _LargeScreenHomePageState extends State<LargeScreenHomePage> {
     }
 
     addSection(
-      LargeScreenShelf(
-        title: '为你打造',
-        height: 148,
-        itemCount: 4,
-        itemBuilder: (BuildContext context, int index) {
-          final _ActionEntry action = _actions(context)[index];
-          return LargeScreenActionTile(
-            width: (LargeScreenMetrics.featureCardWidth(width) * 1.06).clamp(
-              240.0,
-              400.0,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: inset),
+            child: const LargeScreenSectionHeader(title: '为你打造'),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: inset),
+            // The same filled card as the 电台 strip, on every platform: the
+            // cover mosaic and the two caption lines fill the whole tile. A
+            // guest gets the login sheet instead of a dead tile, and keeping
+            // the top shelf actionable also gives the page a focus anchor.
+            child: HomeActionShelf(
+              busy: _startingStation,
+              covers: covers,
+              large: true,
+              onDaily: !_state.signedIn
+                  ? () => unawaited(showLegacyLoginDialog(context, _state))
+                  : feed.quick.isEmpty
+                  ? null
+                  : () => _state.playQueue(feed.quick),
+              onFm: _state.signedIn
+                  ? () => _playStation(_state.catalog.personalFmTracks)
+                  : () => unawaited(showLegacyLoginDialog(context, _state)),
+              onHeart: !_state.signedIn
+                  ? () => unawaited(showLegacyLoginDialog(context, _state))
+                  : _state.collections.liked == null
+                  ? null
+                  : () => unawaited(_startHeartMode()),
+              onReplay: recent.isEmpty ? null : () => _state.playQueue(recent),
             ),
-            title: action.title,
-            subtitle: action.subtitle,
-            icon: action.icon,
-            colors: action.colors,
-            onTap: _startingStation ? null : action.onTap,
-          );
-        },
+          ),
+        ],
       ),
     );
 
@@ -347,27 +391,37 @@ class _LargeScreenHomePageState extends State<LargeScreenHomePage> {
       );
     }
 
-    if (charts.isNotEmpty) {
-      addSection(
-        LargeScreenShelf(
-          title: '排行榜',
-          height: 172,
-          itemCount: charts.length,
-          itemBuilder: (BuildContext context, int index) {
-            final MusicChart chart = charts[index];
-            return LargeScreenChartCard(
-              width: chartWidth,
-              title: chart.title,
-              source: chart.source,
-              issueLabel: chart.issueLabel,
-              accent: chart.accent,
-              logoUrl: chart.logoUrl,
-              onTap: () => widget.actions.onOpenChart(chart),
-            );
-          },
-        ),
-      );
-    }
+    addSection(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: inset),
+            child: const LargeScreenSectionHeader(title: '排行榜'),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: inset),
+            // The chart shelf keeps the desktop/mobile card: a cover mosaic,
+            // the board logo and its top three rows, with the same paging
+            // behaviour; the loading card is the shared one too.
+            child: charts.isNotEmpty
+                ? ChartShelf(
+                    charts: charts,
+                    onOpen: widget.actions.onOpenChart,
+                    large: true,
+                  )
+                : ChartLoadCard(
+                    loading: _state.discoveryChartsLoading,
+                    message: _state.discoveryChartsError,
+                    large: true,
+                    onRetry: () =>
+                        unawaited(_state.refreshDiscoveryCharts(force: true)),
+                  ),
+          ),
+        ],
+      ),
+    );
 
     if (recommendations.isNotEmpty) {
       addSection(
@@ -413,63 +467,19 @@ class _LargeScreenHomePageState extends State<LargeScreenHomePage> {
       );
     }
 
-    return SingleChildScrollView(
-      key: const PageStorageKey<String>('large-screen-home'),
-      padding: const EdgeInsets.only(top: 18, bottom: 34),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: sections,
+    return ScrollTickerGate(
+      child: SingleChildScrollView(
+        key: const PageStorageKey<String>('large-screen-home'),
+        padding: const EdgeInsets.only(
+          top: 18,
+          bottom: LargeScreenMetrics.floatingBarInset,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: sections,
+        ),
       ),
     );
-  }
-
-  List<_ActionEntry> _actions(BuildContext context) {
-    VoidCallback? signIn() =>
-        () => unawaited(showLegacyLoginDialog(context, _state));
-    return <_ActionEntry>[
-      _ActionEntry(
-        title: '每日推荐',
-        subtitle: '今日限定好歌',
-        icon: Icons.calendar_today_rounded,
-        colors: const <Color>[Color(0xFFFF375F), Color(0xFFFF7A45)],
-        onTap: !_state.signedIn
-            ? signIn()
-            : (_state.home?.quick.isEmpty ?? true)
-            ? null
-            : () => _state.playQueue(_state.home!.quick),
-      ),
-      _ActionEntry(
-        title: '私人漫游',
-        subtitle: '发现没听过的音乐',
-        icon: Icons.waves_rounded,
-        colors: const <Color>[Color(0xFF7357FF), Color(0xFF35A7FF)],
-        onTap: _state.signedIn
-            ? () => _playStation(_state.catalog.personalFmTracks)
-            : signIn(),
-      ),
-      _ActionEntry(
-        title: '心动模式',
-        subtitle: '红心与相似推荐',
-        icon: Icons.favorite_rounded,
-        colors: const <Color>[Color(0xFFE5488A), Color(0xFF8C52FF)],
-        onTap: !_state.signedIn
-            ? signIn()
-            : _state.collections.liked == null
-            ? null
-            : () => _playStation(
-                () => _state.catalog.heartModeTracks(_state.collections.liked!),
-              ),
-      ),
-      _ActionEntry(
-        title: '反复聆听',
-        subtitle: '回到你爱的歌',
-        icon: Icons.replay_rounded,
-        colors: const <Color>[Color(0xFF087E8B), Color(0xFF42C98B)],
-        onTap: _state.recentTracks.isEmpty
-            ? null
-            : () => _state.playQueue(_state.recentTracks),
-      ),
-    ];
   }
 }
 
@@ -489,41 +499,17 @@ class _FeatureEntry {
   final IconData icon;
 }
 
-class _ActionEntry {
-  const _ActionEntry({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.colors,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final List<Color> colors;
-  final VoidCallback? onTap;
-}
-
 // ---------------------------------------------------------------------------
 // 资料库
 // ---------------------------------------------------------------------------
 
 /// The library categories shown in the rail.
-enum LargeScreenLibraryFilter {
-  recentlyAdded,
-  playlists,
-  artists,
-  albums,
-  songs,
-}
+enum LargeScreenLibraryFilter { playlists, artists, songs }
 
 extension LargeScreenLibraryFilterLabels on LargeScreenLibraryFilter {
   String get label => switch (this) {
-    LargeScreenLibraryFilter.recentlyAdded => '最近添加',
     LargeScreenLibraryFilter.playlists => '播放列表',
     LargeScreenLibraryFilter.artists => '歌手',
-    LargeScreenLibraryFilter.albums => '专辑',
     LargeScreenLibraryFilter.songs => '歌曲',
   };
 }
@@ -535,7 +521,7 @@ class LargeScreenLibraryPage extends StatefulWidget {
     super.key,
     required this.state,
     required this.actions,
-    this.initialFilter = LargeScreenLibraryFilter.recentlyAdded,
+    this.initialFilter = LargeScreenLibraryFilter.playlists,
   });
 
   final AppState state;
@@ -548,6 +534,15 @@ class LargeScreenLibraryPage extends StatefulWidget {
 
 class _LargeScreenLibraryPageState extends State<LargeScreenLibraryPage> {
   late LargeScreenLibraryFilter _filter = widget.initialFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh from the cloud whenever the library is opened: the play record
+    // is the account's source of truth, and a listen on another device should
+    // show up here too.
+    unawaited(widget.state.loadPlayStats(force: true));
+  }
 
   @override
   void didUpdateWidget(covariant LargeScreenLibraryPage oldWidget) {
@@ -576,6 +571,19 @@ class _LargeScreenLibraryPageState extends State<LargeScreenLibraryPage> {
     ]);
     final List<Track> songs = widget.state.recentTracks;
     final List<ArtistRef> artists = _artistsFrom(songs, albums);
+    final Map<String, int> playCounts = <String, int>{
+      for (final TrackPlayStat stat in widget.state.playStats)
+        stat.songId: stat.playCount,
+    };
+    final int totalPlays = widget.state.playStats.fold<int>(
+      0,
+      (int sum, TrackPlayStat stat) => sum + stat.playCount,
+    );
+    final Duration totalListenTime = widget.state.playStats.fold<Duration>(
+      Duration.zero,
+      (Duration sum, TrackPlayStat stat) =>
+          sum + stat.duration * stat.playCount,
+    );
     final double width = MediaQuery.sizeOf(context).width;
     final double rail = LargeScreenMetrics.railWidth(width);
     return Row(
@@ -597,10 +605,12 @@ class _LargeScreenLibraryPageState extends State<LargeScreenLibraryPage> {
             child: _LibraryPane(
               filter: _filter,
               playlists: playlists,
-              albums: albums,
               artists: artists,
               songs: songs,
               actions: widget.actions,
+              playCounts: playCounts,
+              totalPlays: totalPlays,
+              totalListenTime: totalListenTime,
             ),
           ),
         ),
@@ -629,7 +639,12 @@ class _LibraryRail extends StatelessWidget {
     );
     return SingleChildScrollView(
       key: const PageStorageKey<String>('large-screen-library-rail'),
-      padding: EdgeInsets.fromLTRB(inset, 20, 18, 30),
+      padding: EdgeInsets.fromLTRB(
+        inset,
+        20,
+        18,
+        LargeScreenMetrics.floatingBarInset,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -765,28 +780,37 @@ class _LibraryPane extends StatelessWidget {
   const _LibraryPane({
     required this.filter,
     required this.playlists,
-    required this.albums,
     required this.artists,
     required this.songs,
     required this.actions,
+    required this.playCounts,
+    required this.totalPlays,
+    required this.totalListenTime,
   });
 
   final LargeScreenLibraryFilter filter;
   final List<Playlist> playlists;
-  final List<Album> albums;
   final List<ArtistRef> artists;
   final List<Track> songs;
   final LargeScreenActions actions;
+  final Map<String, int> playCounts;
+  final int totalPlays;
+  final Duration totalListenTime;
 
   @override
   Widget build(BuildContext context) {
     final int count = switch (filter) {
-      LargeScreenLibraryFilter.recentlyAdded ||
-      LargeScreenLibraryFilter.albums => albums.length,
       LargeScreenLibraryFilter.playlists => playlists.length,
       LargeScreenLibraryFilter.artists => artists.length,
       LargeScreenLibraryFilter.songs => songs.length,
     };
+    final String hours = (totalListenTime.inMinutes / 60).toStringAsFixed(1);
+    final String? subtitle =
+        filter == LargeScreenLibraryFilter.songs && playCounts.isNotEmpty
+        ? context.tr('累计播放 $totalPlays 次 · $hours 小时')
+        : count == 0
+        ? null
+        : _countForFilter(context, filter, count);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -799,9 +823,7 @@ class _LibraryPane extends StatelessWidget {
           ),
           child: LargeScreenSectionHeader(
             title: filter.label,
-            subtitle: count == 0
-                ? null
-                : _countForFilter(context, filter, count),
+            subtitle: subtitle,
           ),
         ),
         Expanded(child: _body(context)),
@@ -817,17 +839,32 @@ class _LibraryPane extends StatelessWidget {
         }
         return ListView.builder(
           key: const PageStorageKey<String>('large-screen-library-songs'),
-          padding: const EdgeInsets.fromLTRB(10, 0, 24, 34),
+          padding: const EdgeInsets.fromLTRB(
+            10,
+            0,
+            24,
+            LargeScreenMetrics.floatingBarInset,
+          ),
           itemCount: songs.length,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
+          scrollCacheExtent: const ScrollCacheExtent.pixels(600),
+          addAutomaticKeepAlives: false,
           itemBuilder: (BuildContext context, int index) {
             final Track track = songs[index];
+            final int? plays = playCounts[track.id];
             return LargeScreenTrackRow(
               index: index,
               title: track.title,
               artist: track.artist,
               imageUrl: track.coverUrl,
               duration: track.duration,
+              trailing: plays == null
+                  ? null
+                  : Text(
+                      context.tr('播放 $plays 次'),
+                      style: LargeScreenType.rowMeta(
+                        context,
+                      ).copyWith(fontSize: 14),
+                    ),
               onTap: () => actions.onPlayTracks(songs, index),
             );
           },
@@ -875,29 +912,6 @@ class _LibraryPane extends StatelessWidget {
             );
           },
         );
-      case LargeScreenLibraryFilter.recentlyAdded:
-      case LargeScreenLibraryFilter.albums:
-        if (albums.isEmpty) {
-          return const LargeScreenNotice(
-            message: '还没有专辑',
-            icon: Icons.album_rounded,
-          );
-        }
-        return _ArtworkGrid(
-          itemCount: albums.length,
-          builder: (BuildContext context, int index, double cell) {
-            final Album album = albums[index];
-            return LargeScreenMediaCard(
-              width: cell,
-              title: album.title,
-              subtitle: album.artist,
-              imageUrl: album.coverUrl,
-              icon: Icons.album_rounded,
-              centerCaption: true,
-              onTap: () => actions.onOpenAlbum(album),
-            );
-          },
-        );
     }
   }
 }
@@ -923,7 +937,12 @@ class _ArtworkGrid extends StatelessWidget {
         );
         final double cell = (available - (columns - 1) * gap) / columns;
         return GridView.builder(
-          padding: EdgeInsets.fromLTRB(14, 0, rightInset, 36),
+          padding: EdgeInsets.fromLTRB(
+            14,
+            0,
+            rightInset,
+            LargeScreenMetrics.floatingBarInset,
+          ),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
             crossAxisSpacing: gap,
@@ -931,7 +950,8 @@ class _ArtworkGrid extends StatelessWidget {
             mainAxisExtent: cell + 96,
           ),
           itemCount: itemCount,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
+          scrollCacheExtent: const ScrollCacheExtent.pixels(600),
+          addAutomaticKeepAlives: false,
           itemBuilder: (BuildContext context, int index) =>
               builder(context, index, cell),
         );
@@ -1154,6 +1174,7 @@ class _LargeScreenCollectionPageState extends State<LargeScreenCollectionPage> {
             padding: EdgeInsets.symmetric(horizontal: inset),
             sliver: SliverList.builder(
               itemCount: tracks.length,
+              addAutomaticKeepAlives: false,
               itemBuilder: (BuildContext context, int index) {
                 final Track track = tracks[index];
                 return LargeScreenTrackRow(
@@ -1170,7 +1191,9 @@ class _LargeScreenCollectionPageState extends State<LargeScreenCollectionPage> {
               },
             ),
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: 40)),
+        const SliverToBoxAdapter(
+          child: SizedBox(height: LargeScreenMetrics.floatingBarInset),
+        ),
       ],
     );
   }
@@ -1314,7 +1337,12 @@ class _LargeScreenArtistPageState extends State<LargeScreenArtistPage> {
     );
     return SingleChildScrollView(
       key: PageStorageKey<String>('large-screen-artist-${artist.id}'),
-      padding: EdgeInsets.fromLTRB(inset, 22, inset, 36),
+      padding: EdgeInsets.fromLTRB(
+        inset,
+        22,
+        inset,
+        LargeScreenMetrics.floatingBarInset,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -1374,7 +1402,8 @@ class _LargeScreenArtistPageState extends State<LargeScreenArtistPage> {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: _albums.length,
-                  scrollCacheExtent: const ScrollCacheExtent.pixels(1200),
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(500),
+                  addAutomaticKeepAlives: false,
                   itemBuilder: (BuildContext context, int index) {
                     final Album album = _albums[index];
                     return Padding(
@@ -1563,6 +1592,7 @@ class _LargeScreenChartPageState extends State<LargeScreenChartPage> {
           padding: EdgeInsets.symmetric(horizontal: inset),
           sliver: SliverList.builder(
             itemCount: _chart.entries.length,
+            addAutomaticKeepAlives: false,
             itemBuilder: (BuildContext context, int index) {
               final ChartEntry entry = _chart.entries[index];
               final Track? track = entry.track;
@@ -1595,7 +1625,9 @@ class _LargeScreenChartPageState extends State<LargeScreenChartPage> {
             },
           ),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 40)),
+        const SliverToBoxAdapter(
+          child: SizedBox(height: LargeScreenMetrics.floatingBarInset),
+        ),
       ],
     );
   }
@@ -1760,9 +1792,15 @@ class _LargeScreenSearchPageState extends State<LargeScreenSearchPage> {
           return const LargeScreenNotice(message: '暂无歌曲');
         }
         return ListView.builder(
-          padding: EdgeInsets.fromLTRB(inset - 8, 0, inset, 30),
+          padding: EdgeInsets.fromLTRB(
+            inset - 8,
+            0,
+            inset,
+            LargeScreenMetrics.floatingBarInset,
+          ),
           itemCount: _results.tracks.length,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
+          scrollCacheExtent: const ScrollCacheExtent.pixels(600),
+          addAutomaticKeepAlives: false,
           itemBuilder: (BuildContext context, int index) {
             final Track track = _results.tracks[index];
             return LargeScreenTrackRow(
@@ -1866,7 +1904,12 @@ class _SearchGrid extends StatelessWidget {
         );
         final double cell = (available - (columns - 1) * gap) / columns;
         return GridView.builder(
-          padding: EdgeInsets.fromLTRB(inset, 0, inset, 30),
+          padding: EdgeInsets.fromLTRB(
+            inset,
+            0,
+            inset,
+            LargeScreenMetrics.floatingBarInset,
+          ),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
             crossAxisSpacing: gap,
@@ -1874,7 +1917,8 @@ class _SearchGrid extends StatelessWidget {
             mainAxisExtent: cell + 96,
           ),
           itemCount: itemCount,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
+          scrollCacheExtent: const ScrollCacheExtent.pixels(600),
+          addAutomaticKeepAlives: false,
           itemBuilder: (BuildContext context, int index) =>
               builder(context, index, cell),
         );
@@ -1896,21 +1940,28 @@ class LargeScreenReusedPage extends StatelessWidget {
     required this.child,
     this.maxWidth = 1180,
     this.textScale = 1.16,
+    this.bottomInset = 0,
   });
 
   final Widget child;
   final double maxWidth;
   final double textScale;
 
+  /// Room kept clear for the floating transport strip.
+  final double bottomInset;
+
   @override
   Widget build(BuildContext context) {
     final MediaQueryData media = MediaQuery.of(context);
     return MediaQuery(
       data: media.copyWith(textScaler: TextScaler.linear(textScale)),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: child,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: child,
+          ),
         ),
       ),
     );
@@ -1930,6 +1981,7 @@ class LargeScreenSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LargeScreenReusedPage(
     maxWidth: 980,
+    bottomInset: LargeScreenMetrics.floatingBarInset,
     child: LegacySettingsPage(state: state, onOpenLocalMusic: onOpenLocalMusic),
   );
 }
@@ -1942,6 +1994,7 @@ class LargeScreenLocalMusicPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LargeScreenReusedPage(
     maxWidth: 1240,
+    bottomInset: LargeScreenMetrics.floatingBarInset,
     child: LocalMusicPage(state: state),
   );
 }
@@ -1974,6 +2027,7 @@ class LargeScreenCommentsPage extends StatelessWidget {
           child: LargeScreenReusedPage(
             maxWidth: 1180,
             textScale: 1.12,
+            bottomInset: LargeScreenMetrics.floatingBarInset,
             child: SongCommentsView(
               state: state,
               track: track,

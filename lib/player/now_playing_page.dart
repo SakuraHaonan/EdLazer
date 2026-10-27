@@ -386,10 +386,12 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
         const InlineLabel('歌词'),
         const SizedBox(height: AppSpacing.md),
         Expanded(
-          child: LyricViewport(
-            state: widget.state,
-            backdropKey: _backdropKey,
-            onSelectionChanged: _selectionChanged,
+          child: _settledGate(
+            LyricViewport(
+              state: widget.state,
+              backdropKey: _backdropKey,
+              onSelectionChanged: _selectionChanged,
+            ),
           ),
         ),
       ],
@@ -444,6 +446,21 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       if (mounted) setState(() => _saving = false);
       _armHide();
     }
+  }
+
+  /// Holds the lyric engine still until the entrance has landed.
+  ///
+  /// The lyric canvas is the most expensive painter in the player — one
+  /// blurred layer per visible row, all of them re-blurred whenever the words
+  /// move — and the entrance slide re-rasterises the whole page on every
+  /// frame. Muting its ticker for those 300 ms removes the two costs from the
+  /// same frame budget; the rows are already laid out, so nothing jumps when
+  /// it resumes. The gate owns the viewport as a plain child, so unmuting
+  /// rebuilds one `TickerMode` node instead of the page.
+  Widget _settledGate(Widget child) {
+    final ValueListenable<bool>? settled = widget.entranceSettled;
+    if (settled == null) return child;
+    return _EntranceTickerGate(settled: settled, child: child);
   }
 
   Widget _cover(Track track) => Semantics(
@@ -568,6 +585,14 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                   mode: LegacyBackgroundMode.nowPlayingDynamic,
                   pageColor: Colors.black,
                   animationsEnabled: settled,
+                  // Reads the live preference: the shell rebuilds this page on
+                  // every state report, so dragging the slider is reflected on
+                  // the next frame instead of on the next opening.
+                  quality: widget.state.dynamicBackgroundQuality,
+                  // The slide re-executes the whole page display list once per
+                  // frame; a single gradient instead of the warped mesh keeps
+                  // those frames affordable.
+                  preview: !settled,
                 ),
               ),
               if (track == null)
@@ -598,10 +623,12 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                               state: widget.state,
                               track: track,
                               artwork: _cover(track),
-                              lyrics: LyricViewport(
-                                state: widget.state,
-                                backdropKey: _backdropKey,
-                                onSelectionChanged: _selectionChanged,
+                              lyrics: _settledGate(
+                                LyricViewport(
+                                  state: widget.state,
+                                  backdropKey: _backdropKey,
+                                  onSelectionChanged: _selectionChanged,
+                                ),
                               ),
                               comments: SongCommentsView(
                                 state: widget.state,
@@ -1105,6 +1132,25 @@ class _EmptyNowPlaying extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Mutes its subtree's tickers until [settled] reports true.
+///
+/// Same shape as [_EntranceGatedBackdrop]: the child is built once and handed
+/// in, so flipping the flag rebuilds this node and nothing below it.
+class _EntranceTickerGate extends StatelessWidget {
+  const _EntranceTickerGate({required this.settled, required this.child});
+
+  final ValueListenable<bool> settled;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: settled,
+    builder: (BuildContext context, bool value, Widget? child) =>
+        TickerMode(enabled: value, child: child!),
+    child: child,
+  );
 }
 
 /// Rebuilds only the backdrop when the entrance settles.

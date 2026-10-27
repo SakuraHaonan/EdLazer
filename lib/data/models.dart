@@ -1,6 +1,22 @@
 /// Models presented by the player, mapped from the gateway response.
 library;
 
+/// One row of the listener's play record, as returned by the gateway.
+///
+/// [playCount] is the number of plays the official app shows in 听歌排行;
+/// [duration] lets a list turn it into the accumulated listening time.
+class TrackPlayStat {
+  const TrackPlayStat({
+    required this.songId,
+    required this.playCount,
+    required this.duration,
+  });
+
+  final String songId;
+  final int playCount;
+  final Duration duration;
+}
+
 class ArtistRef {
   const ArtistRef({required this.id, required this.name, this.coverUrl});
   final int id;

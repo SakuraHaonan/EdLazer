@@ -263,13 +263,13 @@ class _NavBackButton extends StatelessWidget {
   }
 }
 
-/// The floating transport dock.
+/// The floating transport card.
 ///
 /// It keeps the things a listener reaches for from a sofa: what is playing
 /// (open the player), previous/play/next in the centre, and like / queue /
-/// expand on the right. It is a rounded card lifted off the bottom edge by a
-/// shadow, not a bar welded to the panel; the seek rail lives in the player,
-/// where there is room for it.
+/// expand on the right. The strip itself is a rounded translucent card with a
+/// soft shadow: it floats over the page, so the artwork scrolled underneath
+/// stays part of the canvas. The seek rail lives in the player.
 class LargeScreenTransport extends StatelessWidget {
   const LargeScreenTransport({
     super.key,
@@ -288,7 +288,7 @@ class LargeScreenTransport extends StatelessWidget {
     );
     final BorderRadius radius = BorderRadius.circular(26);
     return Padding(
-      padding: EdgeInsets.fromLTRB(inset, 4, inset, 16),
+      padding: EdgeInsets.symmetric(horizontal: inset),
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: radius,
@@ -323,7 +323,7 @@ class LargeScreenTransport extends StatelessWidget {
                   child: Row(
                     children: <Widget>[
                       // Equal flex on both sides keeps the transport controls
-                      // on the bar's centre line, not merely in the gap the
+                      // on the screen's centre line, not merely in the gap the
                       // artwork and actions happen to leave.
                       Expanded(
                         child: _TransportMeta(state: state, onOpen: onOpen),

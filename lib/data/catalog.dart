@@ -193,7 +193,7 @@ class Catalog {
       _homeError = null;
       return _home;
     } catch (_) {
-      _homeError = '曲库加载失败，请检查网络后重试。';  // i18n:key
+      _homeError = '曲库加载失败，请检查网络后重试。'; // i18n:key
       return _home = null;
     }
   }
@@ -323,10 +323,10 @@ class Catalog {
     );
     _online = firstFailure == null || !feed.isEmpty;
     if (feed.isEmpty && firstFailure != null) {
-      _homeError = '曲库加载失败，请检查网络后重试。';  // i18n:key
+      _homeError = '曲库加载失败，请检查网络后重试。'; // i18n:key
       _home = null;
     } else {
-      if (feed.isEmpty) _homeError = '当前没有可展示的音乐。';  // i18n:key
+      if (feed.isEmpty) _homeError = '当前没有可展示的音乐。'; // i18n:key
       _home = feed;
     }
     return _home;
@@ -512,21 +512,53 @@ class Catalog {
     },
   );
 
-  Future<List<Track>> heartModeTracks(Playlist liked) async {
+  /// The 心动 mode queue.
+  ///
+  /// The official app seeds the intelligence list with the song that is
+  /// playing, asks for a batch, and keeps doing that as the queue advances;
+  /// the station loader in [AppState] dedupes and appends those batches. The
+  /// liked playlist only supplies the seed when nothing is playing yet and
+  /// acts as the fallback when the service has no recommendation.
+  Future<List<Track>> heartModeTracks(
+    Playlist liked, {
+    int? seedSongId,
+    int count = 30,
+  }) async {
     final int playlistId = int.tryParse(liked.id) ?? 0;
     if (playlistId <= 0) return const <Track>[];
-    final List<Track> likedTracks = await playlistTracks(liked.id);
-    if (likedTracks.isEmpty) return const <Track>[];
-    final int songId = int.tryParse(likedTracks.first.id) ?? 0;
+    // The liked list is only needed to pick a seed when nothing is playing
+    // yet; a refill seeded by the current song must not re-download it.
+    List<Track> likedTracks = const <Track>[];
+    if (seedSongId == null) {
+      likedTracks = await playlistTracks(liked.id);
+      if (likedTracks.isEmpty) return const <Track>[];
+    }
+    final int songId = seedSongId ?? int.tryParse(likedTracks.first.id) ?? 0;
     if (songId <= 0) return likedTracks;
     final generated = await gateway.intelligenceList(
       songId: songId,
       playlistId: playlistId,
-      count: 30,
+      count: count,
     );
-    return generated.isEmpty
-        ? likedTracks
-        : generated.map(trackFromSong).toList();
+    if (generated.isNotEmpty) return generated.map(trackFromSong).toList();
+    if (likedTracks.isEmpty) {
+      likedTracks = await playlistTracks(liked.id);
+    }
+    return likedTracks;
+  }
+
+  /// The listener's play record, joined with each song's duration.
+  Future<List<TrackPlayStat>> playStats(int uid) async {
+    if (uid <= 0) return const <TrackPlayStat>[];
+    final records = await gateway.playRecord(uid);
+    return <TrackPlayStat>[
+      for (final record in records)
+        TrackPlayStat(
+          songId: '${record.song.id}',
+          playCount: record.playCount,
+          duration: record.song.duration,
+        ),
+    ];
   }
 
   Future<List<Track>> artistStationTracks(ArtistRef seed) async {
@@ -803,7 +835,9 @@ class Catalog {
     try {
       final Map<String, dynamic> body = await gateway.playlistDetail(id);
       final dynamic rawPlaylist = body['playlist'];
-      if (rawPlaylist is! Map<String, dynamic>) throw StateError('歌单数据不可用。');  // i18n:key
+      if (rawPlaylist is! Map<String, dynamic>) {
+        throw StateError('歌单数据不可用。'); // i18n:key
+      }
       final GatewayPlaylist playlist = GatewayPlaylist.fromJson(rawPlaylist);
       final List<GatewaySong> ordered = <GatewaySong>[];
       if (playlist.trackIds.isNotEmpty) {
@@ -1334,7 +1368,7 @@ class Catalog {
       artists: album.artists.map(artistFromGateway).toList(),
       year: year,
       coverSeed: _seedFrom(album.id),
-      note: album.trackCount > 0 ? '${album.trackCount} 首曲目' : '',  // i18n:key
+      note: album.trackCount > 0 ? '${album.trackCount} 首曲目' : '', // i18n:key
       accent: _accentFrom(album.id),
       trackCount: album.trackCount > 0 ? album.trackCount : null,
       coverUrl: album.coverUrl,

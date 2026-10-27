@@ -52,10 +52,6 @@ List<Color> normalizeFlowPalette(List<Color> colors) {
   return List<Color>.generate(5, (int i) => colors[i % colors.length]);
 }
 
-/// Resolution of the GPU-style mesh used by the AMLL-derived cover flow.
-const int _meshColumns = 28;
-const int _meshRows = 18;
-
 /// The animated album-colour renderer.
 ///
 /// This is a Flutter port of AMLL's `MeshGradientRenderer`: a dense triangle
@@ -73,6 +69,8 @@ class AlbumFlowBackground extends StatefulWidget {
     this.animated = true,
     this.solid = false,
     this.cornerRadius = 0,
+    this.quality = kDynamicBackgroundQualityDefault,
+    this.preview = false,
   });
 
   final List<Color> colors;
@@ -88,6 +86,19 @@ class AlbumFlowBackground extends StatefulWidget {
 
   final double cornerRadius;
 
+  /// `动态背景渲染精度`, 0.1 … 1.0: the mesh density and update cadence this
+  /// canvas runs at. See [DynamicBackgroundPrecision].
+  final double quality;
+
+  /// Paints one vertical ramp instead of the warped mesh.
+  ///
+  /// The player is slid in and out as a full-window layer, and every frame of
+  /// that slide re-executes the page's display list. A single gradient keeps
+  /// that frame affordable; the real mesh takes over the moment the page
+  /// stops moving, using the same five colours, so the handover is a warp
+  /// appearing rather than a colour change.
+  final bool preview;
+
   @override
   State<AlbumFlowBackground> createState() => _AlbumFlowBackgroundState();
 }
@@ -99,9 +110,12 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
   /// The mesh drifts on a ten-second time base: over one 120 fps frame the
   /// change is a fraction of a percent of the warp. Re-rendering it at the
   /// display rate therefore buys nothing visible while spending the whole
-  /// frame budget; a steady 30 updates per second is indistinguishable and
-  /// leaves the UI thread free for page and lyric motion.
-  static const Duration _frameInterval = Duration(milliseconds: 33);
+  /// frame budget. The cadence actually used comes from the `动态背景渲染精度`
+  /// setting — 100 ms per update at 0.1, 33 ms at 1.0 — and never faster than
+  /// that, which leaves the UI thread free for page and lyric motion.
+  late DynamicBackgroundPrecision _precision = DynamicBackgroundPrecision.of(
+    widget.quality,
+  );
 
   late List<Color> _from = normalizeFlowPalette(widget.colors);
   late List<Color> _to = _from;
@@ -145,7 +159,9 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
 
   void _onPaletteFrame() {
     final int now = _paletteClock.elapsedMicroseconds;
-    if (now - _lastPaletteFrameUs < _frameInterval.inMicroseconds) return;
+    if (now - _lastPaletteFrameUs < _precision.frameInterval.inMicroseconds) {
+      return;
+    }
     _lastPaletteFrameUs = now;
     _frames.value++;
   }
@@ -182,8 +198,22 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
         _palette.forward(from: 0);
       }
     }
+    final DynamicBackgroundPrecision precision = DynamicBackgroundPrecision.of(
+      widget.quality,
+    );
+    if (precision != _precision) {
+      _precision = precision;
+      // The timer period is fixed when it starts: drop it and start the lane
+      // again so the new cadence applies immediately instead of on the next
+      // rebuild.
+      _timer?.cancel();
+      _timer = null;
+      _syncPlayback();
+      _frames.value++;
+    }
     if (oldWidget.animated != widget.animated ||
-        oldWidget.solid != widget.solid) {
+        oldWidget.solid != widget.solid ||
+        oldWidget.preview != widget.preview) {
       _syncPlayback();
     }
   }
@@ -214,7 +244,7 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
           ..reset()
           ..start();
         _lastAdvance = Duration.zero;
-        _timer = Timer.periodic(_frameInterval, (_) => _advance());
+        _timer = Timer.periodic(_precision.frameInterval, (_) => _advance());
       }
     } else {
       _timer?.cancel();
@@ -265,6 +295,9 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
             phase: () => _phase,
             veil: widget.veil,
             solid: widget.solid,
+            preview: widget.preview,
+            columns: _precision.columns,
+            rows: _precision.rows,
             // The palette controller reports through [_onPaletteFrame], so
             // the painter only follows the throttled mesh lane.
             repaint: _frames,
@@ -293,6 +326,9 @@ class _FlowPainter extends CustomPainter {
     required this.phase,
     required this.veil,
     required this.solid,
+    required this.preview,
+    required this.columns,
+    required this.rows,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
@@ -300,26 +336,37 @@ class _FlowPainter extends CustomPainter {
   final double Function() phase;
   final Color veil;
   final bool solid;
+  final bool preview;
 
-  static const int _columns = _meshColumns;
-  static const int _rows = _meshRows;
-  static const int _vertexCount = (_columns + 1) * (_rows + 1);
+  /// Mesh quads across and down; `动态背景渲染精度` scales them.
+  final int columns;
+  final int rows;
 
   Float32List? _positions;
   Int32List? _colors;
   Uint16List? _indices;
+  int _builtColumns = 0;
+  int _builtRows = 0;
 
+  int get _vertexCount => (columns + 1) * (rows + 1);
+
+  /// Rebuilds the triangle strip only when the precision setting moved to a
+  /// different mesh: the buffers and their indices are pure geometry.
   void _ensureMesh() {
-    if (_positions != null) return;
+    if (_positions != null && _builtColumns == columns && _builtRows == rows) {
+      return;
+    }
+    _builtColumns = columns;
+    _builtRows = rows;
     _positions = Float32List(_vertexCount * 2);
     _colors = Int32List(_vertexCount);
-    _indices = Uint16List(_columns * _rows * 6);
+    _indices = Uint16List(columns * rows * 6);
     var cursor = 0;
-    for (var row = 0; row < _rows; row++) {
-      for (var column = 0; column < _columns; column++) {
-        final int topLeft = row * (_columns + 1) + column;
+    for (var row = 0; row < rows; row++) {
+      for (var column = 0; column < columns; column++) {
+        final int topLeft = row * (columns + 1) + column;
         final int topRight = topLeft + 1;
-        final int bottomLeft = topLeft + _columns + 1;
+        final int bottomLeft = topLeft + columns + 1;
         final int bottomRight = bottomLeft + 1;
         _indices![cursor++] = topLeft;
         _indices![cursor++] = topRight;
@@ -391,8 +438,24 @@ class _FlowPainter extends CustomPainter {
     if (size.isEmpty) return;
     final List<Color> colors = palette();
     final Rect canvasRect = Offset.zero & size;
-    canvas.drawRect(canvasRect, Paint()..color = colors[4]);
-    if (!solid) {
+    if (preview && !solid) {
+      // One ramp through the same palette, and nothing else: the expensive
+      // warped mesh is not painted at all while the page carrying it is
+      // still moving, so the frame costs a single full-screen fill.
+      canvas.drawRect(
+        canvasRect,
+        Paint()
+          ..shader = ui.Gradient.linear(
+            canvasRect.topCenter,
+            canvasRect.bottomCenter,
+            <Color>[colors[0], colors[2], colors[4]],
+            const <double>[0, .55, 1],
+          ),
+      );
+    } else {
+      canvas.drawRect(canvasRect, Paint()..color = colors[4]);
+    }
+    if (!solid && !preview) {
       _ensureMesh();
       final Float32List positions = _positions!;
       final Int32List vertexColors = _colors!;
@@ -400,10 +463,10 @@ class _FlowPainter extends CustomPainter {
       final double width = size.width;
       final double height = size.height;
       var vertex = 0;
-      for (var row = 0; row <= _rows; row++) {
-        final double v = row / _rows;
-        for (var column = 0; column <= _columns; column++) {
-          final double u = column / _columns;
+      for (var row = 0; row <= rows; row++) {
+        final double v = row / rows;
+        for (var column = 0; column <= columns; column++) {
+          final double u = column / columns;
           final double envelope = math.sin(math.pi * u) * math.sin(math.pi * v);
           final double waveX =
               math.sin(v * math.pi * 2.4 + time * .20 + 1.1) * .115 +
@@ -437,7 +500,11 @@ class _FlowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FlowPainter oldDelegate) =>
-      oldDelegate.solid != solid || oldDelegate.veil != veil;
+      oldDelegate.solid != solid ||
+      oldDelegate.veil != veil ||
+      oldDelegate.preview != preview ||
+      oldDelegate.columns != columns ||
+      oldDelegate.rows != rows;
 }
 
 double _fluidEase(double fraction) {
@@ -741,6 +808,7 @@ class LegacyAlbumBackdrop extends StatefulWidget {
     this.imagePath,
     this.veil,
     this.pageColor,
+    this.quality = kDynamicBackgroundQualityDefault,
     this.onSeed,
   });
 
@@ -761,6 +829,9 @@ class LegacyAlbumBackdrop extends StatefulWidget {
   /// Painted under the flow (legacy `colors.background`), and on its own when
   /// the backdrop is off.
   final Color? pageColor;
+
+  /// `动态背景渲染精度` from Settings, handed to the flow canvas.
+  final double quality;
 
   /// Reports the extracted artwork seed so the shell can seed its palette even
   /// when the backdrop itself is off.
@@ -825,6 +896,7 @@ class _LegacyAlbumBackdropState extends State<LegacyAlbumBackdrop> {
           colors: _colors,
           animated: widget.mode == LegacyBackgroundMode.nowPlayingDynamic,
           solid: widget.mode == LegacyBackgroundMode.nowPlayingStatic,
+          quality: widget.quality,
           veil: widget.veil ?? const Color(0x00000000),
         ),
         if (widget.veil == null)

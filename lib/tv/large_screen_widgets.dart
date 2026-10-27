@@ -8,6 +8,7 @@
 /// are the single place where those sizes are decided.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -33,8 +34,12 @@ abstract final class LargeScreenMetrics {
   /// Height of the floating destination capsule.
   static const double navBarHeight = 58;
 
-  /// Height of the transport shelf under the content.
+  /// Height of the floating transport strip.
   static const double transportHeight = 88;
+
+  /// Bottom room a page reserves for the floating transport strip, so its last
+  /// card can be scrolled clear of the overlay.
+  static const double floatingBarInset = 124;
 
   /// Gap between two captioned cards in a shelf.
   static const double cardGap = 26;
@@ -458,210 +463,6 @@ class _LargeScreenMediaCardState extends State<LargeScreenMediaCard> {
   }
 }
 
-/// One of the "made for you" shortcuts: a coloured tile with an icon.
-class LargeScreenActionTile extends StatelessWidget {
-  const LargeScreenActionTile({
-    super.key,
-    required this.width,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.colors,
-    this.onTap,
-  });
-
-  final double width;
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final List<Color> colors;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      height: 148,
-      child: LargeScreenTapTarget(
-        onTap: feedbackAction(context, onTap),
-        borderRadius: BorderRadius.circular(18),
-        focusScale: 1.035,
-        child: Container(
-          width: double.infinity,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: colors,
-            ),
-          ),
-          child: Stack(
-            children: <Widget>[
-              Positioned(
-                right: -14,
-                bottom: -18,
-                child: Icon(
-                  icon,
-                  size: 118,
-                  color: Colors.white.withValues(alpha: .18),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 18, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: <Widget>[
-                    Icon(icon, size: 26, color: Colors.white),
-                    const Spacer(),
-                    Text(
-                      context.tr(title),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 21,
-                        height: 1.2,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      context.tr(subtitle),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        height: 1.25,
-                        color: Color(0xD9FFFFFF),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A chart tile: the board's own accent, its source and the issue label.
-class LargeScreenChartCard extends StatelessWidget {
-  const LargeScreenChartCard({
-    super.key,
-    required this.width,
-    required this.title,
-    required this.source,
-    required this.issueLabel,
-    this.accent = 0xFF356EFF,
-    this.logoUrl,
-    this.onTap,
-  });
-
-  final double width;
-  final String title;
-  final String source;
-  final String issueLabel;
-  final int accent;
-  final String? logoUrl;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color base = Color(accent);
-    return SizedBox(
-      width: width,
-      height: 172,
-      child: LargeScreenTapTarget(
-        onTap: feedbackAction(context, onTap),
-        borderRadius: BorderRadius.circular(18),
-        focusScale: 1.035,
-        child: Container(
-          width: double.infinity,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[base, Color.lerp(base, Colors.black, .58)!],
-            ),
-          ),
-          child: Stack(
-            children: <Widget>[
-              if (logoUrl != null)
-                Positioned(
-                  right: 14,
-                  bottom: 10,
-                  child: Opacity(
-                    opacity: .9,
-                    child: Image(
-                      image: ArtworkImage(logoUrl!),
-                      width: 64,
-                      height: 64,
-                      fit: BoxFit.contain,
-                      errorBuilder:
-                          (
-                            BuildContext context,
-                            Object error,
-                            StackTrace? stack,
-                          ) => const SizedBox.shrink(),
-                    ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      source,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .8,
-                        color: Color(0xCCFFFFFF),
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 21,
-                        height: 1.2,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      issueLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xB3FFFFFF),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// A section heading inside a page, with the smaller subtitle beside it.
 class LargeScreenSectionHeader extends StatelessWidget {
   const LargeScreenSectionHeader({
@@ -755,7 +556,8 @@ class LargeScreenShelf extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             padding: EdgeInsets.symmetric(horizontal: inset),
             itemCount: itemCount,
-            scrollCacheExtent: const ScrollCacheExtent.pixels(1400),
+            scrollCacheExtent: const ScrollCacheExtent.pixels(600),
+            addAutomaticKeepAlives: false,
             itemBuilder: (BuildContext context, int index) => Padding(
               padding: EdgeInsets.only(
                 right: index == itemCount - 1 ? 0 : LargeScreenMetrics.cardGap,
@@ -1142,4 +944,60 @@ class LargeScreenPageTitle extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Pauses the page's own tickers while any shelf is being scrolled.
+///
+/// The moving cover mosaics are the heaviest continuous animation on the
+/// browse page. They do not need to run while the listener is flinging a row:
+/// freezing them for the gesture keeps the scroll at frame rate, and the
+/// short settle delay stops a fling's tail from re-arming them frame by frame.
+class ScrollTickerGate extends StatefulWidget {
+  const ScrollTickerGate({
+    super.key,
+    required this.child,
+    this.settle = const Duration(milliseconds: 160),
+  });
+
+  final Widget child;
+  final Duration settle;
+
+  @override
+  State<ScrollTickerGate> createState() => _ScrollTickerGateState();
+}
+
+class _ScrollTickerGateState extends State<ScrollTickerGate> {
+  bool _scrolling = false;
+  Timer? _timer;
+
+  void _onScroll(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      _timer?.cancel();
+      if (!_scrolling) setState(() => _scrolling = true);
+    } else if (notification is ScrollEndNotification) {
+      _timer?.cancel();
+      _timer = Timer(widget.settle, () {
+        if (mounted) setState(() => _scrolling = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      NotificationListener<ScrollNotification>(
+        onNotification: (ScrollNotification notification) {
+          _onScroll(notification);
+          return false;
+        },
+        child: TickerMode(
+          enabled: !_scrolling,
+          child: RepaintBoundary(child: widget.child),
+        ),
+      );
 }

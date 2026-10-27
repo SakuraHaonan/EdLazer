@@ -15,6 +15,8 @@ class AlbumBlurFlow extends StatefulWidget {
     required this.mode,
     required this.pageColor,
     this.animationsEnabled = true,
+    this.quality = kDynamicBackgroundQualityDefault,
+    this.preview = false,
     this.boundaryKey,
   });
 
@@ -22,6 +24,13 @@ class AlbumBlurFlow extends StatefulWidget {
   final LegacyBackgroundMode mode;
   final Color pageColor;
   final bool animationsEnabled;
+
+  /// `动态背景渲染精度` from Settings, 0.1 … 1.0.
+  final double quality;
+
+  /// Paints the cheap stand-in canvas instead of the warped mesh. The player
+  /// sets it while its entrance or exit slide is running.
+  final bool preview;
 
   /// Lets the player capture the currently painted backdrop frame, e.g. for
   /// the exported lyric image.
@@ -77,6 +86,8 @@ class _AlbumBlurFlowState extends State<AlbumBlurFlow> {
                     widget.animationsEnabled &&
                     widget.mode == LegacyBackgroundMode.nowPlayingDynamic,
                 solid: widget.mode == LegacyBackgroundMode.nowPlayingStatic,
+                quality: widget.quality,
+                preview: widget.preview,
               ),
             const IgnorePointer(
               child: DecoratedBox(

@@ -11,6 +11,7 @@ import '../state/song_comments_controller.dart';
 import '../state/detail_requests.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
+import '../theme/tokens.dart';
 import '../tv/large_screen_chrome.dart';
 import '../tv/large_screen_pages.dart';
 import '../tv/large_screen_widgets.dart';
@@ -94,6 +95,16 @@ class _LegacyShellState extends State<LegacyShell>
   /// the page follows the finger and settles from wherever it was left.
   late final PlayerPullDown _playerPull = _PlayerPull(this);
 
+  /// The player's open and close motion: decelerating, i.e. fast first and
+  /// slow on arrival. A third of the travel is covered in the first tenth of
+  /// the 300 ms, which is what makes the page feel like it snapped up in
+  /// response to the tap instead of easing away from it.
+  ///
+  /// The curve shapes time, never the offset: the pull-down writes
+  /// `_nowPlayingMotion.value` straight through and reads it back, so the page
+  /// keeps tracking the finger one to one while it is dragged.
+  static const Curve _playerMotionCurve = AppMotion.standardCurve;
+
   /// Drives the shell's own rebuilds. Playback reports ten times a second;
   /// rebuilding the whole page for every tick while a switch is animating is
   /// what turns a 280 ms cross-fade into a stutter, so [state] is filtered
@@ -146,7 +157,7 @@ class _LegacyShellState extends State<LegacyShell>
     // Mirrors the page switcher's duration in [_content].
     _contentMotion = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 280),
+      duration: const Duration(milliseconds: 320),
     )..addStatusListener(_onContentMotionStatus);
     state.addListener(_onAppStateChanged);
     // The first frame is not a switch: only a change from here on is one.
@@ -202,6 +213,19 @@ class _LegacyShellState extends State<LegacyShell>
   void _onAppStateChanged() {
     if (!mounted) return;
     if (_contentSwitching && !_nowPlayingOpen) return;
+    // On a television the shelf pages are the most expensive trees in the
+    // app. Playback position ticks arrive ten times a second and change
+    // nothing on them; the transport has its own listener. Filter those
+    // reports out, but keep every structural change (track, queue, loaded
+    // collections, charts, surface) flowing through.
+    if (largeScreenModeOf(context) &&
+        !_nowPlayingOpen &&
+        !_hasOpenDetail &&
+        _section != _LegacySection.settings) {
+      final String signature = _largeScreenSignature;
+      if (signature == _largeScreenSignatureCache) return;
+      _largeScreenSignatureCache = signature;
+    }
     // A page can report from its own initState, i.e. while the tree is being
     // built; marking the shell dirty there throws. Take that report on the
     // frame that is already running instead.
@@ -216,6 +240,29 @@ class _LegacyShellState extends State<LegacyShell>
       return;
     }
     _repaint.ping();
+  }
+
+  String? _largeScreenSignatureCache;
+
+  String get _largeScreenSignature {
+    final Track? current = state.current;
+    return <Object?>[
+      current?.id,
+      state.playing,
+      state.queueIndex,
+      state.queue.length,
+      state.recentTracks.length,
+      identityHashCode(state.collections),
+      identityHashCode(state.home),
+      identityHashCode(state.playStats),
+      state.discoveryCharts.length,
+      state.discoveryChartsLoading,
+      state.discoveryChartsError,
+      state.homeError,
+      state.surface,
+      state.signedIn,
+      state.isGuest,
+    ].join('|');
   }
 
   /// The switcher is already animating in this frame, so the mirror starts on
@@ -449,7 +496,7 @@ class _LegacyShellState extends State<LegacyShell>
     _nowPlayingMotion.animateTo(
       1,
       duration: const Duration(milliseconds: 300),
-      curve: Curves.fastOutSlowIn,
+      curve: _playerMotionCurve,
     );
   }
 
@@ -467,7 +514,7 @@ class _LegacyShellState extends State<LegacyShell>
     _nowPlayingMotion.animateBack(
       0,
       duration: const Duration(milliseconds: 300),
-      curve: Curves.fastOutSlowIn,
+      curve: _playerMotionCurve,
     );
   }
 
@@ -489,7 +536,7 @@ class _LegacyShellState extends State<LegacyShell>
       _nowPlayingMotion.animateTo(
         1,
         duration: duration,
-        curve: Curves.easeOutCubic,
+        curve: _playerMotionCurve,
       );
       return;
     }
@@ -502,7 +549,7 @@ class _LegacyShellState extends State<LegacyShell>
     _nowPlayingMotion.animateBack(
       0,
       duration: duration,
-      curve: Curves.easeOutCubic,
+      curve: _playerMotionCurve,
     );
   }
 
@@ -607,6 +654,7 @@ class _LegacyShellState extends State<LegacyShell>
                             mode: state.legacyBackground,
                             imagePath: state.legacyBackgroundImagePath,
                             uiAlpha: state.legacyUiAlpha,
+                            quality: state.dynamicBackgroundQuality,
                             onSeed: state.setLegacySeed,
                           ),
                         ),
@@ -779,11 +827,27 @@ class _LegacyShellState extends State<LegacyShell>
                 account: _accountButton(apple, radius: 22),
                 playing: state.playing,
               ),
-              Expanded(child: RepaintBoundary(child: _content())),
-              RepaintBoundary(
-                child: LargeScreenTransport(
-                  state: state,
-                  onOpen: _openNowPlaying,
+              // The page owns the whole area under the capsule; the transport
+              // strip is painted over it, with no panel of its own. Pages end
+              // their scroll content with `floatingBarInset` so the last row
+              // can still be brought above the strip.
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    RepaintBoundary(child: _content()),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 10,
+                      child: RepaintBoundary(
+                        child: LargeScreenTransport(
+                          state: state,
+                          onOpen: _openNowPlaying,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1355,10 +1419,11 @@ class _LegacyShellState extends State<LegacyShell>
   Widget _content() {
     final Widget page = _contentPage();
     final bool motion = !MediaQuery.disableAnimationsOf(context);
+    final bool largeScreen = largeScreenModeOf(context);
     return AnimatedSwitcher(
       // [_contentMotion] mirrors this duration: keep the two in step.
-      duration: motion ? const Duration(milliseconds: 280) : Duration.zero,
-      switchInCurve: Curves.easeOutCubic,
+      duration: motion ? const Duration(milliseconds: 320) : Duration.zero,
+      switchInCurve: Curves.easeOutQuart,
       switchOutCurve: Curves.easeInCubic,
       layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
         alignment: Alignment.topCenter,
@@ -1375,20 +1440,33 @@ class _LegacyShellState extends State<LegacyShell>
                 child: ExcludeSemantics(child: RepaintBoundary(child: old)),
               ),
             ),
-          ?current,
+          // Pause the incoming page's own tickers for the duration of the
+          // switch too: on a television the cover mosaics are the heaviest
+          // animation in the tree, and they can wait 280 ms for the page to
+          // land.
+          if (current != null)
+            TickerMode(
+              enabled: !_contentSwitching,
+              child: RepaintBoundary(child: current),
+            ),
         ],
       ),
       transitionBuilder: (Widget child, Animation<double> animation) {
         final Animation<double> eased = CurvedAnimation(
           parent: animation,
-          curve: Curves.easeOutCubic,
+          // A gentle Apple-style arrival: most of the travel happens early,
+          // the last pixels settle slowly.
+          curve: const Cubic(0.32, 0.72, 0, 1),
           reverseCurve: Curves.easeInCubic,
         );
+        // Fast first, slow on arrival. The slide is a few pixels of vertical
+        // travel (a compositor transform), not a layout change, and the fade
+        // keeps the outgoing page readable until the new one owns the frame.
         return FadeTransition(
           opacity: eased,
           child: SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(0.04, 0),
+              begin: Offset(0, largeScreen ? .012 : .04),
               end: Offset.zero,
             ).animate(eased),
             child: RepaintBoundary(child: child),

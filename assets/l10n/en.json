@@ -461,15 +461,19 @@
   "为你打造": "Made for You",
   "精选推荐": "Top Picks",
   "新发行": "New Releases",
-  "最近添加": "Recently Added",
   "播放列表": "Playlists",
   "正在播放": "Now Playing",
   "更多": "More",
   "本期上榜": "On the chart",
-  "还没有专辑": "No albums yet",
   "还没有歌手资料": "No artist details yet",
   "从任何一张封面开始播放": "Start from any cover",
   "{count} 个歌单": "{count} playlists",
   "{count} 位歌手": "{count} artists",
-  "{count} 张专辑": "{count} albums"
+  "{count} 张专辑": "{count} albums",
+  "动态背景渲染精度": "Dynamic background quality",
+  "网格 {columns}×{rows}，每 {ms} ms 刷新一次": "Mesh {columns}×{rows}, refreshed every {ms} ms",
+  "已切换至心动模式": "Switched to Heart mode",
+  "累计播放 {count} 次 · {hours} 小时": "{count} plays · {hours} h",
+  "播放 {count} 次": "{count} plays",
+  "播放记录加载失败，请稍后重试。": "Couldn't load the play record. Try again later."
 }

@@ -1,4 +1,4 @@
-﻿# Now Playing / Lyric Engine Rewrite
+# Now Playing / Lyric Engine Rewrite
 
 The player stack was rebuilt from scratch. The old page, desktop/mobile
 implementations and the old lyric renderer are no longer used.
@@ -131,6 +131,14 @@ Tapping the artwork no longer opens a large cover overlay. Long-pressing any
 cover (desktop or compact header) opens a confirmation dialog before saving
 the current artwork to the device.
 
+### Track changes
+
+`AnimatedTrackCover` dissolves one plate into the next: 420 ms, a symmetric
+`Cubic(0.4, 0, 0.2, 1)` fade and a 1.2% scale settle. The previous carousel
+slide is gone; both plates are compositor layers, so the cross-fade costs two
+opacity updates rather than a re-rasterised artwork per frame. A metadata
+refresh keeps the same `ValueKey` and does not replay the dissolve.
+
 
 ## Performance and accessibility
 
@@ -140,9 +148,16 @@ The shell no longer pushes the player as a new Navigator route. It mounts the
 player as a same-route overlay over the existing app root:
 
 - the whole player uses Material's open-upwards motion: a compositor-only
-  slide from `Offset(0, 1)` to `Offset.zero`, 300 ms, `fastOutSlowIn`, with
-  the same motion reversed on close. The easing belongs to the transition
-  animation, so the very same offset can also be driven by a finger;
+  slide from `Offset(0, 1)` to `Offset.zero`, 300 ms, closing on the same
+  motion reversed. The curve is decelerating, not symmetric: a third of the
+  travel is covered in the first tenth of the duration and the landing is
+  soft, so the page answers the tap immediately instead of easing away from
+  it. The same curve runs the close, so leaving never starts with a hang;
+- the curve shapes time, never the offset. The pull-down writes the
+  controller value straight through and reads it back, so a dragged page
+  still sits exactly under the finger — both the shell overlay and the
+  standalone `NowPlayingRoute` keep the finger-driven path linear and curve
+  only the push, the pop and the settle after a release;
 - no full-screen clip radius, scale or fade is animated;
 - the motion keeps its duration even when the platform reports reduced motion
   (`AnimationBehavior.preserve`). That flag shrinks a controller to 5% of its
@@ -150,12 +165,25 @@ player as a same-route overlay over the existing app root:
   single-frame snap instead of carrying the page the rest of the way out;
   compositor transforms are not a vestibular trigger;
 - the shell's ambient tickers are paused while the player is up. The player's
-  own tickers are not: a `TickerMode` gate on the player made every ticker in
-  it depend on that gate, so unmuting it on the last frame of the entrance
-  rebuilt the whole page exactly when the animation landed;
+  own tickers are not: a `TickerMode` gate around the whole player made every
+  ticker in it depend on that gate, so unmuting it on the last frame of the
+  entrance rebuilt the whole page exactly when the animation landed;
+- the lyric canvas is the one exception, and it is gated narrowly: the slide
+  re-executes the page display list on every frame, and the lyric painter
+  carries one blurred layer per visible row, so its 60 fps tick is muted for
+  the 300 ms of travel. The gate owns the viewport as a plain child, so
+  unmuting it rebuilds a single `TickerMode` node — not the page — and the
+  rows are already laid out, so nothing jumps when it resumes;
 - the album-colour mesh flow is held back until the entrance has settled, and
   it follows a `ValueListenable<bool>` on its own, so the frame it starts on
   rebuilds the backdrop and nothing else;
+- while the slide runs the backdrop paints a single vertical ramp through the
+  five album colours instead of the warped mesh. A warped full-window
+  `drawVertices` re-executed on every frame of a moving layer is what pegged
+  the GPU on entry; the ramp costs one fill, and the mesh takes over on the
+  settle frame with the same palette, so the handover reads as the warp
+  appearing rather than a colour change. The exit slide uses the same
+  stand-in;
 - the player page widget is built once per opening and handed to the tree
   unchanged: a shell rebuild — a playback report while the player is up, the
   entrance settling — never rebuilds the player's subtree;
@@ -164,6 +192,10 @@ player as a same-route overlay over the existing app root:
 - on exit the mesh is disabled before the reverse slide begins;
 - the background never renders the song cover image itself; only the extracted
   multi-hue palette drives the mesh flow;
+- the mesh honours `动态背景渲染精度` from Settings (0.1 … 1.0) live: the setting
+  scales the vertices uploaded per frame and the interval between two
+  updates, so a slow GPU can be handed back the time instead of dropping the
+  flow entirely;
 - the player canvas ignores the browse backdrop setting: choosing 不使用 or a
   custom picture in Settings never removes the song's flow from this page;
 - large subtrees are wrapped in `RepaintBoundary` so the slide transforms a

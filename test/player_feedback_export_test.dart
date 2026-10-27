@@ -218,7 +218,7 @@ void main() {
   testWidgets(
     'iOS intensity is saved and switches are rendered by the app',
     (tester) async {
-      tester.view.physicalSize = const Size(1280, 1400);
+      tester.view.physicalSize = const Size(1280, 1600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final state = AppState(catalog: _Catalog());
@@ -256,7 +256,7 @@ void main() {
   testWidgets(
     'setting sliders click through detents and stop when disabled',
     (tester) async {
-      tester.view.physicalSize = const Size(1280, 1400);
+      tester.view.physicalSize = const Size(1280, 1600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final calls = <MethodCall>[];
