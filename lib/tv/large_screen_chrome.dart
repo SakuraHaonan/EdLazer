@@ -18,7 +18,6 @@ import '../theme/apple_design.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/interaction_feedback.dart';
 import 'large_screen_widgets.dart';
-import '../legacy/legacy_widgets.dart';
 import '../legacy/legacy_player_bar.dart';
 
 /// The destinations reachable from the capsule.
@@ -264,10 +263,13 @@ class _NavBackButton extends StatelessWidget {
   }
 }
 
-/// The bottom transport shelf.
+/// The floating transport dock.
 ///
-/// It keeps the four things a listener reaches for from a sofa: what is
-/// playing (open the player), previous/play/next, the seek rail, and the queue.
+/// It keeps the things a listener reaches for from a sofa: what is playing
+/// (open the player), previous/play/next in the centre, and like / queue /
+/// expand on the right. It is a rounded card lifted off the bottom edge by a
+/// shadow, not a bar welded to the panel; the seek rail lives in the player,
+/// where there is room for it.
 class LargeScreenTransport extends StatelessWidget {
   const LargeScreenTransport({
     super.key,
@@ -281,44 +283,67 @@ class LargeScreenTransport extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    return AppleGlass(
-      borderRadius: BorderRadius.zero,
-      blurSigma: 30,
-      color: apple.glassStrong,
-      border: Border(top: BorderSide(color: apple.separator, width: .5)),
-      child: SizedBox(
-        height: LargeScreenMetrics.transportHeight,
-        child: AnimatedBuilder(
-          animation: state,
-          builder: (BuildContext context, Widget? _) {
-            return LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                final bool narrow = constraints.maxWidth < 980;
-                final double inset = LargeScreenMetrics.pageInset(
-                  constraints.maxWidth,
-                );
+    final double inset = LargeScreenMetrics.pageInset(
+      MediaQuery.sizeOf(context).width,
+    );
+    final BorderRadius radius = BorderRadius.circular(26);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(inset, 4, inset, 16),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: .34),
+              blurRadius: 26,
+              offset: const Offset(0, 12),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: .16),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: AppleGlass(
+          borderRadius: radius,
+          blurSigma: 30,
+          color: apple.glassStrong,
+          border: Border.all(
+            color: apple.separator.withValues(alpha: .6),
+            width: .5,
+          ),
+          child: SizedBox(
+            height: LargeScreenMetrics.transportHeight,
+            child: AnimatedBuilder(
+              animation: state,
+              builder: (BuildContext context, Widget? _) {
                 return Padding(
-                  padding: EdgeInsets.symmetric(horizontal: inset),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: <Widget>[
+                      // Equal flex on both sides keeps the transport controls
+                      // on the bar's centre line, not merely in the gap the
+                      // artwork and actions happen to leave.
                       Expanded(
-                        flex: narrow ? 5 : 4,
                         child: _TransportMeta(state: state, onOpen: onOpen),
                       ),
-                      const SizedBox(width: 18),
                       _TransportControls(state: state),
-                      if (!narrow) ...<Widget>[
-                        const SizedBox(width: 22),
-                        Expanded(flex: 5, child: _TransportSeek(state: state)),
-                      ],
-                      const SizedBox(width: 14),
-                      _TransportActions(state: state, onOpen: onOpen),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: _TransportActions(
+                            state: state,
+                            onOpen: onOpen,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 );
               },
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
@@ -470,53 +495,6 @@ class _TransportGlyphState extends State<_TransportGlyph> {
           color: foreground.withValues(alpha: enabled ? 1 : .35),
         ),
       ),
-    );
-  }
-}
-
-class _TransportSeek extends StatelessWidget {
-  const _TransportSeek({required this.state});
-
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final Duration? duration = state.current?.duration;
-    final bool ready = duration != null && duration > Duration.zero;
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        SizedBox(
-          height: 24,
-          child: LegacyThinSeekBar(
-            progress: state.progress,
-            bufferedProgress: state.bufferedFraction,
-            height: 24,
-            semanticLabel: '播放进度',
-            onSeek: ready ? state.seek : null,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Row(
-          children: <Widget>[
-            Text(
-              ready ? legacyDuration(state.position) : '--:--',
-              style: LargeScreenType.rowMeta(context).copyWith(
-                fontSize: 13,
-                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-              ),
-            ),
-            const Spacer(),
-            Text(
-              ready ? legacyDuration(duration) : '--:--',
-              style: LargeScreenType.rowMeta(context).copyWith(
-                fontSize: 13,
-                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }

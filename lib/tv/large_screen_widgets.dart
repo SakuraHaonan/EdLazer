@@ -34,7 +34,7 @@ abstract final class LargeScreenMetrics {
   static const double navBarHeight = 58;
 
   /// Height of the transport shelf under the content.
-  static const double transportHeight = 92;
+  static const double transportHeight = 88;
 
   /// Gap between two captioned cards in a shelf.
   static const double cardGap = 26;

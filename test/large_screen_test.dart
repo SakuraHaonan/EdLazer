@@ -9,6 +9,7 @@ import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/catalog_details.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
+import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
@@ -197,6 +198,16 @@ void main() {
       // The desktop source list is not part of this composition.
       expect(find.text('Lazer'), findsNothing);
       expect(find.text('测试歌单'), findsWidgets);
+      // The dock has no seek rail: transport controls sit on the centre line,
+      // with the playing metadata on the left and the actions on the right.
+      expect(find.byType(LegacyThinSeekBar), findsNothing);
+      final Offset dockCentre = tester.getCenter(
+        find.byType(LargeScreenTransport),
+      );
+      final Offset playCentre = tester.getCenter(
+        find.byIcon(Icons.play_arrow_rounded),
+      );
+      expect((playCentre.dx - dockCentre.dx).abs(), lessThan(1));
       expect(tester.takeException(), isNull);
     });
 

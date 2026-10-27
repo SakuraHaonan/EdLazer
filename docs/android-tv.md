@@ -64,8 +64,10 @@ The large-screen mode is its own composition, not the desktop shell stretched:
   horizontal scroll;
 - a **library rail** (最近添加 / 播放列表 / 歌手 / 专辑 / 歌曲, then 本地音乐 and
   我喜欢的音乐) beside a centred artwork grid;
-- a **transport shelf** under the content: cover and title (opens the player),
-  previous / play / next, the seek rail, like, queue and expand;
+- a floating **transport dock**: a rounded card lifted off the bottom edge by
+  a shadow, with the playing metadata on the left (opens the player), the
+  previous / play / next controls centred, and like / queue / expand on the
+  right. The seek rail lives in the immersive player rather than here;
 - detail pages with a 256 dp hero and 64 dp track rows. Settings, local music
   and comments reuse their existing controls at a larger reading measure.
 
@@ -104,8 +106,9 @@ Other remote behaviour:
   order: the queue/volume overlay (`TvOverlayStack`), the player, detail
   pages, then returns a non-home destination to 现在就听; at the root it leaves
   the app.
-- **Seek rail** — left/right step the playhead by 2% (`LegacyThinSeekBar`);
-  up/down leave the rail. The rail commits the value as it steps.
+- **Seek rail** — inside the immersive player, left/right step the playhead by
+  2% (`LegacyThinSeekBar`); up/down leave the rail. The rail commits the value
+  as it steps. The bottom dock deliberately has no progress rail.
 - **Search** — the magnifier chip opens the search page. Its `SearchBar` is a
   normal focus stop; Select enters text and raises the system IME.
 - **Queue** — Select on the transport's queue glyph opens the floating queue

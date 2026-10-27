@@ -84,9 +84,10 @@ Android TV gets its own composition rather than the desktop shell at ten feet.
 `设置 → 界面 → 设备形态` can force `大屏幕模式`; otherwise a Leanback or
 touch-less Android device selects it automatically and boots into it. The
 large-screen mode draws a floating destination capsule, shelves of captioned
-artwork, a rail-and-grid library and a transport shelf, keeps the standard
-interface scale, insets chrome for overscan, and turns every card, row and
-transport glyph into a D-pad focus stop with a white-on-black focus ring.
+artwork, a rail-and-grid library and a rounded transport dock, keeps the
+standard interface scale, insets chrome for overscan, and turns every card,
+row and transport glyph into a D-pad focus stop with a white-on-black focus
+ring.
 Directional traversal follows the card geometry and bumps a shelf or page when
 the next card has not been built yet. Back closes the queue or volume panel
 first, then the player, then detail pages. See
