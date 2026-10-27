@@ -32,17 +32,23 @@ class _HapticSeekSliderState extends State<HapticSeekSlider> {
       detentFeedback: true,
       onChanged: widget.state.current == null ? null : widget.state.seek,
     );
-    if (!TvScope.isActive(context)) return slider;
-    // Material sliders spend the up/down keys on their value. On a television
-    // those keys must leave the rail instead: a remote's d-pad should move to
-    // the row above or below, not scrub the song. Replacing the slider's focus
-    // stop keeps left/right nudging and leaves up/down to the default
-    // directional traversal.
+    final bool tv = TvScope.isActive(context);
+    // Material sliders spend the up/down keys on their value. Those keys must
+    // always leave the rail instead: a remote's d-pad moves to the row above
+    // or below, not scrubs the song. The wrapper is unconditional so a build
+    // where TvScope has not been installed (or a desktop window with a
+    // keyboard) cannot fall back to the bare slider. Left/right still nudge.
     return FocusableActionDetector(
       enabled: widget.state.current != null,
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.arrowLeft): _SeekStepIntent(-_step),
         SingleActivator(LogicalKeyboardKey.arrowRight): _SeekStepIntent(_step),
+        SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
+          TraversalDirection.up,
+        ),
+        SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
+          TraversalDirection.down,
+        ),
       },
       actions: <Type, Action<Intent>>{
         _SeekStepIntent: CallbackAction<_SeekStepIntent>(
@@ -57,12 +63,10 @@ class _HapticSeekSliderState extends State<HapticSeekSlider> {
         clipBehavior: Clip.none,
         children: <Widget>[
           ExcludeFocus(child: slider),
-          if (_focused)
+          if (tv && _focused)
             Positioned.fill(
               child: IgnorePointer(
-                child: TvFocusOutline(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                child: TvFocusOutline(borderRadius: BorderRadius.circular(8)),
               ),
             ),
         ],

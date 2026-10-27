@@ -310,6 +310,81 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('up and down leave the seek rail without TvScope', (
+      tester,
+    ) async {
+      final AppState state = AppState(
+        catalog: _SeekCatalog(),
+        audioEngine: _SeekEngine(),
+      );
+      addTearDown(state.dispose);
+      state.playQueue(const <Track>[_seekTrack]);
+      await tester.pump();
+      state.seek(.5);
+
+      final FocusNode above = FocusNode();
+      final FocusNode below = FocusNode();
+      addTearDown(above.dispose);
+      addTearDown(below.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: <Widget>[
+                TextButton(
+                  focusNode: above,
+                  onPressed: () {},
+                  child: const Text('above'),
+                ),
+                SizedBox(width: 320, child: HapticSeekSlider(state: state)),
+                TextButton(
+                  focusNode: below,
+                  onPressed: () {},
+                  child: const Text('below'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final FocusNode rail = Focus.of(
+        tester.element(
+          find
+              .descendant(
+                of: find.byType(HapticSeekSlider),
+                matching: find.byType(Stack),
+              )
+              .first,
+        ),
+      );
+      rail.requestFocus();
+      await tester.pump();
+      expect(rail.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(below.hasFocus, isTrue);
+      expect(state.progress, closeTo(.5, 1e-9));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(rail.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(above.hasFocus, isTrue);
+      expect(state.progress, closeTo(.5, 1e-9));
+
+      rail.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(state.progress, closeTo(.48, 1e-9));
+      state.pause();
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a focus region claims the first control after late content', (
       tester,
     ) async {

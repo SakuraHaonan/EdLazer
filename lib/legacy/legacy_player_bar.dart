@@ -562,6 +562,12 @@ class _LegacyThinSeekBarState extends State<LegacyThinSeekBar> {
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.arrowLeft): _SeekNudgeIntent(-0.02),
         SingleActivator(LogicalKeyboardKey.arrowRight): _SeekNudgeIntent(0.02),
+        SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
+          TraversalDirection.up,
+        ),
+        SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
+          TraversalDirection.down,
+        ),
       },
       actions: <Type, Action<Intent>>{
         _SeekNudgeIntent: CallbackAction<_SeekNudgeIntent>(
