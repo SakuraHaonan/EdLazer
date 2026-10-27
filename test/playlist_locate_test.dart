@@ -32,6 +32,9 @@ class _Catalog extends Catalog {
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics();
   @override
   Future<List<Track>> playlistTracks(String id) async => _tracks();
+
+  @override
+  Future<List<Track>?> cachedPlaylistTracks(String playlistId) async => null;
 }
 
 Future<void> _locateCurrentTrack(WidgetTester tester, Size size) async {

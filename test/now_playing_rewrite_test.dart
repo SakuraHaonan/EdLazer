@@ -85,7 +85,7 @@ void main() {
     expect(tester.getSemantics(rootFinder).id, rootBefore.id);
     expect(tester.takeException(), isNull);
 
-    await tester.pump(const Duration(milliseconds: 380));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(
       tester.widget<SlideTransition>(playerSlide).position.value.dy,
       closeTo(0, .001),
@@ -93,7 +93,7 @@ void main() {
     expect(tester.getSemantics(rootFinder).id, rootBefore.id);
     await tester.tap(find.byKey(const ValueKey<String>('desktop-close')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     await tester.pump();
     expect(find.byType(NowPlayingPage), findsNothing);
     expect(tester.getSemantics(rootFinder).id, rootBefore.id);
@@ -128,7 +128,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
 
     expect(find.byType(NowPlayingPage), findsOneWidget);
     await tester.tap(find.byIcon(Icons.group_rounded).first);

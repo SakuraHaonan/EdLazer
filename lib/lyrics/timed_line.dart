@@ -268,35 +268,46 @@ class _WordPainter extends CustomPainter {
       );
       canvas.clipRect(clip);
       if (boundary + fade / 2 >= rect.left) {
-        canvas.saveLayer(clip, Paint());
-        if (motion.glow > .001) {
-          canvas.saveLayer(
-            clip,
-            Paint()
-              ..imageFilter = ui.ImageFilter.blur(
-                sigmaX: motion.glowRadiusEm * layout.fontSize,
-                sigmaY: motion.glowRadiusEm * layout.fontSize,
-              )
-              ..colorFilter = ColorFilter.mode(
-                Colors.white.withValues(alpha: motion.glow),
-                BlendMode.srcIn,
-              ),
-          );
+        if (boundary - fade / 2 >= rect.right) {
+          // Fully highlighted glyphs need no mask or glow: paint straight
+          // into the clip. The old path pushed an offscreen saveLayer per
+          // glyph on every frame — dozens of full-line rasterizations even
+          // though only the moving boundary needs blending.
+          canvas.save();
+          canvas.clipRect(clip);
           layout.bright.paint(canvas, Offset.zero);
           canvas.restore();
+        } else {
+          canvas.saveLayer(clip, Paint());
+          if (motion.glow > .001) {
+            canvas.saveLayer(
+              clip,
+              Paint()
+                ..imageFilter = ui.ImageFilter.blur(
+                  sigmaX: motion.glowRadiusEm * layout.fontSize,
+                  sigmaY: motion.glowRadiusEm * layout.fontSize,
+                )
+                ..colorFilter = ColorFilter.mode(
+                  Colors.white.withValues(alpha: motion.glow),
+                  BlendMode.srcIn,
+                ),
+            );
+            layout.bright.paint(canvas, Offset.zero);
+            canvas.restore();
+          }
+          layout.bright.paint(canvas, Offset.zero);
+          canvas.drawRect(
+            clip,
+            Paint()
+              ..blendMode = BlendMode.dstIn
+              ..shader = ui.Gradient.linear(
+                Offset(boundary - fade / 2, 0),
+                Offset(boundary + fade / 2, 0),
+                [Colors.white, Colors.transparent],
+              ),
+          );
+          canvas.restore();
         }
-        layout.bright.paint(canvas, Offset.zero);
-        canvas.drawRect(
-          clip,
-          Paint()
-            ..blendMode = BlendMode.dstIn
-            ..shader = ui.Gradient.linear(
-              Offset(boundary - fade / 2, 0),
-              Offset(boundary + fade / 2, 0),
-              [Colors.white, Colors.transparent],
-            ),
-        );
-        canvas.restore();
       }
       canvas.restore();
     }

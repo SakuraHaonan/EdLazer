@@ -19,6 +19,7 @@ import 'theme/apple_design.dart';
 import 'state/app_state.dart';
 import 'tv/tv_mode.dart';
 import 'widgets/window_frame.dart';
+import 'widgets/media_shortcut_listener.dart';
 import 'widgets/interaction_feedback.dart';
 import 'widgets/app_scroll_behavior.dart';
 import 'widgets/ui_scaling.dart';
@@ -224,10 +225,13 @@ class _LazerAppState extends State<LazerApp> {
         // The shell is always home: the guest session boots straight into
         // it, and sign-in happens in a popup card that closes over this —
         // no gate, no home swap to churn the accessibility tree.
-        home: LegacyShell(
-          key: const ValueKey('legacy'),
+        home: MediaShortcutListener(
           state: _state,
-          autoCheckUpdates: true,
+          child: LegacyShell(
+            key: const ValueKey('legacy'),
+            state: _state,
+            autoCheckUpdates: true,
+          ),
         ),
       ),
     );

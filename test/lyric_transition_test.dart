@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -17,7 +17,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _Catalog extends Catalog {
   @override
-  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => GatewayLyrics(
     lrc: [
@@ -77,10 +80,7 @@ void main() {
       await tester.pumpAndSettle();
       final viewport = find.byType(LyricViewport);
       expect(
-        find.descendant(
-          of: viewport,
-          matching: find.byType(LyricEdgeFade),
-        ),
+        find.descendant(of: viewport, matching: find.byType(LyricEdgeFade)),
         findsOneWidget,
       );
       final focused = find.byKey(const ValueKey('lyric-blur-15'));
@@ -89,7 +89,9 @@ void main() {
       expect(tester.widget<ImageFiltered>(adjacent).enabled, true);
       expect(
         tester.widget<ImageFiltered>(adjacent).imageFilter,
-        equals(ui.ImageFilter.blur(sigmaX: 1.55, sigmaY: 1.55)),
+        // Sigmas are quantized to 1/8 px so frames reuse one filter object;
+        // 1.55 lands on 1.5.
+        equals(ui.ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5)),
         reason: 'blur follows the row\'s distance from the focus band',
       );
       if (const bool.fromEnvironment('SAVE_UI_PROBES')) {
@@ -123,5 +125,4 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
-
 }

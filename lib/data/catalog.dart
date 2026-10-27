@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -100,7 +101,40 @@ class Catalog {
   final BiliboardClient charts;
   final BillboardClient billboard;
   final AudioCache audioCache;
-  final _requests = <String, Future<Object>>{};
+  final _requests = <String, _PendingRequest>{};
+  final Map<String, int> _epochs = <String, int>{};
+  // Keys that a mutation invalidated but whose disk tombstone may not have
+  // landed yet. Cache-first reads must skip them even during that window.
+  final Set<String> _invalidatedKeys = <String>{};
+
+  /// The hottest decoded snapshots, in front of the disk cache.
+  ///
+  /// Playlist tracks used to be re-read from disk and re-decoded on the UI
+  /// isolate every time a playlist was opened, even while the snapshot was
+  /// still fresh — a visible hitch on a long playlist. This small LRU keeps
+  /// the decoded objects instead; invalidations remove the entry so a
+  /// mutation is never masked by a warm copy.
+  final LinkedHashMap<String, _MemorySnapshot> _memory =
+      LinkedHashMap<String, _MemorySnapshot>();
+  static const int _memoryLimit = 32;
+
+  void _remember(String key, Object value, DateTime savedAt) {
+    _memory
+      ..remove(key)
+      ..[key] = _MemorySnapshot(value, savedAt);
+    while (_memory.length > _memoryLimit) {
+      _memory.remove(_memory.keys.first);
+    }
+  }
+
+  Future<void> _expire(String key) async {
+    _memory.remove(key);
+    _invalidatedKeys.add(key);
+    // Bump the epoch so a request that started before this invalidation can
+    // never satisfy the next read: a forced refresh must observe the mutation.
+    _epochs[key] = (_epochs[key] ?? 0) + 1;
+    await cache.expireJson(key);
+  }
 
   // Private playlists and recommendations must not cross session boundaries.
   String get _scope {
@@ -117,42 +151,134 @@ class Catalog {
     Map<String, dynamic> Function(T) encode,
     Future<T> Function() fetch,
   ) async {
+    final int epoch = _epochs[key] ?? 0;
     final pending = _requests[key];
-    if (pending != null) return await pending as T;
+    if (pending != null && pending.epoch == epoch) {
+      return await pending.future as T;
+    }
+    final remembered = _memory[key];
+    if (remembered?.value is T && _fresh(remembered!.savedAt, ttl)) {
+      _touch(key, remembered);
+      return remembered.value as T;
+    }
     final future = () async {
-      final saved = await cache.readJson(key);
-      T? previous;
-      if (saved != null) {
-        try {
-          previous = decode(saved.data);
-        } catch (_) {
-          await cache.remove(CacheBucket.data, key, extension: 'json');
+      // A warm but expired copy is already decoded. Reading and decoding the
+      // same disk blob again costs a visible hitch on a long playlist, and
+      // cache-first callers intentionally leave such a copy in memory.
+      T? previous = remembered?.value is T ? remembered!.value as T : null;
+      if (previous == null) {
+        final saved = await cache.readJson(key);
+        if (saved != null) {
+          try {
+            previous = decode(saved.data);
+          } catch (_) {
+            await cache.remove(CacheBucket.data, key, extension: 'json');
+          }
+          if (previous != null) {
+            _remember(key, previous, saved.savedAt);
+            // An invalidated key may still have a fresh-looking disk copy if
+            // its tombstone write failed; never serve that as a hit.
+            if (!_invalidatedKeys.contains(key) && saved.fresh(ttl)) {
+              return previous;
+            }
+          }
         }
-        if (previous != null && saved.fresh(ttl)) return previous;
       }
       try {
         final result = await fetch();
-        await cache.writeJson(key, encode(result));
+        // A mutation can invalidate the key while the request is in flight;
+        // its response predates the mutation, so it must not refill the cache.
+        if ((_epochs[key] ?? 0) == epoch) {
+          await cache.writeJson(key, encode(result));
+          _remember(key, result, DateTime.now());
+          _invalidatedKeys.remove(key);
+        }
         return result;
       } catch (_) {
         _online = false;
-        if (previous != null) return previous;
+        if (previous != null && (_epochs[key] ?? 0) == epoch) return previous;
         rethrow;
       }
     }();
-    _requests[key] = future;
+    final entry = _PendingRequest(future, epoch);
+    _requests[key] = entry;
     try {
       return await future;
     } finally {
-      if (identical(_requests[key], future)) _requests.remove(key);
+      if (identical(_requests[key], entry)) _requests.remove(key);
     }
   }
 
+  static bool _fresh(DateTime savedAt, Duration ttl) =>
+      DateTime.now().difference(savedAt) < ttl;
+
+  static bool _invalidated(DateTime savedAt) =>
+      savedAt.millisecondsSinceEpoch == 0;
+
+  void _touch(String key, _MemorySnapshot snapshot) {
+    _memory
+      ..remove(key)
+      ..[key] = snapshot;
+  }
+
+  /// Reads a stored snapshot without contacting the service.
+  ///
+  /// Opening a playlist should paint the last known track list immediately;
+  /// the caller can refresh it in the background afterwards. Unlike
+  /// [_cached], an expired snapshot is returned as-is instead of blocking on
+  /// the network, which is what made a cold or offline open feel uncached.
+  Future<T?> _storedSnapshot<T extends Object>(
+    String key,
+    T Function(Map<String, dynamic>) decode,
+  ) async {
+    if (_invalidatedKeys.contains(key)) return null;
+    final remembered = _memory[key];
+    if (remembered?.value is T && !_invalidated(remembered!.savedAt)) {
+      _touch(key, remembered);
+      return remembered.value as T;
+    }
+    final saved = await cache.readJson(key);
+    // An explicitly invalidated snapshot still serves as the offline fallback
+    // for [_cached], but it must not paint the page before a fresh request.
+    if (saved == null || saved.invalidated || _invalidatedKeys.contains(key)) {
+      return null;
+    }
+    try {
+      final value = decode(saved.data);
+      _remember(key, value, saved.savedAt);
+      return value;
+    } catch (_) {
+      await cache.remove(CacheBucket.data, key, extension: 'json');
+      return null;
+    }
+  }
+
+  /// The last stored track list for [playlistId], stale or not, or null when
+  /// this playlist has never been opened in the current session scope.
+  Future<List<Track>?> cachedPlaylistTracks(String playlistId) {
+    if ((int.tryParse(playlistId) ?? 0) <= 0) {
+      return Future<List<Track>?>.value(null);
+    }
+    return _storedSnapshot<List<Track>>(
+      'playlist-v2:$_scope:$playlistId',
+      (json) => _decodeTracks(json['tracks']),
+    );
+  }
+
+  /// The last stored account collections, used to paint 资料库 on the first
+  /// frame after a cold start while the live request runs in the background.
+  Future<UserCollections?> cachedUserCollections(int uid) => uid <= 0
+      ? Future<UserCollections?>.value(null)
+      : _storedSnapshot<UserCollections>(
+          'collections:$_scope:$uid',
+          _decodeCollections,
+        );
+
   Future<void> invalidatePlaylist(String id) =>
-      cache.expireJson('playlist-v2:$_scope:$id');
+      _expire('playlist-v2:$_scope:$id');
 
   Future<void> invalidateCollections(int uid) =>
-      cache.expireJson('collections:$_scope:$uid');
+      _expire('collections:$_scope:$uid');
 
   Future<List<Track>> refreshPlaylist(String id) async {
     await invalidatePlaylist(id);
@@ -160,10 +286,18 @@ class Catalog {
   }
 
   Future<void> invalidateHome({int? userId}) =>
-      cache.expireJson('home:$_scope:${userId ?? 0}');
+      _expire('home:$_scope:${userId ?? 0}');
 
-  Future<void> invalidateLyrics(String trackId) =>
-      cache.expireJson('lyrics:$trackId');
+  Future<void> invalidateLyrics(String trackId) => _expire('lyrics:$trackId');
+
+  /// Drops every discovery-chart snapshot, in memory and on disk.
+  Future<void> invalidateDiscoveryCharts() async {
+    await Future.wait(<Future<void>>[
+      _expire('external-billboard-v1'),
+      _expire('external-biliboard-v1'),
+      _expire('netease-mirror-charts-v2'),
+    ]);
+  }
 
   /// Whether the last gateway interaction succeeded.
   bool get online => _online;
@@ -548,16 +682,45 @@ class Catalog {
   }
 
   /// The listener's play record, joined with each song's duration.
-  Future<List<TrackPlayStat>> playStats(int uid) async {
+  ///
+  /// Cached for five minutes: opening 听歌排行 used to force a network round
+  /// trip (and a full upload flush) on every visit, which stalled the library.
+  Future<List<TrackPlayStat>> playStats(int uid, {bool force = false}) async {
     if (uid <= 0) return const <TrackPlayStat>[];
-    final records = await gateway.playRecord(uid);
+    final key = 'play-stats:$_scope:$uid';
+    if (force) await _expire(key);
+    return _cached(
+      key,
+      const Duration(minutes: 5),
+      _decodePlayStats,
+      (stats) => <String, dynamic>{
+        'stats': <Map<String, dynamic>>[
+          for (final stat in stats) stat.toJson(),
+        ],
+      },
+      () async {
+        final records = await gateway.playRecord(uid);
+        return <TrackPlayStat>[
+          for (final record in records)
+            TrackPlayStat(
+              songId: '${record.song.id}',
+              playCount: record.playCount,
+              duration: record.song.duration,
+            ),
+        ];
+      },
+    );
+  }
+
+  Future<void> invalidatePlayStats(int uid) =>
+      _expire('play-stats:$_scope:$uid');
+
+  static List<TrackPlayStat> _decodePlayStats(Map<String, dynamic> json) {
+    final raw = json['stats'];
+    if (raw is! List) return const <TrackPlayStat>[];
     return <TrackPlayStat>[
-      for (final record in records)
-        TrackPlayStat(
-          songId: '${record.song.id}',
-          playCount: record.playCount,
-          duration: record.song.duration,
-        ),
+      for (final row in raw)
+        if (row is Map<String, dynamic>) TrackPlayStat.fromJson(row),
     ];
   }
 
@@ -875,11 +1038,29 @@ class Catalog {
       final GatewayPlaylist playlist = GatewayPlaylist.fromJson(rawPlaylist);
       final List<GatewaySong> ordered = <GatewaySong>[];
       if (playlist.trackIds.isNotEmpty) {
-        for (int offset = 0; offset < playlist.trackIds.length; offset += 500) {
-          final int end = math.min(offset + 500, playlist.trackIds.length);
-          ordered.addAll(
-            await gateway.songDetails(playlist.trackIds.sublist(offset, end)),
-          );
+        // Large playlists are two or more song-detail pages; the round trips
+        // are independent, so overlap them. A thousand-song list used to wait
+        // for every page in turn even though each one is a separate request.
+        final List<int> ids = playlist.trackIds;
+        final int pages = (ids.length / 500).ceil();
+        final List<List<GatewaySong>?> details =
+            List<List<GatewaySong>?>.filled(pages, null);
+        int next = 0;
+        Future<void> worker() async {
+          while (true) {
+            final int page = next++;
+            if (page >= pages) return;
+            final int offset = page * 500;
+            final int end = math.min(offset + 500, ids.length);
+            details[page] = await gateway.songDetails(ids.sublist(offset, end));
+          }
+        }
+
+        await Future.wait(<Future<void>>[
+          for (var i = 0; i < math.min(4, pages); i++) worker(),
+        ]);
+        for (final List<GatewaySong>? page in details) {
+          if (page != null) ordered.addAll(page);
         }
       }
       if (playlist.trackIds.isEmpty ||
@@ -891,27 +1072,45 @@ class Catalog {
           math.max(playlist.trackCount, playlist.trackIds.length),
         );
         final List<GatewaySong> complete = <GatewaySong>[];
-        for (int offset = 0; offset < expected; offset += 500) {
-          final page = await gateway.playlistTracks(
-            id,
-            limit: 500,
-            offset: offset,
-          );
-          final rawSongs = page['songs'];
-          final songs = rawSongs is List
-              ? rawSongs
-                    .whereType<Map<String, dynamic>>()
-                    .map((item) {
-                      final nested = item['song'] ?? item['data'];
-                      return GatewaySong.fromJson(
-                        nested is Map<String, dynamic> ? nested : item,
-                      );
-                    })
-                    .where((song) => song.id > 0)
-                    .toList()
-              : const <GatewaySong>[];
-          complete.addAll(songs);
-          if (songs.length < 500) break;
+        // Fetch a handful of pages at a time, in order. Waiting for every
+        // page of a long list before showing anything made a 5 000-song
+        // playlist open in ten sequential round trips.
+        for (int start = 0; start < expected; start += 500 * 3) {
+          final List<int> offsets = <int>[
+            for (
+              int offset = start;
+              offset < expected && offset < start + 500 * 3;
+              offset += 500
+            )
+              offset,
+          ];
+          final List<Map<String, dynamic>> batch =
+              await Future.wait(<Future<Map<String, dynamic>>>[
+                for (final int offset in offsets)
+                  gateway.playlistTracks(id, limit: 500, offset: offset),
+              ]);
+          var shortPage = false;
+          for (final Map<String, dynamic> page in batch) {
+            final rawSongs = page['songs'];
+            final songs = rawSongs is List
+                ? rawSongs
+                      .whereType<Map<String, dynamic>>()
+                      .map((item) {
+                        final nested = item['song'] ?? item['data'];
+                        return GatewaySong.fromJson(
+                          nested is Map<String, dynamic> ? nested : item,
+                        );
+                      })
+                      .where((song) => song.id > 0)
+                      .toList()
+                : const <GatewaySong>[];
+            complete.addAll(songs);
+            if (songs.length < 500) {
+              shortPage = true;
+              break;
+            }
+          }
+          if (shortPage) break;
         }
         if (complete.isNotEmpty) {
           ordered
@@ -981,7 +1180,7 @@ class Catalog {
   Future<AlbumDetails> albumDetails(int albumId, {bool force = false}) async {
     if (albumId <= 0) throw ArgumentError.value(albumId, 'albumId');
     final key = 'album-detail:$albumId';
-    if (force) await cache.expireJson(key);
+    if (force) await _expire(key);
     return _cached(
       key,
       const Duration(hours: 1),
@@ -1019,7 +1218,7 @@ class Catalog {
   }) async {
     if (seed.id <= 0) throw ArgumentError.value(seed.id, 'artistId');
     final key = 'artist-detail:${seed.id}';
-    if (force) await cache.expireJson(key);
+    if (force) await _expire(key);
     return _cached(
       key,
       const Duration(minutes: 30),
@@ -1066,7 +1265,7 @@ class Catalog {
   }) async {
     if (id <= 0 || offset < 0) throw ArgumentError('Invalid artist album page');
     final key = 'artist-albums:$id:$offset';
-    if (force) await cache.expireJson(key);
+    if (force) await _expire(key);
     return _cached(
       key,
       const Duration(minutes: 15),
@@ -1097,7 +1296,7 @@ class Catalog {
   Future<List<Track>> artistSongs(int id, {bool force = false}) async {
     if (id <= 0) throw ArgumentError.value(id, 'artistId');
     final key = 'artist-songs:$id';
-    if (force) await cache.expireJson(key);
+    if (force) await _expire(key);
     return _cached(
       key,
       const Duration(minutes: 30),
@@ -1430,4 +1629,18 @@ class Catalog {
 /// caller can tell "not on NetEase" apart from "the network just failed".
 class _NoChartMatch implements Exception {
   const _NoChartMatch();
+}
+
+/// One decoded catalogue snapshot held in memory.
+class _MemorySnapshot {
+  const _MemorySnapshot(this.value, this.savedAt);
+  final Object value;
+  final DateTime savedAt;
+}
+
+/// An in-flight cache fill and the invalidation epoch it belongs to.
+class _PendingRequest {
+  const _PendingRequest(this.future, this.epoch);
+  final Future<Object> future;
+  final int epoch;
 }

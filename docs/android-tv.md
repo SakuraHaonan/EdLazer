@@ -1,4 +1,4 @@
-# 大屏幕模式 (Large screen mode, Android TV)
+﻿# 大屏幕模式 (Large screen mode, Android TV)
 
 The television presentation is called **大屏幕模式** in the interface. The same
 APK runs on phones, tablets, car head units and Android TV; a Leanback or
@@ -94,7 +94,7 @@ Large-screen motion is deliberately non-linear — fast first, slow on arrival:
 - **Track changes in the player** dissolve the cover over 420 ms with a
   symmetric ease-in-out and a 1.2% scale settle, so one artwork melts into the
   next rather than sliding across.
-- **The player slide** uses the same decelerating curve over 420 ms.
+- **The player slide** uses the same decelerating curve over 500 ms.
 
 ## Performance
 

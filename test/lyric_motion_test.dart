@@ -24,7 +24,10 @@ const _track = Track(
 
 class _Catalog extends Catalog {
   @override
-  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => GatewayLyrics(
     lrc: [
@@ -207,9 +210,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final first = find.byKey(
-      ValueKey<String>('lyric-line-${_track.id}-0'),
-    );
+    final first = find.byKey(ValueKey<String>('lyric-line-0'));
     final firstTop = tester.getTopLeft(first).dy;
 
     // Pulling down at the first line must not reveal empty space above it.
@@ -224,9 +225,7 @@ void main() {
     final up = await tester.startGesture(const Offset(195, 250));
     await up.moveBy(const Offset(0, -6000));
     await tester.pump();
-    final last = find.byKey(
-      ValueKey<String>('lyric-line-${_track.id}-29'),
-    );
+    final last = find.byKey(ValueKey<String>('lyric-line-29'));
     expect(last, findsOneWidget);
     final lastTop = tester.getTopLeft(last).dy;
     await up.moveBy(const Offset(0, -600));
@@ -261,7 +260,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.byKey(ValueKey<String>('lyric-line-${_track.id}-0')),
+      find.byKey(ValueKey<String>('lyric-line-0')),
       findsNothing,
       reason: 'the old playback focus must not keep the gap mounted',
     );

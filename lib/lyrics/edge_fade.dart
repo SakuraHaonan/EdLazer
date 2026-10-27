@@ -10,11 +10,20 @@ class LyricEdgeFade extends StatelessWidget {
     super.key,
     required this.child,
     required this.verticalExtent,
+    this.horizontal = true,
   });
 
   static const horizontalExtent = 18.0;
   final Widget child;
   final double verticalExtent;
+
+  /// Fades the left/right edges as well.
+  ///
+  /// Each mask is a full-pane offscreen pass. A wide lyric canvas already
+  /// reserves an 18 px gutter for the blur halo, so the viewport only keeps
+  /// this second pass on compact layouts where a wrapped line can come close
+  /// to the edge.
+  final bool horizontal;
 
   ui.Shader _shader(Rect bounds, {required bool vertical}) {
     final length = vertical ? bounds.height : bounds.width;
@@ -42,15 +51,21 @@ class LyricEdgeFade extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => ClipRect(
-    child: ShaderMask(
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (bounds) => _shader(bounds, vertical: true),
-      child: ShaderMask(
+  Widget build(BuildContext context) {
+    Widget masked = child;
+    if (horizontal) {
+      masked = ShaderMask(
         blendMode: BlendMode.dstIn,
         shaderCallback: (bounds) => _shader(bounds, vertical: false),
-        child: child,
+        child: masked,
+      );
+    }
+    return ClipRect(
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (bounds) => _shader(bounds, vertical: true),
+        child: masked,
       ),
-    ),
-  );
+    );
+  }
 }

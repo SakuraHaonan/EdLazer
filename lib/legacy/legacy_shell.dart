@@ -98,7 +98,7 @@ class _LegacyShellState extends State<LegacyShell>
 
   /// The player's open and close motion: decelerating, i.e. fast first and
   /// slow on arrival. A third of the travel is covered early, which makes the
-  /// page answer the tap immediately; the 420 ms tail lets the cover dissolve
+  /// page answer the tap immediately; the 500 ms tail lets the cover dissolve
   /// and the sheet settle without feeling rushed.
   ///
   /// The curve shapes time, never the offset: the pull-down writes
@@ -146,8 +146,8 @@ class _LegacyShellState extends State<LegacyShell>
     super.initState();
     _nowPlayingMotion = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
-      reverseDuration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 500),
+      reverseDuration: const Duration(milliseconds: 500),
       // Never let the platform's reduced-motion flag scale this to 5%: the
       // player is dragged by the finger, so a released pull has to finish the
       // distance it was left at (80-260 ms) instead of snapping away in a
@@ -496,7 +496,7 @@ class _LegacyShellState extends State<LegacyShell>
     _nowPlayingMotion.value = 0;
     _nowPlayingMotion.animateTo(
       1,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 500),
       curve: _playerMotionCurve,
     );
   }
@@ -514,7 +514,7 @@ class _LegacyShellState extends State<LegacyShell>
     // would never be retired.
     _nowPlayingMotion.animateBack(
       0,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 500),
       curve: _playerMotionCurve,
     );
   }
@@ -947,7 +947,7 @@ class _LegacyShellState extends State<LegacyShell>
           ),
         AppleGlass(
           borderRadius: BorderRadius.zero,
-          blurSigma: 28,
+          blurSigma: 16,
           color: apple.glass,
           border: Border(top: BorderSide(color: apple.separator, width: .5)),
           child: NavigationBar(
@@ -992,7 +992,7 @@ class _LegacyShellState extends State<LegacyShell>
   Widget _sidebar(AppleSemanticColors apple) {
     return AppleGlass(
       borderRadius: BorderRadius.zero,
-      blurSigma: 32,
+      blurSigma: 16,
       color: apple.glass.withValues(alpha: .92),
       child: SizedBox(
         width: 236,
@@ -1011,90 +1011,99 @@ class _LegacyShellState extends State<LegacyShell>
               ),
             ),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
-                children: <Widget>[
-                  _sidebarLabel(apple, '浏览'), // i18n:key
-                  LegacyRailItem(
-                    icon: Icons.search_rounded,
-                    label: '搜索',
-                    selected:
-                        _section == _LegacySection.search &&
-                        _playlist == null &&
-                        _artist == null &&
-                        _chart == null &&
-                        !_comments,
-                    onTap: () => _select(_LegacySection.search),
-                  ),
-                  const SizedBox(height: 2),
-                  LegacyRailItem(
-                    icon: Icons.home_rounded,
-                    label: '主页',
-                    selected:
-                        _section == _LegacySection.home &&
-                        _playlist == null &&
-                        _artist == null &&
-                        _chart == null &&
-                        !_comments,
-                    onTap: () => _select(_LegacySection.home),
-                  ),
-                  const SizedBox(height: 2),
-                  LegacyRailItem(
-                    icon: Icons.library_music_rounded,
-                    label: '音乐库',
-                    selected:
-                        _section == _LegacySection.library &&
-                        _playlist == null &&
-                        _artist == null &&
-                        _chart == null &&
-                        !_comments,
-                    onTap: () => _select(_LegacySection.library),
-                  ),
-                  const SizedBox(height: 2),
-                  LegacyRailItem(
-                    icon: Icons.favorite_rounded,
-                    label: '我喜欢',
-                    selected:
-                        _section == _LegacySection.likes &&
-                        _playlist == null &&
-                        _artist == null &&
-                        _chart == null &&
-                        !_comments,
-                    onTap: () => _select(_LegacySection.likes),
-                  ),
-                  const SizedBox(height: 22),
-                  SizedBox(
-                    height: 33,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 9),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: <Widget>[
-                          Text(
-                            context.tr('资料库'),
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: apple.secondaryLabel,
-                                  fontWeight: FontWeight.w600,
+              child: CustomScrollView(
+                slivers: <Widget>[
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+                    sliver: SliverList.list(
+                      children: <Widget>[
+                        _sidebarLabel(apple, '浏览'), // i18n:key
+                        LegacyRailItem(
+                          icon: Icons.search_rounded,
+                          label: '搜索',
+                          selected:
+                              _section == _LegacySection.search &&
+                              _playlist == null &&
+                              _artist == null &&
+                              _chart == null &&
+                              !_comments,
+                          onTap: () => _select(_LegacySection.search),
+                        ),
+                        const SizedBox(height: 2),
+                        LegacyRailItem(
+                          icon: Icons.home_rounded,
+                          label: '主页',
+                          selected:
+                              _section == _LegacySection.home &&
+                              _playlist == null &&
+                              _artist == null &&
+                              _chart == null &&
+                              !_comments,
+                          onTap: () => _select(_LegacySection.home),
+                        ),
+                        const SizedBox(height: 2),
+                        LegacyRailItem(
+                          icon: Icons.library_music_rounded,
+                          label: '音乐库',
+                          selected:
+                              _section == _LegacySection.library &&
+                              _playlist == null &&
+                              _artist == null &&
+                              _chart == null &&
+                              !_comments,
+                          onTap: () => _select(_LegacySection.library),
+                        ),
+                        const SizedBox(height: 2),
+                        LegacyRailItem(
+                          icon: Icons.favorite_rounded,
+                          label: '我喜欢',
+                          selected:
+                              _section == _LegacySection.likes &&
+                              _playlist == null &&
+                              _artist == null &&
+                              _chart == null &&
+                              !_comments,
+                          onTap: () => _select(_LegacySection.likes),
+                        ),
+                        const SizedBox(height: 22),
+                        SizedBox(
+                          height: 33,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 9),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: <Widget>[
+                                Text(
+                                  context.tr('资料库'),
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: apple.secondaryLabel,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                 ),
-                          ),
-                          if (state.signedIn) ...<Widget>[
-                            const SizedBox(width: 9),
-                            Transform.translate(
-                              offset: const Offset(0, 1),
-                              child: _LibraryRefreshButton(
-                                onRefresh: () =>
-                                    state.refreshCollections(force: true),
-                              ),
+                                if (state.signedIn) ...<Widget>[
+                                  const SizedBox(width: 9),
+                                  Transform.translate(
+                                    offset: const Offset(0, 1),
+                                    child: _LibraryRefreshButton(
+                                      onRefresh: () =>
+                                          state.refreshCollections(force: true),
+                                    ),
+                                  ),
+                                ],
+                                const Spacer(),
+                              ],
                             ),
-                          ],
-                          const Spacer(),
-                        ],
-                      ),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  _railPlaylists(apple),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                    sliver: _railPlaylists(apple),
+                  ),
                 ],
               ),
             ),
@@ -1262,25 +1271,30 @@ class _LegacyShellState extends State<LegacyShell>
       ...state.collections.subscribed,
     ];
     if (playlists.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(9, 5, 9, 8),
-        child: Text(
-          context.tr(state.isGuest ? '登录后同步你的歌单' : '暂无歌单'),
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: apple.tertiaryLabel),
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(9, 5, 9, 8),
+          child: Text(
+            context.tr(state.isGuest ? '登录后同步你的歌单' : '暂无歌单'),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: apple.tertiaryLabel),
+          ),
         ),
       );
     }
-    return Column(
-      children: <Widget>[
-        for (final Playlist playlist in playlists)
-          _RailPlaylist(
-            playlist: playlist,
-            selected: _playlist?.id == playlist.id,
-            onTap: () => _openPlaylist(playlist),
-          ),
-      ],
+    // Only the rows on screen are mounted: an account can hold a thousand
+    // playlists, and every shell rebuild used to rebuild all of them.
+    return SliverList.builder(
+      itemCount: playlists.length,
+      itemBuilder: (BuildContext context, int index) {
+        final Playlist playlist = playlists[index];
+        return _RailPlaylist(
+          playlist: playlist,
+          selected: _playlist?.id == playlist.id,
+          onTap: () => _openPlaylist(playlist),
+        );
+      },
     );
   }
 

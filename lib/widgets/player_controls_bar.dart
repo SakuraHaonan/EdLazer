@@ -25,7 +25,9 @@ class PlayerControlsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: state.all,
+    // Structural lane only: the rail below owns the 100 ms position updates,
+    // so ticking playback does not rebuild the artwork and title rows.
+    animation: state,
     builder: (context, _) {
       final Track? track = state.current;
       return DecoratedBox(
@@ -67,6 +69,7 @@ class PlayerControlsBar extends StatelessWidget {
                                         coverUrl: track.coverUrl,
                                         accent: track.accent,
                                         radius: BorderRadius.zero,
+                                        size: 44,
                                       ),
                                     ),
                                   ),
@@ -209,6 +212,7 @@ class _TrackRowState extends State<TrackRow> {
                       coverUrl: track.coverUrl,
                       accent: track.accent,
                       radius: BorderRadius.zero,
+                      size: 40,
                     ),
                   ),
                 ),
@@ -247,10 +251,7 @@ class _TrackRowState extends State<TrackRow> {
                       style: context.type.captionMuted,
                     ),
                   ),
-                Text(
-                  fmt(track.duration),
-                  style: context.type.monoSm,
-                ),
+                Text(fmt(track.duration), style: context.type.monoSm),
               ],
             ),
           ),

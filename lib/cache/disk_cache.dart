@@ -149,10 +149,18 @@ class DiskCache {
       await partial.rename(target.path);
       partial = null;
       // Serialize pruning so concurrent cover downloads share one LRU pass.
+      // The scan itself stays off the caller's critical path: a cache write
+      // should hand the file back immediately and let maintenance catch up.
       final previous = _maintenance[bucket] ?? Future<void>.value();
       final next = previous.then((_) => _prune(bucket, target.path));
       _maintenance[bucket] = next;
-      await next;
+      unawaited(
+        next.whenComplete(() {
+          if (identical(_maintenance[bucket], next)) {
+            _maintenance.remove(bucket);
+          }
+        }),
+      );
       return target;
     } catch (_) {
       return null;
@@ -197,6 +205,14 @@ class DiskCache {
         } catch (_) {}
       }
     } catch (_) {}
+  }
+
+  /// Waits for queued LRU maintenance. Tests and shutdown paths only; normal
+  /// callers must not block on a bucket scan.
+  Future<void> settle() async {
+    while (_maintenance.isNotEmpty) {
+      await Future.wait(_maintenance.values.toList());
+    }
   }
 
   Future<CachedJson?> readJson(String key) async {
@@ -252,4 +268,9 @@ class CachedJson {
   final Map<String, dynamic> data;
   final DateTime savedAt;
   bool fresh(Duration ttl) => DateTime.now().difference(savedAt) < ttl;
+
+  /// [DiskCache.expireJson] keeps the payload as an offline fallback but
+  /// stamps it with the Unix epoch. Cache-first readers must treat that copy
+  /// as gone: it can predate the mutation that forced the refresh.
+  bool get invalidated => savedAt.millisecondsSinceEpoch == 0;
 }

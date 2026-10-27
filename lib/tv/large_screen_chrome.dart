@@ -308,7 +308,7 @@ class LargeScreenTransport extends StatelessWidget {
         ),
         child: AppleGlass(
           borderRadius: radius,
-          blurSigma: 30,
+          blurSigma: 16,
           color: apple.glassStrong,
           border: Border.all(
             color: apple.separator.withValues(alpha: .6),

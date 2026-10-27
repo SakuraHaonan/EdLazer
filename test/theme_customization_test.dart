@@ -16,6 +16,7 @@ import 'package:lazer_nextgen/player/now_playing_page.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/ui_preferences.dart';
 import 'package:lazer_nextgen/theme/apple_design.dart';
+import 'package:lazer_nextgen/tv/large_screen_pages.dart';
 
 const Track _track = Track(
   id: 'custom-theme-fixture',
@@ -118,6 +119,36 @@ void main() {
     await restarted.setLegacyBackgroundImage(null);
     expect(prefs.getString('lazer_legacy_background_image'), isNull);
     expect(restarted.legacyBackgroundImagePath, isNull);
+  });
+
+  test('an app-owned backdrop persists its file name, not its container path', () async {
+    final Directory directory = Directory.systemTemp.createTempSync(
+      'lazer-owned-backdrop',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final File image = File(
+      '${directory.path}${Platform.pathSeparator}background_42.png',
+    )..writeAsBytesSync(_onePixelPng);
+
+    final AppState state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    await state.setLegacyBackgroundImage(image.path);
+    await state.setLegacyBackground(LegacyBackgroundMode.customImage);
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getString('lazer_legacy_background_image'),
+      'background_42.png',
+      reason: 'iOS may move the container between launches',
+    );
+    expect(state.legacyBackgroundImagePath, image.path);
+
+    final AppState restarted = AppState(catalog: _Catalog());
+    addTearDown(restarted.dispose);
+    await restarted.bootstrap();
+    // The test platform has no app-support directory handler; restore keeps
+    // the portable name rather than losing the choice.
+    expect(restarted.legacyBackgroundImagePath, 'background_42.png');
+    expect(restarted.legacyBackground, LegacyBackgroundMode.customImage);
   });
 
   testWidgets('an off dark backdrop is a lifted canvas, never pure black', (
@@ -242,6 +273,81 @@ void main() {
     expect(find.text('背景图片'), findsOneWidget);
     expect(find.byKey(const ValueKey('background-image-pick')), findsOneWidget);
     expect(find.byKey(const ValueKey('background-image-clear')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the picture action adopts the chosen file', (tester) async {
+    tester.view.physicalSize = const Size(1280, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final Directory directory = Directory.systemTemp.createTempSync(
+      'lazer-pick-backdrop',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final File image = File(
+      '${directory.path}${Platform.pathSeparator}background_77.png',
+    )..writeAsBytesSync(_onePixelPng);
+    final AppState state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    await state.setLegacyBackground(LegacyBackgroundMode.customImage);
+    int picks = 0;
+
+    await tester.pumpWidget(
+      _app(
+        AnimatedBuilder(
+          animation: state,
+          builder: (BuildContext context, _) => Scaffold(
+            body: LegacySettingsPage(
+              state: state,
+              backgroundImagePicker: () async {
+                picks++;
+                return image.path;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('background-image-pick')));
+    await tester.pumpAndSettle();
+    expect(picks, 1);
+    expect(state.legacyBackgroundImagePath, image.path);
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('lazer_legacy_background_image'), 'background_77.png');
+  });
+
+  testWidgets('large-screen settings can replace the backdrop too', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final AppState state = AppState(catalog: _Catalog());
+    addTearDown(state.dispose);
+    await state.setLegacyBackground(LegacyBackgroundMode.customImage);
+    const String picked =
+        '/tmp/background_large.png';
+
+    await tester.pumpWidget(
+      _app(
+        AnimatedBuilder(
+          animation: state,
+          builder: (BuildContext context, _) => Scaffold(
+            body: LargeScreenSettingsPage(
+              state: state,
+              onOpenLocalMusic: () {},
+              backgroundImagePicker: () async => picked,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('background-image-pick')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('background-image-pick')));
+    await tester.pumpAndSettle();
+    expect(state.legacyBackgroundImagePath, picked);
     expect(tester.takeException(), isNull);
   });
 

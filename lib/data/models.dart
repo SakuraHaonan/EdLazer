@@ -15,6 +15,18 @@ class TrackPlayStat {
   final String songId;
   final int playCount;
   final Duration duration;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'songId': songId,
+    'playCount': playCount,
+    'duration': duration.inMilliseconds,
+  };
+
+  factory TrackPlayStat.fromJson(Map<String, dynamic> json) => TrackPlayStat(
+    songId: json['songId'] as String? ?? '',
+    playCount: (json['playCount'] as num?)?.toInt() ?? 0,
+    duration: Duration(milliseconds: (json['duration'] as num?)?.toInt() ?? 0),
+  );
 }
 
 class ArtistRef {

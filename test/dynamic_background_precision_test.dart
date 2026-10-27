@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:lazer_nextgen/audio/audio_engine.dart';
 import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
@@ -29,6 +30,43 @@ class _Gateway extends NeteaseGateway {
   Future<Set<int>> likedSongIds(int uid) async => <int>{};
 }
 
+/// A loaded source with no clock of its own, so the player counts as playing
+/// without any platform channel.
+class _Engine implements AudioEngine {
+  @override
+  bool active = false;
+
+  @override
+  Duration position = Duration.zero;
+
+  @override
+  Duration? get duration => _track.duration;
+
+  @override
+  Stream<void> get completed => const Stream<void>.empty();
+
+  @override
+  Future<void> setUrl(String url) async => active = true;
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> seek(Duration position) async => this.position = position;
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> stop() async => active = false;
+
+  @override
+  void dispose() {}
+}
+
 class _Catalog extends Catalog {
   _Catalog() : super(gateway: _Gateway());
   @override
@@ -45,7 +83,7 @@ class _Catalog extends Catalog {
   Future<String?> audioUrlFor(
     Track track, {
     AudioQuality quality = AudioQuality.exhigh,
-  }) async => null;
+  }) async => 'file:///fixture.mp3';
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async =>
       const GatewayLyrics(lrc: '[00:00.00]First lyric');
@@ -214,7 +252,10 @@ void main() {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final AppState state = AppState(catalog: _Catalog());
+    final AppState state = AppState(
+      catalog: _Catalog(),
+      audioEngine: _Engine(),
+    );
     addTearDown(state.dispose);
     await state.setDynamicBackgroundQuality(0.5);
     state.playQueue(const <Track>[_track]);
@@ -254,12 +295,16 @@ void main() {
     expect(playerFlow().quality, 0.5);
     expect(lyricGate(), isFalse);
 
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < 34; i++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
     expect(playerFlow().preview, isFalse);
     expect(playerFlow().animated, isTrue);
     expect(lyricGate(), isTrue);
     expect(tester.takeException(), isNull);
+
+    // Stop the transport ticker before the tree goes away.
+    state.togglePlay();
+    await tester.pump();
   });
 }

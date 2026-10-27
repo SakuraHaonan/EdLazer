@@ -73,7 +73,11 @@ class VolumeControl extends StatelessWidget {
                     semanticFormatterCallback: (value) =>
                         '${(value * 100).round()}%',
                     value: state.volume,
-                    onChanged: (value) =>
+                    // The drag only touches the engine and the in-memory level;
+                    // persisting on every pointer move wrote prefs and
+                    // notified the whole shell dozens of times a second.
+                    onChanged: state.previewVolume,
+                    onChangeEnd: (value) =>
                         unawaited(_change(context, state.setVolume(value))),
                   ),
                 ),

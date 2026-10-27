@@ -19,6 +19,7 @@ import '../local/local_music_import.dart';
 import '../local/local_music_page.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
+import '../state/media_shortcuts.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
 import '../widgets/accessible_controls.dart';
@@ -27,6 +28,8 @@ import '../widgets/apple_ui.dart';
 import '../widgets/catalog_links.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/listen_together_dialog.dart';
+import '../widgets/playlist_picker_dialog.dart';
+import '../widgets/shortcut_recorder_dialog.dart';
 import '../state/detail_requests.dart';
 import '../tv/tv_mode.dart';
 import '../updates/update_dialog.dart';
@@ -282,7 +285,12 @@ class _ArtistHero extends StatelessWidget {
         ClipOval(
           child: SizedBox.square(
             dimension: 180,
-            child: LegacyCover(url: artist.coverUrl, radius: 0, iconSize: 50),
+            child: LegacyCover(
+              url: artist.coverUrl,
+              size: 180,
+              radius: 0,
+              iconSize: 50,
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -1319,6 +1327,25 @@ class _MovingCoverMosaicState extends State<_MovingCoverMosaic>
     vsync: this,
     duration: const Duration(seconds: 18),
   );
+  // The 18-second drift is slow enough that display-rate updates are
+  // invisible, while a full-rate ticker rebuilt every visible mosaic 100+
+  // times a second. Sample the controller at 30 fps instead.
+  final ValueNotifier<double> _phase = ValueNotifier<double>(0);
+  final Stopwatch _gate = Stopwatch()..start();
+  int _lastSampleMs = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _motion.addListener(_sample);
+  }
+
+  void _sample() {
+    final int now = _gate.elapsedMilliseconds;
+    if (now - _lastSampleMs < 33) return;
+    _lastSampleMs = now;
+    _phase.value = _motion.value;
+  }
 
   @override
   void didChangeDependencies() {
@@ -1332,7 +1359,10 @@ class _MovingCoverMosaicState extends State<_MovingCoverMosaic>
 
   @override
   void dispose() {
-    _motion.dispose();
+    _motion
+      ..removeListener(_sample)
+      ..dispose();
+    _phase.dispose();
     super.dispose();
   }
 
@@ -1349,15 +1379,15 @@ class _MovingCoverMosaicState extends State<_MovingCoverMosaic>
     );
     final travel = widget.tile * covers.length;
     return AnimatedBuilder(
-      animation: _motion,
+      animation: _phase,
       builder: (context, child) => Transform.rotate(
         angle: widget.angle,
         child: Transform.translate(
           offset: Offset(
             widget.reverse
-                ? -travel + _motion.value * travel
-                : -_motion.value * travel,
-            (_motion.value - .5) * widget.tile * widget.diagonal,
+                ? -travel + _phase.value * travel
+                : -_phase.value * travel,
+            (_phase.value - .5) * widget.tile * widget.diagonal,
           ),
           child: child,
         ),
@@ -1517,7 +1547,11 @@ class _EditorialPlaylistShelf extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: <Widget>[
-                LegacyCover(url: playlist.coverUrl, radius: 0),
+                LegacyCover(
+                  url: playlist.coverUrl,
+                  size: compact ? 270 : 330,
+                  radius: 0,
+                ),
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -2751,7 +2785,11 @@ class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
                 fit: StackFit.expand,
                 children: <Widget>[
                   if (widget.playlist.coverUrl?.isNotEmpty ?? false)
-                    LegacyCover(url: widget.playlist.coverUrl, radius: 0)
+                    LegacyCover(
+                      url: widget.playlist.coverUrl,
+                      size: widget.compact ? 190 : 248,
+                      radius: 0,
+                    )
                   else
                     DecoratedBox(
                       decoration: BoxDecoration(
@@ -2900,59 +2938,191 @@ class LegacyLibraryPage extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: adaptiveContentMaxWidth(context, 1180),
         ),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(inset, 8, inset, 28),
-          children: <Widget>[
-            ApplePageTitle(
-              title: '资料库',
-              subtitle: state.isGuest ? '登录后同步你的歌单' : '${state.user.name} 的音乐',
-              padding: const EdgeInsets.fromLTRB(0, 12, 0, 18),
-            ),
-            LocalMusicCard(
-              state: state,
-              onOpen: onOpenLocalMusic,
-              importer: localImporter,
-            ),
-            if (mine.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 30),
-              LegacySectionHeader(
-                title: '我的音乐',
-                subtitle: state.isGuest ? '游客模式' : null,
-                trailing: state.signedIn
-                    ? IconButton(
-                        tooltip: context.tr('刷新歌单'),
-                        onPressed: () =>
-                            unawaited(state.refreshCollections(force: true)),
-                        icon: const Icon(Icons.sync_rounded, size: 19),
-                      )
-                    : null,
-              ),
-              const SizedBox(height: 14),
-              LegacyPlaylistGrid(playlists: mine, onOpen: onOpenPlaylist),
-            ],
-            if (publicLists.isNotEmpty) ...<Widget>[
-              SizedBox(height: mine.isEmpty ? 30 : 34),
-              const LegacySectionHeader(title: '推荐歌单'),
-              const SizedBox(height: 14),
-              LegacyPlaylistGrid(
-                playlists: publicLists,
-                onOpen: onOpenPlaylist,
-              ),
-            ],
-            if (mine.isEmpty && publicLists.isEmpty)
-              LegacyNotice(
-                message: state.isGuest ? '登录后同步你的歌单' : '还没有歌单。',
-                action: state.isGuest
-                    ? FilledButton(
-                        onPressed: () =>
-                            unawaited(showLegacyLoginDialog(context, state)),
-                        child: const TrText('登录'),
-                      )
-                    : null,
-              ),
-          ],
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            // The grid is built lazily row by row: an account can hold a
+            // thousand playlists, and a Wrap used to mount every card (and
+            // every cover image) on the frame the library opened.
+            final double width = math.max(0, constraints.maxWidth - inset * 2);
+            final int columns = switch (width) {
+              >= 1100 => 6,
+              >= 860 => 5,
+              >= 660 => 4,
+              >= 430 => 3,
+              _ => 2,
+            };
+            const double gap = 18;
+            final double cell = ((width - gap * (columns - 1)) / columns).clamp(
+              112.0,
+              180.0,
+            );
+            return CustomScrollView(
+              slivers: <Widget>[
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(inset, 8, inset, 0),
+                  sliver: SliverList.list(
+                    children: <Widget>[
+                      ApplePageTitle(
+                        title: '资料库',
+                        subtitle: state.isGuest
+                            ? '登录后同步你的歌单'
+                            : '${state.user.name} 的音乐',
+                        padding: const EdgeInsets.fromLTRB(0, 12, 0, 18),
+                      ),
+                      LocalMusicCard(
+                        state: state,
+                        onOpen: onOpenLocalMusic,
+                        importer: localImporter,
+                      ),
+                      if (mine.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 30),
+                        LegacySectionHeader(
+                          title: '我的音乐',
+                          subtitle: state.isGuest ? '游客模式' : null,
+                          trailing: state.signedIn
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    IconButton(
+                                      tooltip: context.tr('创建歌单'),
+                                      onPressed: () => unawaited(
+                                        showCreateCloudPlaylistDialog(
+                                          context,
+                                          state,
+                                        ),
+                                      ),
+                                      icon: const Icon(
+                                        Icons.add_rounded,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: context.tr('刷新歌单'),
+                                      onPressed: () => unawaited(
+                                        state.refreshCollections(force: true),
+                                      ),
+                                      icon: const Icon(
+                                        Icons.sync_rounded,
+                                        size: 19,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : null,
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+                    ],
+                  ),
+                ),
+                if (mine.isNotEmpty)
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: inset),
+                    sliver: _PlaylistRowsSliver(
+                      playlists: mine,
+                      columns: columns,
+                      cell: cell,
+                      gap: gap,
+                      onOpen: onOpenPlaylist,
+                    ),
+                  ),
+                if (publicLists.isNotEmpty)
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      inset,
+                      mine.isEmpty ? 30 : 34,
+                      inset,
+                      0,
+                    ),
+                    sliver: SliverList.list(
+                      children: <Widget>[
+                        const LegacySectionHeader(title: '推荐歌单'),
+                        const SizedBox(height: 14),
+                      ],
+                    ),
+                  ),
+                if (publicLists.isNotEmpty)
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: inset),
+                    sliver: _PlaylistRowsSliver(
+                      playlists: publicLists,
+                      columns: columns,
+                      cell: cell,
+                      gap: gap,
+                      onOpen: onOpenPlaylist,
+                    ),
+                  ),
+                if (mine.isEmpty && publicLists.isEmpty)
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: inset),
+                    sliver: SliverToBoxAdapter(
+                      child: LegacyNotice(
+                        message: state.isGuest ? '登录后同步你的歌单' : '还没有歌单。',
+                        action: state.isGuest
+                            ? FilledButton(
+                                onPressed: () => unawaited(
+                                  showLegacyLoginDialog(context, state),
+                                ),
+                                child: const TrText('登录'),
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 28)),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+}
+
+/// A lazily built playlist grid: one sliver row per [columns] cards.
+///
+/// A sliver list keeps the intrinsic card height (so text scaling never
+/// overflows a fixed grid extent) while only mounting the rows on screen.
+class _PlaylistRowsSliver extends StatelessWidget {
+  const _PlaylistRowsSliver({
+    required this.playlists,
+    required this.columns,
+    required this.cell,
+    required this.gap,
+    required this.onOpen,
+  });
+
+  final List<Playlist> playlists;
+  final int columns;
+  final double cell;
+  final double gap;
+  final ValueChanged<Playlist> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final int count = (playlists.length + columns - 1) ~/ columns;
+    return SliverList.builder(
+      itemCount: count,
+      itemBuilder: (BuildContext context, int row) {
+        final int start = row * columns;
+        final int end = math.min(start + columns, playlists.length);
+        return Padding(
+          padding: EdgeInsets.only(bottom: row == count - 1 ? 0 : 24),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (var i = start; i < end; i++) ...<Widget>[
+                if (i > start) SizedBox(width: gap),
+                LegacyPlaylistCard(
+                  playlist: playlists[i],
+                  width: cell,
+                  onTap: () => onOpen(playlists[i]),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -3048,8 +3218,23 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
 
   Future<void> _load() async {
     setState(() => _error = null);
+    final Album? album = widget.album;
+    if (album == null && _tracks == null) {
+      // Last session's track list paints immediately; the live request below
+      // replaces it as soon as the gateway answers.
+      final List<Track>? stored = await widget.state.catalog
+          .cachedPlaylistTracks(widget.playlist.id);
+      if (mounted && stored != null && _tracks == null) {
+        setState(() {
+          _tracks = stored;
+          _metricsDirty = true;
+          _rowIndexTrackId = null;
+          _rowIndexCache = -1;
+        });
+        _scheduleLocateRefresh();
+      }
+    }
     try {
-      final Album? album = widget.album;
       final List<Track> tracks;
       String? note;
       if (album != null) {
@@ -3078,29 +3263,23 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     }
   }
 
-  /// Natural height of one [LegacyTrackRow]: 44 px cover, three optional text
-  /// lines and the row's vertical padding/margin. Measured rather than
-  /// hard-coded so text scaling stays exact.
-  double _rowExtent(Track track, ThemeData theme, TextScaler scaler) {
-    double line(TextStyle? style, String text) {
-      final TextPainter painter = TextPainter(
-        text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
-        textDirection: TextDirection.ltr,
-        textScaler: scaler,
-        maxLines: 1,
-      )..layout();
-      final double height = painter.height;
-      painter.dispose();
-      return height;
-    }
-
-    final double title = line(theme.textTheme.bodyMedium, track.title);
-    final double artist = line(theme.textTheme.bodySmall, track.artist);
-    final String? translated = track.translatedTitle?.trim();
-    final double translation = translated == null || translated.isEmpty
-        ? 0
-        : line(theme.textTheme.bodySmall, translated);
-    return math.max(44.0, title + artist + translation) + 16.0;
+  /// Natural height of one [LegacyTrackRow]: 44 px cover, up to three
+  /// single-line text rows and the row's vertical padding/margin.
+  ///
+  /// Every text line is single-line with ellipsis, so its height depends on
+  /// the theme style alone — not on the words. Measuring the two styles once
+  /// keeps a 1,000-song playlist from laying out 3,000 text painters on the
+  /// frame the locator first needs its offsets.
+  static double _lineHeight(TextStyle? style, TextScaler scaler) {
+    final TextPainter painter = TextPainter(
+      text: TextSpan(text: '国', style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final double height = painter.height;
+    painter.dispose();
+    return height;
   }
 
   void _ensureRowMetrics() {
@@ -3117,12 +3296,21 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     }
     final ThemeData theme = Theme.of(context);
     final TextScaler scaler = MediaQuery.textScalerOf(context);
+    // Only two possible row heights exist (with/without a translated title);
+    // sampling them once turns the per-track work into one addition.
+    final double title = _lineHeight(theme.textTheme.bodyMedium, scaler);
+    final double detail = _lineHeight(theme.textTheme.bodySmall, scaler);
+    final double plain = math.max(44.0, title + detail) + 16.0;
+    final double translated = math.max(44.0, title + detail * 2) + 16.0;
     final List<double> tops = <double>[];
     final List<double> heights = <double>[];
     var offset = 0.0;
     for (final Track track in tracks) {
+      final String? subtitle = track.translatedTitle?.trim();
+      final double extent = subtitle == null || subtitle.isEmpty
+          ? plain
+          : translated;
       tops.add(offset);
-      final double extent = _rowExtent(track, theme, scaler);
       heights.add(extent);
       offset += extent;
     }
@@ -3855,12 +4043,17 @@ class LegacySettingsPage extends StatelessWidget {
     super.key,
     required this.state,
     this.onOpenLocalMusic,
+    this.backgroundImagePicker,
   });
 
   final AppState state;
 
   /// Jumps to the local-music page from the download settings group.
   final VoidCallback? onOpenLocalMusic;
+
+  /// Overrides the platform picture picker. Tests and platform forks can
+  /// supply a stored file without opening a system dialog.
+  final Future<String?> Function()? backgroundImagePicker;
 
   @override
   Widget build(BuildContext context) {
@@ -3869,6 +4062,10 @@ class LegacySettingsPage extends StatelessWidget {
     final double minScale = UiMetrics.minScaleOf(context);
     final double shownScale = UiMetrics.scaleOf(context);
     final bool car = UiMetrics.carOf(context);
+    final bool shortcutsCustomised = MediaShortcutAction.values.any(
+      (MediaShortcutAction action) =>
+          state.mediaShortcuts[action] != kDefaultMediaShortcuts[action],
+    );
     final DynamicBackgroundPrecision flowPrecision =
         DynamicBackgroundPrecision.of(state.dynamicBackgroundQuality);
     final double inset = _pageInset(context);
@@ -4030,7 +4227,13 @@ class LegacySettingsPage extends StatelessWidget {
                         unawaited(state.setLegacyBackground(value));
                         if (value == LegacyBackgroundMode.customImage &&
                             state.legacyBackgroundImagePath == null) {
-                          unawaited(_pickBackgroundImage(context, state));
+                          unawaited(
+                            _pickBackgroundImage(
+                              context,
+                              state,
+                              backgroundImagePicker,
+                            ),
+                          );
                         }
                       },
                     ),
@@ -4064,8 +4267,13 @@ class LegacySettingsPage extends StatelessWidget {
                             ),
                           OutlinedButton(
                             key: const ValueKey('background-image-pick'),
-                            onPressed: () =>
-                                unawaited(_pickBackgroundImage(context, state)),
+                            onPressed: () => unawaited(
+                              _pickBackgroundImage(
+                                context,
+                                state,
+                                backgroundImagePicker,
+                              ),
+                            ),
                             child: Text(
                               context.tr(
                                 state.legacyBackgroundImagePath == null
@@ -4341,6 +4549,40 @@ class LegacySettingsPage extends StatelessWidget {
                     onChanged: (double value) =>
                         unawaited(state.setLyricControlsSeconds(value)),
                   ),
+                ],
+              ),
+            ),
+            const _LegacySectionLabel('快捷键'),
+            AppleGroupedCard(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _LegacySettingRow(
+                    label: '媒体快捷键',
+                    subtitle: '在应用内用键盘控制播放；在文本框中输入时快捷键不会触发',
+                    trailing: TextButton(
+                      key: const ValueKey('media-shortcut-reset'),
+                      onPressed: shortcutsCustomised
+                          ? () => unawaited(state.resetMediaShortcuts())
+                          : null,
+                      child: const TrText('恢复默认'),
+                    ),
+                  ),
+                  for (final MediaShortcutAction action
+                      in MediaShortcutAction.values)
+                    _LegacySettingRow(
+                      label: action.label,
+                      subtitle: action.detail,
+                      trailing: OutlinedButton(
+                        key: ValueKey('media-shortcut-${action.name}'),
+                        onPressed: () =>
+                            unawaited(_editMediaShortcut(context, state, action)),
+                        child: Text(
+                          state.mediaShortcutFor(action)?.label ??
+                              context.tr('未设置'),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -4878,10 +5120,14 @@ Future<void> _pickLegacyAccent(BuildContext context, AppState state) async {
 }
 
 /// Picks a picture, stores a copy and switches the backdrop to it.
-Future<void> _pickBackgroundImage(BuildContext context, AppState state) async {
+Future<void> _pickBackgroundImage(
+  BuildContext context,
+  AppState state, [
+  Future<String?> Function()? picker,
+]) async {
   String? stored;
   try {
-    stored = await pickCustomBackgroundImage();
+    stored = await (picker ?? pickCustomBackgroundImage)();
   } catch (_) {
     // No picker on this platform, or the copy failed; leave the setting as is.
     return;
@@ -4891,6 +5137,40 @@ Future<void> _pickBackgroundImage(BuildContext context, AppState state) async {
   await state.setLegacyBackgroundImage(stored);
   await state.setLegacyBackground(LegacyBackgroundMode.customImage);
   if (previous != stored) await deleteCustomBackgroundImage(previous);
+}
+
+/// Opens the key recorder for [action] and persists the chosen combination.
+Future<void> _editMediaShortcut(
+  BuildContext context,
+  AppState state,
+  MediaShortcutAction action,
+) async {
+  final ShortcutSelection? selection = await showShortcutRecorderDialog(
+    context,
+    action: action,
+    current: state.mediaShortcutFor(action),
+    conflict: (MediaShortcutBinding binding) => mediaShortcutConflict(
+      state.mediaShortcuts,
+      action: action,
+      binding: binding,
+    ),
+  );
+  if (selection == null) return;
+  if (selection.cleared) {
+    await state.setMediaShortcut(action, null);
+    return;
+  }
+  final MediaShortcutBinding? binding = selection.binding;
+  if (binding == null) return;
+  if (mediaShortcutConflict(
+        state.mediaShortcuts,
+        action: action,
+        binding: binding,
+      ) !=
+      null) {
+    return;
+  }
+  await state.setMediaShortcut(action, binding);
 }
 
 class _LegacyAccentSwatch extends StatelessWidget {

@@ -98,7 +98,9 @@ class _CatalogDetailPageState extends State<CatalogDetailPage> {
       }
     } catch (_) {
       if (mounted && generation == _generation) {
-        setState(() => _error = _isArtist ? '歌手资料加载失败，请重试。' : '专辑资料加载失败，请重试。');  // i18n:key
+        setState(
+          () => _error = _isArtist ? '歌手资料加载失败，请重试。' : '专辑资料加载失败，请重试。',
+        ); // i18n:key
       }
     } finally {
       if (mounted && generation == _generation) {
@@ -133,7 +135,7 @@ class _CatalogDetailPageState extends State<CatalogDetailPage> {
       });
     } catch (_) {
       if (mounted && generation == _generation) {
-        setState(() => _albumsError = '专辑加载失败，请重试。');  // i18n:key
+        setState(() => _albumsError = '专辑加载失败，请重试。'); // i18n:key
       }
     } finally {
       if (mounted && generation == _generation) {
@@ -165,6 +167,7 @@ class _CatalogDetailPageState extends State<CatalogDetailPage> {
           : PlateArt(
               seed: _isArtist ? artist!.id : album!.coverSeed,
               coverUrl: artUrl,
+              size: side,
             ),
     );
     final details = Column(
@@ -358,7 +361,8 @@ class _CatalogDetailPageState extends State<CatalogDetailPage> {
                         state: widget.state,
                         track: _tracks[index],
                         index: index + 1,
-                        isCurrent: widget.state.current?.id == _tracks[index].id,
+                        isCurrent:
+                            widget.state.current?.id == _tracks[index].id,
                         onPlay: () =>
                             widget.state.playQueue(_tracks, startIndex: index),
                       ),
@@ -397,6 +401,7 @@ class _CatalogDetailPageState extends State<CatalogDetailPage> {
                                     child: PlateArt(
                                       seed: album.coverSeed,
                                       coverUrl: album.coverUrl,
+                                      size: 240,
                                     ),
                                   ),
                                 ),

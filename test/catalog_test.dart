@@ -20,6 +20,7 @@ class _Gateway extends NeteaseGateway {
   int collectionCalls = 0;
   int audioCalls = 0;
   int lyricCalls = 0;
+  int playRecordCalls = 0;
 
   @override
   Future<GatewayLyrics> preferredLyrics(int id) async {
@@ -84,6 +85,24 @@ class _Gateway extends NeteaseGateway {
   }
 
   @override
+  Future<List<GatewayPlayRecord>> playRecord(int uid) async {
+    playRecordCalls++;
+    if (failAll) throw const SocketException('offline');
+    return const <GatewayPlayRecord>[
+      GatewayPlayRecord(
+        song: GatewaySong(
+          id: 1,
+          title: '曲目 1',
+          artists: <String>['音乐人'],
+          albumName: '专辑',
+          duration: Duration(minutes: 3),
+        ),
+        playCount: 12,
+      ),
+    ];
+  }
+
+  @override
   Future<List<GatewaySong>> songDetails(List<int> ids) async {
     detailPages.add(ids);
     return ids
@@ -124,6 +143,14 @@ class _Gateway extends NeteaseGateway {
     String keywords, {
     int limit = 20,
   }) async => const <GatewayPlaylist>[];
+}
+
+/// Simulates a disk that could not write its invalidation tombstone.
+class _StubbornCache extends DiskCache {
+  _StubbornCache({required super.directory});
+
+  @override
+  Future<void> expireJson(String key) async {}
 }
 
 class _ChartGateway extends NeteaseGateway {
@@ -344,6 +371,141 @@ void main() {
         final offline = await catalog.lyricsFor(track);
         expect(offline?.lrc, '[00:00]Line 2');
         expect(offline?.tlyric, '[00:00]翻译');
+      },
+    );
+
+    test(
+      'a fresh playlist is served from memory after the disk snapshot is gone',
+      () async {
+        final gateway = _Gateway();
+        final catalog = Catalog(gateway: gateway, cache: disk);
+        final first = await catalog.playlistTracks('12');
+        expect(first.length, 501);
+        // Simulate the OS cache cleaner removing the file between two visits.
+        await disk.remove(
+          CacheBucket.data,
+          'playlist-v2:guest:12',
+          extension: 'json',
+        );
+        gateway.failAll = true;
+        final warm = await catalog.playlistTracks('12');
+        expect(warm.length, 501);
+        expect(gateway.playlistCalls, 1);
+
+        // An invalidation must drop the warm copy as well as the disk one.
+        await catalog.invalidatePlaylist('12');
+        await expectLater(
+          catalog.playlistTracks('12'),
+          throwsA(isA<SocketException>()),
+        );
+      },
+    );
+
+    test(
+      'a stored playlist paints without the service until invalidated',
+      () async {
+        final first = Catalog(gateway: _Gateway(), cache: disk);
+        final loaded = await first.playlistTracks('12');
+        expect(loaded.length, 501);
+
+        // A cold start: new catalog, same disk, and a service that is down.
+        final offline = _Gateway()..failAll = true;
+        final restarted = Catalog(
+          gateway: offline,
+          cache: DiskCache(directory: () async => directory),
+        );
+        final stored = await restarted.cachedPlaylistTracks('12');
+        expect(stored?.length, 501);
+        expect(stored?.first.id, loaded.first.id);
+        expect(offline.playlistCalls, 0);
+
+        // A mutation invalidates the snapshot: the page must not paint the
+        // pre-mutation list, even though the payload stays as the offline
+        // fallback for the blocking path.
+        await restarted.invalidatePlaylist('12');
+        expect(await restarted.cachedPlaylistTracks('12'), isNull);
+        expect((await restarted.playlistTracks('12')).length, 501);
+        expect(offline.playlistCalls, 1);
+      },
+    );
+
+    test(
+      'a failed disk tombstone cannot resurrect an invalidated playlist',
+      () async {
+        final gateway = _Gateway();
+        final catalog = Catalog(
+          gateway: gateway,
+          cache: _StubbornCache(directory: () async => directory),
+        );
+        expect((await catalog.playlistTracks('12')).length, 501);
+        await catalog.invalidatePlaylist('12');
+        expect(await catalog.cachedPlaylistTracks('12'), isNull);
+
+        // The disk file still looks fresh here, but the catalog must not take
+        // it as a hit: only the failed fetch may fall back to it.
+        gateway.failPlaylist = true;
+        expect((await catalog.playlistTracks('12')).length, 501);
+        expect(gateway.playlistCalls, 2);
+      },
+    );
+
+    test(
+      'stored collections paint without the service until invalidated',
+      () async {
+        final firstGateway = _Gateway()
+          ..sessionCookie = 'MUSIC_U=fixture-account';
+        final first = Catalog(gateway: firstGateway, cache: disk);
+        final loaded = await first.userCollections(7);
+        expect(loaded.liked?.id, '70');
+
+        final offline = _Gateway()
+          ..sessionCookie = 'MUSIC_U=fixture-account'
+          ..failAll = true;
+        final restarted = Catalog(
+          gateway: offline,
+          cache: DiskCache(directory: () async => directory),
+        );
+        final stored = await restarted.cachedUserCollections(7);
+        expect(stored?.liked?.trackCount, 501);
+        expect(offline.collectionCalls, 0);
+
+        await restarted.invalidateCollections(7);
+        expect(await restarted.cachedUserCollections(7), isNull);
+      },
+    );
+
+    test(
+      'play stats are cached in memory and on disk until invalidated',
+      () async {
+        final gateway = _Gateway();
+        final catalog = Catalog(gateway: gateway, cache: disk);
+        final first = await catalog.playStats(7);
+        expect(first.single.songId, '1');
+        expect(first.single.playCount, 12);
+        expect(first.single.duration, const Duration(minutes: 3));
+        expect(gateway.playRecordCalls, 1);
+
+        // Opening 听歌排行 again must not hit the network.
+        await catalog.playStats(7);
+        expect(gateway.playRecordCalls, 1);
+
+        // A forced refresh (the play-history retry) bypasses both layers.
+        await catalog.playStats(7, force: true);
+        expect(gateway.playRecordCalls, 2);
+
+        // Uploading a play invalidates the cached record.
+        await catalog.invalidatePlayStats(7);
+        await catalog.playStats(7);
+        expect(gateway.playRecordCalls, 3);
+
+        // A restarted catalog serves the disk snapshot without a request.
+        final restarted = Catalog(
+          gateway: gateway,
+          cache: DiskCache(directory: () async => directory),
+        );
+        final cached = await restarted.playStats(7);
+        expect(cached.single.playCount, 12);
+        expect(gateway.playRecordCalls, 3);
       },
     );
 
@@ -642,51 +804,54 @@ void main() {
     expect(gateway.classicCalls, 1);
   });
 
-  test('a row that matched nothing is remembered briefly, not for weeks', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'lazer-chart-retry-test-',
-    );
-    addTearDown(() => directory.delete(recursive: true));
-    final gateway = _LateChartGateway();
-    final catalog = Catalog(
-      gateway: gateway,
-      cache: DiskCache(directory: () async => directory),
-    );
-    const chart = MusicChart(
-      id: 'biliboard:1:124',
-      title: '周榜',
-      source: 'Biliboard',
-      issueLabel: 'Current',
-      providerKey: 'biliboard:1',
-      entries: <ChartEntry>[
-        ChartEntry(rank: 1, title: 'シスターに懺悔を', artist: '廃原メモリ'),
-      ],
-    );
+  test(
+    'a row that matched nothing is remembered briefly, not for weeks',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lazer-chart-retry-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final gateway = _LateChartGateway();
+      final catalog = Catalog(
+        gateway: gateway,
+        cache: DiskCache(directory: () async => directory),
+      );
+      const chart = MusicChart(
+        id: 'biliboard:1:124',
+        title: '周榜',
+        source: 'Biliboard',
+        issueLabel: 'Current',
+        providerKey: 'biliboard:1',
+        entries: <ChartEntry>[
+          ChartEntry(rank: 1, title: 'シスターに懺悔を', artist: '廃原メモリ'),
+        ],
+      );
 
-    final firstVisit = await catalog.matchChart(chart);
-    expect(firstVisit.entries.single.track, isNull);
-    final afterMiss = gateway.searchCalls;
-    expect(afterMiss, greaterThan(0));
+      final firstVisit = await catalog.matchChart(chart);
+      expect(firstVisit.entries.single.track, isNull);
+      final afterMiss = gateway.searchCalls;
+      expect(afterMiss, greaterThan(0));
 
-    // Re-opening the board inside the miss window must not fire the same
-    // searches again: that storm is what made the search host reject a whole
-    // board and leave every row without a play link.
-    final reopened = await catalog.matchChart(chart);
-    expect(reopened.entries.single.track, isNull);
-    expect(gateway.searchCalls, afterMiss);
+      // Re-opening the board inside the miss window must not fire the same
+      // searches again: that storm is what made the search host reject a whole
+      // board and leave every row without a play link.
+      final reopened = await catalog.matchChart(chart);
+      expect(reopened.entries.single.track, isNull);
+      expect(gateway.searchCalls, afterMiss);
 
-    // An explicit retry searches again and resolves the row.
-    gateway.available = true;
-    final retried = await catalog.matchChart(chart, force: true);
-    expect(retried.entries.single.track?.id, '9');
-    expect(gateway.searchCalls, greaterThan(afterMiss));
+      // An explicit retry searches again and resolves the row.
+      gateway.available = true;
+      final retried = await catalog.matchChart(chart, force: true);
+      expect(retried.entries.single.track?.id, '9');
+      expect(gateway.searchCalls, greaterThan(afterMiss));
 
-    // Once resolved the row is served from cache, forced retry or not.
-    final served = gateway.searchCalls;
-    final again = await catalog.matchChart(chart, force: true);
-    expect(again.entries.single.track?.id, '9');
-    expect(gateway.searchCalls, served);
-  });
+      // Once resolved the row is served from cache, forced retry or not.
+      final served = gateway.searchCalls;
+      final again = await catalog.matchChart(chart, force: true);
+      expect(again.entries.single.track?.id, '9');
+      expect(gateway.searchCalls, served);
+    },
+  );
 
   test('a search outage leaves every row retryable', () async {
     final directory = await Directory.systemTemp.createTemp(

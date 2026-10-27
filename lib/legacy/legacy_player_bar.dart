@@ -56,7 +56,7 @@ class LegacyPlayerBar extends StatelessWidget {
           final AppleSemanticColors apple = AppleSemanticColors.of(context);
           return AppleGlass(
             borderRadius: BorderRadius.zero,
-            blurSigma: 28,
+            blurSigma: 16,
             color: apple.glassStrong,
             border: Border(top: BorderSide(color: apple.separator, width: .5)),
             child: SizedBox(
@@ -96,7 +96,7 @@ class LegacyPlayerBar extends StatelessWidget {
         final AppleSemanticColors apple = AppleSemanticColors.of(context);
         return AppleGlass(
           borderRadius: BorderRadius.zero,
-          blurSigma: 30,
+          blurSigma: 16,
           color: apple.glassStrong,
           border: Border(top: BorderSide(color: apple.separator, width: .5)),
           child: SizedBox(

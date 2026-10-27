@@ -232,6 +232,43 @@ NeteaseRequest buildNeteaseRequest(
         '/api/v6/playlist/detail',
         body: <String, Object?>{'id': id(), 'n': 100000, 's': value('s', '8')},
       );
+    case '/playlist/create':
+      final String name = value('name').trim();
+      if (name.isEmpty || name.length > 40) {
+        throw ArgumentError.value(name, 'name', 'must be 1-40 characters.');
+      }
+      return request(
+        '/api/playlist/create',
+        web: true,
+        body: <String, Object?>{
+          'name': name,
+          // NetEase: '10' is a private playlist, '0' is public.
+          'privacy': value('privacy', '0') == '10' ? '10' : '0',
+          'type': 'NORMAL',
+        },
+      );
+    case '/playlist/tracks':
+      final String op = value('op', 'add');
+      if (op != 'add' && op != 'del') {
+        throw ArgumentError.value(op, 'op', 'must be add or del.');
+      }
+      return request(
+        '/api/playlist/manipulate/tracks',
+        web: true,
+        body: <String, Object?>{
+          'op': op,
+          'pid': id('pid'),
+          // The service expects a JSON array of ids, not a form list.
+          'trackIds': '[${_songIds(value('tracks')).join(',')}]',
+          'imme': 'true',
+        },
+      );
+    case '/playlist/delete':
+      return request(
+        '/api/playlist/delete',
+        web: true,
+        body: <String, Object?>{'pid': id('pid')},
+      );
     case '/user/playlist':
       return request(
         '/api/user/playlist',

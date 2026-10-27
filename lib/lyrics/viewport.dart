@@ -57,7 +57,8 @@ class _LyricViewportState extends State<LyricViewport>
   List<double> _heights = [];
   List<double> _prefix = [];
   double _rowUnit = 0;
-  List<Widget> _rows = [];
+  final Map<int, Widget> _rowCache = <int, Widget>{};
+  List<ValueNotifier<int>> _rowFrames = const <ValueNotifier<int>>[];
   Size _size = Size.zero;
   double get _gutter =>
       math.min(LyricEdgeFade.horizontalExtent, _size.width * 0.1);
@@ -73,13 +74,10 @@ class _LyricViewportState extends State<LyricViewport>
   double _offset = 0;
   double _velocity = 0;
   Duration _lastFrame = Duration.zero;
-  Duration _lastPaint = Duration.zero;
-  static const Duration _frameInterval = Duration(milliseconds: 16);
+  Duration? _lastLanePosition;
   Duration? _lastMedia;
   int _lastWall = 0;
   Timer? _resume;
-  Timer? _followClock;
-  bool _clockVisible = true;
   double _dragCarry = 0;
   LyricSelection _selection = const LyricSelection();
   bool _copied = false;
@@ -102,8 +100,6 @@ class _LyricViewportState extends State<LyricViewport>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _ticker ??= createTicker(_tick);
-    _clockVisible = TickerMode.valuesOf(context).enabled;
-    _syncFollowClock();
   }
 
   @override
@@ -114,21 +110,6 @@ class _LyricViewportState extends State<LyricViewport>
       widget.state.all.addListener(_onLane);
     }
     _updateBlur();
-    _syncFollowClock();
-  }
-
-  void _syncFollowClock() {
-    if (!widget.state.playing ||
-        !_clockVisible ||
-        widget.state.lyrics.isEmpty) {
-      _followClock?.cancel();
-      _followClock = null;
-      return;
-    }
-    _followClock ??= Timer.periodic(
-      AppState.lyricFollowInterval,
-      (_) => _followLine(),
-    );
   }
 
   void _followLine() {
@@ -139,7 +120,7 @@ class _LyricViewportState extends State<LyricViewport>
     if (active == _active) return;
     setState(() {
       _active = active;
-      _rows = [];
+      _rowCache.clear();
       _targets();
       _scaleTargets();
     });
@@ -210,22 +191,33 @@ class _LyricViewportState extends State<LyricViewport>
       _manual = _selection.active;
       _velocity = 0;
     }
-    if (changed ||
-        typographyChanged ||
-        active != _active ||
-        _playing != widget.state.playing) {
+    if (changed || typographyChanged || active != _active) {
       setState(() {
         _active = active;
-        _playing = widget.state.playing;
-        _rows = [];
+        _rowCache.clear();
         if (!changed && !_manual) _targets(seeking: seeking);
         _scaleTargets();
       });
     }
-    // Paused seeks within one line still change the word mask.
-    _frames.value++;
+    if (_playing != widget.state.playing) {
+      _playing = widget.state.playing;
+      // Resuming mid-song must restart word animation even though no spring
+      // is retargeted; the old code got this (and a full stagger restart) by
+      // retargeting every row on the play-state change.
+      if (_playing && _hasWordTimings) _start();
+    }
+    // Only a paused seek changes the word mask without a running ticker. A
+    // playback tick (10 Hz) must not repaint every mounted row.
+    final Duration precise = widget.state.precisePosition;
+    if (_hasWordTimings &&
+        !widget.state.playing &&
+        precise != _lastLanePosition) {
+      if (_active >= 0 && _active < _rowFrames.length) {
+        _rowFrames[_active].value++;
+      }
+    }
+    _lastLanePosition = precise;
     _updateBlur();
-    _syncFollowClock();
   }
 
   void _updateBlur() {
@@ -253,6 +245,10 @@ class _LyricViewportState extends State<LyricViewport>
       _size.height * 0.22,
       math.max(28.0, _rowUnit * 1.15),
     ),
+    // The desktop canvas is wide enough for its 18 px gutter to contain the
+    // blur halo, so skipping the horizontal offscreen pass saves one
+    // full-pane blend per frame without changing what is visible.
+    horizontal: _size.width < 520,
     child: child,
   );
 
@@ -260,17 +256,15 @@ class _LyricViewportState extends State<LyricViewport>
     final Ticker? ticker = _ticker;
     if (ticker != null && !ticker.isActive) {
       _lastFrame = Duration.zero;
-      _lastPaint = Duration.zero;
       ticker.start();
     }
   }
 
   void _tick(Duration elapsed) {
-    // The AMLL reference runs its word animation at 60 fps; on a 120 Hz panel
-    // this halves the number of full lyric repaints (each visible row is a
-    // colour-filtered, blurred text layer) with no visible difference.
-    if (elapsed - _lastPaint < _frameInterval) return;
-    _lastPaint = elapsed;
+    // Every vsync updates the lyric springs. The old 16 ms gate turned a
+    // 100 Hz panel into 50 lyric updates per second (and 80 Hz into 40), so
+    // the animation could never reach the requested 80 fps even when the UI
+    // thread had headroom.
     final dt = ((elapsed - _lastFrame).inMicroseconds / 1e6).clamp(0.0, 0.1);
     _lastFrame = elapsed;
     if (widget.state.playing) _followLine();
@@ -287,6 +281,15 @@ class _LyricViewportState extends State<LyricViewport>
       _ys[i].update(dt);
       _scales[i].update(dt);
       moving = moving || !_ys[i].arrived || !_scales[i].arrived;
+    }
+    // Only the active word row needs a paint every frame; a row whose scale
+    // is still easing needs one for its colour fade. Everything else stays
+    // behind its RepaintBoundary even though the outer stack keeps moving.
+    final bool wordFrame = widget.state.playing && _hasWordTimings;
+    for (var i = 0; i < _rowFrames.length && i < _scales.length; i++) {
+      if (wordFrame && i == _active || !_scales[i].arrived) {
+        _rowFrames[i].value++;
+      }
     }
     _frames.value++;
     if (!moving) _ticker?.stop();
@@ -423,7 +426,7 @@ class _LyricViewportState extends State<LyricViewport>
           })(),
       ];
       _rowUnit = _heights.isEmpty ? 0 : sum / _heights.length;
-      _rows = [];
+      _rowCache.clear();
     }
     if (replaced) {
       _ys = [
@@ -443,6 +446,12 @@ class _LyricViewportState extends State<LyricViewport>
               stiffness: 100,
             ),
           ),
+      ];
+      for (final notifier in _rowFrames) {
+        notifier.dispose();
+      }
+      _rowFrames = [
+        for (var i = 0; i < _lines.length; i++) ValueNotifier<int>(0),
       ];
       _manual = _selection.active;
     }
@@ -533,7 +542,7 @@ class _LyricViewportState extends State<LyricViewport>
       _selection = next;
       _selectionRevision++;
       _copied = false;
-      _rows = [];
+      _rowCache.clear();
     });
     _copiedTimer?.cancel();
     if (changed) widget.onSelectionChanged?.call(next.active);
@@ -626,6 +635,11 @@ class _LyricViewportState extends State<LyricViewport>
     ),
   );
 
+  /// Builds a row lazily and keeps it across frames; only viewport rows are
+  /// ever constructed, so a 1,000-line sheet no longer allocates 1,000 row
+  /// widgets every time the active line changes.
+  Widget _cachedRow(int index) => _rowCache[index] ??= _row(index);
+
   Widget _row(int index) => Semantics(
     selected: _selection.active
         ? _selection.keys.contains(lyricSelectionKey(_lines[index]))
@@ -646,6 +660,9 @@ class _LyricViewportState extends State<LyricViewport>
 
   Widget _rowBody(int index, double selected) {
     final focused = index == _active;
+    final Listenable rowFrames = index < _rowFrames.length
+        ? _rowFrames[index]
+        : _frames;
     double emphasis() => ((_scales[index].value - 97) / 3).clamp(0.0, 1.0);
     double mainAlpha() => 0.48 + emphasis() * 0.52;
     final style = _originalStyle.copyWith(color: Colors.white);
@@ -656,7 +673,7 @@ class _LyricViewportState extends State<LyricViewport>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AnimatedBuilder(
-            animation: _frames,
+            animation: rowFrames,
             builder: (context, child) => ColorFiltered(
               key: ValueKey('lyric-color-$index'),
               colorFilter: ColorFilter.mode(
@@ -680,7 +697,7 @@ class _LyricViewportState extends State<LyricViewport>
                       active: focused,
                       emphasis: emphasis,
                       position: () => widget.state.precisePosition,
-                      repaint: _frames,
+                      repaint: rowFrames,
                     )
                   : Text(
                       _lines[index].text.isEmpty ? ' ' : _lines[index].text,
@@ -712,6 +729,47 @@ class _LyricViewportState extends State<LyricViewport>
           ],
         ],
       ),
+    );
+  }
+
+  /// One mounted lyric row. The index-only key keeps the element (and its
+  /// painted layer) alive when the next song's lyrics arrive, instead of
+  /// tearing the whole sheet down and measuring every line again.
+  Widget _positionedRow(int index) {
+    final double sigma = _sigma(index);
+    return Positioned(
+      key: ValueKey('lyric-line-$index'),
+      top: 0,
+      left: _gutter,
+      width: _textWidth,
+      height: _heights[index],
+      child: Transform.translate(
+        offset: Offset(0, _ys[index].value),
+        child: Transform.scale(
+          scale: _scales[index].value / 100,
+          alignment: Alignment.centerLeft,
+          child: ImageFiltered(
+            key: ValueKey('lyric-blur-$index'),
+            enabled: sigma > 0.02,
+            imageFilter: _blurFilter(sigma),
+            // Every row gets its own layer: a per-word row otherwise repaints
+            // the whole lyric stack on each of its animation frames.
+            child: RepaintBoundary(child: _cachedRow(index)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Blur sigmas are quantized so neighbouring frames reuse one filter object
+  /// instead of allocating and reconfiguring an `ImageFilter` per row.
+  static final Map<int, ui.ImageFilter> _blurFilters = <int, ui.ImageFilter>{};
+
+  static ui.ImageFilter _blurFilter(double sigma) {
+    final int step = (sigma * 8).round();
+    return _blurFilters[step] ??= ui.ImageFilter.blur(
+      sigmaX: step / 8,
+      sigmaY: step / 8,
     );
   }
 
@@ -765,9 +823,6 @@ class _LyricViewportState extends State<LyricViewport>
           Size(box.maxWidth, box.maxHeight),
           MediaQuery.textScalerOf(context),
         );
-        if (_rows.isEmpty) {
-          _rows = [for (var i = 0; i < _lines.length; i++) _row(i)];
-        }
         return PopScope<void>(
           canPop: !_selection.active,
           onPopInvokedWithResult: (didPop, result) {
@@ -846,43 +901,20 @@ class _LyricViewportState extends State<LyricViewport>
                     _dragging = false;
                     _scheduleResume();
                   },
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([_frames, _blur]),
-                    builder: (context, _) => _edgeFade(
-                      Stack(
+                  // The edge mask is built once per layout change, not once
+                  // per animation frame: rebuilding the double ShaderMask at
+                  // 60 fps reconfigured a full-pane offscreen layer each frame.
+                  child: _edgeFade(
+                    AnimatedBuilder(
+                      animation: Listenable.merge([_frames, _blur]),
+                      builder: (context, _) => Stack(
                         fit: StackFit.expand,
                         clipBehavior: Clip.none,
                         children: [
                           for (var i = 0; i < _lines.length; i++)
                             if (_ys[i].value + _heights[i] >= -80 &&
                                 _ys[i].value <= _size.height + 80)
-                              Positioned(
-                                key: ValueKey(
-                                  'lyric-line-${widget.state.current?.id}-$i',
-                                ),
-                                top: 0,
-                                left: _gutter,
-                                width: _textWidth,
-                                height: _heights[i],
-                                child: Transform.translate(
-                                  offset: Offset(0, _ys[i].value),
-                                  child: Transform.scale(
-                                    scale: _scales[i].value / 100,
-                                    alignment: Alignment.centerLeft,
-                                    child: ImageFiltered(
-                                      key: ValueKey('lyric-blur-$i'),
-                                      enabled: _sigma(i) > 0.02,
-                                      imageFilter: ui.ImageFilter.blur(
-                                        sigmaX: _sigma(i),
-                                        sigmaY: _sigma(i),
-                                      ),
-                                      child: _lines[i].words.isEmpty
-                                          ? RepaintBoundary(child: _rows[i])
-                                          : _rows[i],
-                                    ),
-                                  ),
-                                ),
-                              ),
+                              _positionedRow(i),
                         ],
                       ),
                     ),
@@ -938,7 +970,9 @@ class _LyricViewportState extends State<LyricViewport>
   @override
   void dispose() {
     _resume?.cancel();
-    _followClock?.cancel();
+    for (final notifier in _rowFrames) {
+      notifier.dispose();
+    }
     _copiedTimer?.cancel();
     widget.state.all.removeListener(_onLane);
     _ticker?.dispose();

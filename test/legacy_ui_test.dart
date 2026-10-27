@@ -346,7 +346,7 @@ void main() {
 
   testWidgets('the legacy settings expose every preference', (tester) async {
     // Tall enough that the lazy list builds every row, About included.
-    tester.view.physicalSize = const Size(1280, 3400);
+    tester.view.physicalSize = const Size(1280, 4200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final AppState state = AppState(catalog: _Catalog());

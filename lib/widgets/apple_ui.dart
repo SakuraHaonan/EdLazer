@@ -16,7 +16,7 @@ class AppleGlass extends StatelessWidget {
     required this.child,
     this.color,
     this.borderRadius = BorderRadius.zero,
-    this.blurSigma = 24,
+    this.blurSigma = 16,
     this.border,
   });
 
@@ -29,16 +29,24 @@ class AppleGlass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final Color tint = color ?? apple.glass;
+    final Widget decorated = DecoratedBox(
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: borderRadius,
+        border: border,
+      ),
+      child: child,
+    );
+    // A 95%-opaque tint hides almost all of the blurred backdrop, but the
+    // full-screen Gaussian still runs every time the flowing background
+    // repaints. Skip the layer when it cannot be seen.
+    if (tint.a >= .9) {
+      return ClipRRect(borderRadius: borderRadius, child: decorated);
+    }
     final Widget material = BackdropFilter(
       filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: color ?? apple.glass,
-          borderRadius: borderRadius,
-          border: border,
-        ),
-        child: child,
-      ),
+      child: decorated,
     );
     // The clip is not decoration: a BackdropFilter applies to the whole
     // screen when nothing clips it, so dropping it for a square panel blurs

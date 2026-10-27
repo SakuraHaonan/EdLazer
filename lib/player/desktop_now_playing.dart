@@ -18,6 +18,7 @@ import '../widgets/copyable_song_title.dart';
 import '../widgets/player_seek_bar.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/listen_together_dialog.dart';
+import '../widgets/playlist_picker_dialog.dart';
 import '../widgets/volume_control.dart';
 
 enum DesktopNowPlayingPane { lyrics, comments, queue }
@@ -85,6 +86,8 @@ class DesktopNowPlaying extends StatelessWidget {
                         icon: const Icon(Icons.keyboard_arrow_down_rounded),
                       ),
                       const Spacer(),
+                      _AddToPlaylistButton(state: state, track: track),
+                      const SizedBox(width: 2),
                       _DownloadButton(state: state, track: track),
                     ],
                   ),
@@ -165,6 +168,30 @@ class DesktopNowPlaying extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Adds the current song to one of the account's cloud playlists, or creates
+/// a playlist and adds it in one step (the official 收藏到歌单 flow).
+class _AddToPlaylistButton extends StatelessWidget {
+  const _AddToPlaylistButton({required this.state, required this.track});
+  final AppState state;
+  final Track track;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool cloud =
+        int.tryParse(track.id) != null && track.localPath == null;
+    return AccessibleIconButton(
+      key: const ValueKey('desktop-add-to-playlist'),
+      tooltip: cloud ? '添加到歌单' : '本地歌曲无法添加到云端歌单',
+      onPressed: cloud
+          ? () =>
+                unawaited(showAddToPlaylistDialog(context, state, track: track))
+          : null,
+      color: context.colors.onPlayer,
+      icon: const Icon(Icons.playlist_add_rounded),
     );
   }
 }

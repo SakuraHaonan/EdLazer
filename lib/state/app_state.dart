@@ -23,8 +23,10 @@ import '../gateway/transport.dart';
 import '../lyrics/imported_lyrics_store.dart';
 import '../updates/release_version.dart';
 import '../updates/update_checker.dart';
+import '../utils/background_image.dart';
 import 'build_safe_notifier.dart';
 import 'listen_together.dart';
+import 'media_shortcuts.dart';
 import 'ui_preferences.dart';
 
 /// How the session was authenticated.
@@ -324,7 +326,6 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   StreamSubscription<void>? _completionSubscription;
   StreamSubscription<int>? _indexSubscription;
   static const playbackInterval = Duration(milliseconds: 100);
-  static const lyricFollowInterval = Duration(milliseconds: 5);
   bool hapticsEnabled = true;
   final AppHaptics haptics = AppHaptics();
   Future<void> feedback({bool detent = false, bool boundary = false}) =>
@@ -363,6 +364,9 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   }
 
   Future<void> toggleMute() => setVolume(_volume > 0 ? 0 : _unmutedVolume);
+
+  /// Relative volume step used by the keyboard shortcuts.
+  Future<void> adjustVolume(double delta) => setVolume(_volume + delta);
 
   Future<void> setHapticIntensity(double value) async {
     hapticIntensity = value.clamp(0, 1);
@@ -449,7 +453,12 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     if (path == null) {
       await prefs.remove('lazer_legacy_background_image');
     } else {
-      await prefs.setString('lazer_legacy_background_image', path);
+      // Persist the name, not the sandbox path: iOS may move the container
+      // between launches. See [BackgroundImageStore].
+      await prefs.setString(
+        'lazer_legacy_background_image',
+        backgroundImageStore.preferenceValue(path),
+      );
     }
   }
 
@@ -460,6 +469,38 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     await (await SharedPreferences.getInstance()).setDouble(
       'lazer_legacy_ui_alpha',
       legacyUiAlpha,
+    );
+  }
+
+  /// Keyboard combinations that control playback. A null value disables the
+  /// action; actions missing from the map keep their default binding.
+  Map<MediaShortcutAction, MediaShortcutBinding?> mediaShortcuts =
+      MediaShortcutSettings.defaults();
+
+  MediaShortcutBinding? mediaShortcutFor(MediaShortcutAction action) =>
+      mediaShortcuts[action];
+
+  Future<void> setMediaShortcut(
+    MediaShortcutAction action,
+    MediaShortcutBinding? binding,
+  ) async {
+    if (mediaShortcuts[action] == binding) return;
+    mediaShortcuts = <MediaShortcutAction, MediaShortcutBinding?>{
+      ...mediaShortcuts,
+      action: binding,
+    };
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(
+      'lazer_media_shortcuts',
+      MediaShortcutSettings.encode(mediaShortcuts),
+    );
+  }
+
+  Future<void> resetMediaShortcuts() async {
+    mediaShortcuts = MediaShortcutSettings.defaults();
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).remove(
+      'lazer_media_shortcuts',
     );
   }
 
@@ -700,7 +741,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   UserCollections collections = UserCollections.empty;
   bool collectionsLoading = false;
   String? collectionsError;
-  int? _collectionsPendingUid;
+  Future<void>? _collectionsPending;
 
   /// All-time play counts, joined with song durations for 听歌排行.
   List<TrackPlayStat> playStats = const <TrackPlayStat>[];
@@ -727,7 +768,10 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
       // Push anything queued offline before reading the record back, so the
       // counts the library shows include this device's latest plays.
       await _flushPlayUploads();
-      final List<TrackPlayStat> loaded = await catalog.playStats(uid);
+      final List<TrackPlayStat> loaded = await catalog.playStats(
+        uid,
+        force: force,
+      );
       if (user.userId != uid) return;
       playStats = loaded;
     } catch (_) {
@@ -742,26 +786,57 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     }
   }
 
-  Future<void> refreshCollections({bool force = false}) async {
-    final uid = user.userId;
+  Future<void> refreshCollections({bool force = false}) {
+    final int uid = user.userId;
     if (uid <= 0) {
       collections = UserCollections.empty;
       collectionsError = null;
-      return;
+      return Future<void>.value();
     }
-    if (_collectionsPendingUid == uid) return;
-    _collectionsPendingUid = uid;
+    final Future<void>? pending = _collectionsPending;
+    if (pending != null) {
+      // A forced refresh must never be answered by a request that started
+      // before the mutation. Wait for it, then read again so an awaited
+      // `refreshCollections(force: true)` observes the change itself.
+      return force
+          ? pending.then((_) => refreshCollections(force: true))
+          : pending;
+    }
+    final Future<void> run = _refreshCollections(uid, force: force);
+    late final Future<void> tracked;
+    tracked = run.whenComplete(() {
+      if (identical(_collectionsPending, tracked)) _collectionsPending = null;
+    });
+    _collectionsPending = tracked;
+    return tracked;
+  }
+
+  Future<void> _refreshCollections(int uid, {required bool force}) async {
     collectionsLoading = true;
     collectionsError = null;
     notifyListeners();
     try {
-      if (force) await catalog.invalidateCollections(uid);
+      if (force) {
+        await catalog.invalidateCollections(uid);
+      } else if (collections.liked == null &&
+          collections.created.isEmpty &&
+          collections.subscribed.isEmpty) {
+        // Paint the last stored library before the network answers. A cold
+        // start or a blocked request then still opens 资料库 with content
+        // instead of an empty page and a spinner.
+        final UserCollections? stored = await catalog.cachedUserCollections(
+          uid,
+        );
+        if (stored != null && user.userId == uid) {
+          collections = stored;
+          notifyListeners();
+        }
+      }
       final loaded = await catalog.userCollections(uid);
       if (user.userId == uid) collections = loaded;
     } catch (_) {
       if (user.userId == uid) collectionsError = '歌单读取失败，请重试。';
     } finally {
-      if (_collectionsPendingUid == uid) _collectionsPendingUid = null;
       if (user.userId == uid) {
         collectionsLoading = false;
         notifyListeners();
@@ -826,9 +901,24 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
       legacyBackground = LegacyBackgroundModeLabels.parse(
         prefs.getString('lazer_legacy_background'),
       );
-      legacyBackgroundImagePath = prefs.getString(
+      final String? storedBackgroundImage = prefs.getString(
         'lazer_legacy_background_image',
       );
+      final String? restoredBackgroundImage = await backgroundImageStore
+          .restore(storedBackgroundImage);
+      legacyBackgroundImagePath = restoredBackgroundImage;
+      mediaShortcuts = MediaShortcutSettings.decode(
+        prefs.getString('lazer_media_shortcuts'),
+      );
+      if (storedBackgroundImage != null &&
+          restoredBackgroundImage != null &&
+          storedBackgroundImage != restoredBackgroundImage) {
+        // Migrate an absolute path from an older build to the portable name.
+        await prefs.setString(
+          'lazer_legacy_background_image',
+          backgroundImageStore.preferenceValue(restoredBackgroundImage),
+        );
+      }
       legacyUiAlpha = (prefs.getDouble('lazer_legacy_ui_alpha') ?? 0.7).clamp(
         0.4,
         1.0,
@@ -894,6 +984,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
           .clamp(1, 10);
       skippedUpdateVersion = prefs.getString('lazer_skipped_update');
       updateCheckedAt = prefs.getInt('lazer_update_checked_at') ?? 0;
+      _restorePlayUploads(prefs);
     } catch (_) {}
     // Apply interaction preferences before session and catalogue requests.
     notifyListeners();
@@ -904,6 +995,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     unawaited(_loadCurrentArtwork());
     unawaited(ensureCurrentLyrics());
     await _restoreSession();
+    if (signedIn) unawaited(_flushPlayUploads());
     await refreshHome();
   }
 
@@ -925,13 +1017,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     discoveryChartsError = null;
     notifyListeners();
     try {
-      if (force) {
-        await Future.wait(<Future<void>>[
-          catalog.cache.expireJson('external-billboard-v1'),
-          catalog.cache.expireJson('external-biliboard-v1'),
-          catalog.cache.expireJson('netease-mirror-charts-v2'),
-        ]);
-      }
+      if (force) await catalog.invalidateDiscoveryCharts();
       final externalFuture = catalog.discoveryCharts().catchError(
         (_) => const <MusicChart>[],
       );
@@ -1187,6 +1273,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     _finishPlaySession();
     await _flushPlayUploads();
     _playUploads.clear();
+    unawaited(_persistPlayUploads());
     unawaited(listenTogether.leave());
     pause();
     _stationLoader = null;
@@ -1250,6 +1337,89 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     final int id = int.tryParse(albumId) ?? 0;
     final List<Track> tracks = await catalog.albumTracks(id);
     playQueue(tracks);
+  }
+
+  /// Creates a playlist on the signed-in account ("上传到云端"): it is stored
+  /// by the service and shows up in the library on every device.
+  ///
+  /// [privacy] mirrors the official client's 仅自己可见 option. The returned
+  /// playlist carries the server id, so a caller can add the current song
+  /// immediately; [refreshCollections] then brings the library up to date.
+  Future<Playlist?> createCloudPlaylist(
+    String name, {
+    bool privacy = false,
+  }) async {
+    if (!signedIn) throw StateError('Sign in to create a playlist.');
+    final String trimmed = name.trim();
+    if (trimmed.isEmpty) throw ArgumentError('name cannot be blank.');
+    final GatewayPlaylist? created = await gateway.createPlaylist(
+      trimmed,
+      privacy: privacy,
+    );
+    if (created == null) return null;
+    final Playlist playlist = Catalog.playlistFromGateway(created);
+    // Insert optimistically: the picker closes as soon as the song is added,
+    // and the refreshed list can arrive a moment later or fail offline.
+    if (!collections.created.any((Playlist item) => item.id == playlist.id)) {
+      collections = UserCollections(
+        liked: collections.liked,
+        created: <Playlist>[playlist, ...collections.created],
+        subscribed: collections.subscribed,
+      );
+      notifyListeners();
+    }
+    await _invalidateLibraryCollections();
+    return playlist;
+  }
+
+  /// Adds [trackId] to one of the account's cloud playlists.
+  ///
+  /// Adding to 我喜欢的音乐 is the service's "like" action, so the local heart
+  /// state follows immediately; every playlist's cached track list is
+  /// invalidated so opening it shows the new song.
+  Future<void> addSongToCloudPlaylist(String playlistId, String trackId) async {
+    if (!signedIn) throw StateError('Sign in to add songs to a playlist.');
+    final int pid = int.tryParse(playlistId) ?? 0;
+    final int sid = int.tryParse(trackId) ?? 0;
+    if (pid <= 0 || sid <= 0) {
+      throw ArgumentError('Invalid playlist or song.');
+    }
+    if (int.tryParse(collections.liked?.id ?? '') == pid) {
+      // 我喜欢的音乐 is not manipulated through the playlist endpoints.
+      final int uid = _user.userId;
+      if (uid <= 0) throw StateError('Sign in to add songs to a playlist.');
+      await gateway.setSongLiked(sid, uid, true);
+      _likedSongIds.add(sid);
+      final Playlist? liked = collections.liked;
+      if (liked != null && !liked.trackIds.contains(trackId)) {
+        collections = UserCollections(
+          liked: Playlist(
+            id: liked.id,
+            name: liked.name,
+            trackIds: <String>[...liked.trackIds, trackId],
+            coverSeed: liked.coverSeed,
+            description: liked.description,
+            coverUrl: liked.coverUrl,
+            trackCount: liked.trackCount + 1,
+          ),
+          created: collections.created,
+          subscribed: collections.subscribed,
+        );
+      }
+    } else {
+      await gateway.addTracksToPlaylist(pid, <int>[sid]);
+    }
+    await _invalidateLibraryCollections(playlistId: playlistId);
+    notifyListeners();
+  }
+
+  /// Drops cached copies touched by a playlist mutation and reloads the
+  /// library shelves in the background.
+  Future<void> _invalidateLibraryCollections({String? playlistId}) async {
+    if (playlistId != null) await catalog.invalidatePlaylist(playlistId);
+    final int uid = _user.userId;
+    if (uid > 0) await catalog.invalidateCollections(uid);
+    unawaited(refreshCollections(force: true));
   }
 
   // -- transport ------------------------------------------------------------
@@ -1623,6 +1793,16 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     if (_realActive) unawaited(audioEngine!.seek(target));
     // Position-only change: tick lane, not a structural rebuild.
     _tickNotifier.pulse();
+  }
+
+  /// Relative seek used by the keyboard shortcuts.
+  void seekBy(Duration delta) {
+    final Track? t = current;
+    if (t == null) return;
+    final int total = t.duration.inMilliseconds;
+    if (total <= 0) return;
+    final int target = (_position + delta).inMilliseconds.clamp(0, total);
+    seek(target / total);
   }
 
   void toggleShuffle() {
@@ -2301,7 +2481,45 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     );
     if (_playUploads.length >= 50) _playUploads.removeAt(0);
     _playUploads.add(_PlayReport(songId: songId, seconds: seconds));
+    unawaited(_persistPlayUploads());
     await _flushPlayUploads();
+  }
+
+  /// Restores plays that qualified while the app was offline or closing, so a
+  /// crash or a normal exit never loses listening time the account earned.
+  void _restorePlayUploads(SharedPreferences prefs) {
+    final String? raw = prefs.getString('lazer_play_uploads');
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final dynamic decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      for (final dynamic row in decoded) {
+        if (row is! Map<String, dynamic>) continue;
+        final int songId = (row['songId'] as num?)?.toInt() ?? 0;
+        final int seconds = (row['seconds'] as num?)?.toInt() ?? 0;
+        if (songId > 0 && seconds > 0) {
+          _playUploads.add(_PlayReport(songId: songId, seconds: seconds));
+        }
+      }
+      while (_playUploads.length > 50) {
+        _playUploads.removeAt(0);
+      }
+    } catch (_) {
+      // A corrupt queue must not prevent startup; it is disposable data.
+    }
+  }
+
+  Future<void> _persistPlayUploads() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'lazer_play_uploads',
+        jsonEncode(<Map<String, int>>[
+          for (final report in _playUploads)
+            <String, int>{'songId': report.songId, 'seconds': report.seconds},
+        ]),
+      );
+    } catch (_) {}
   }
 
   /// Drains the upload queue. A failed request stays at the head and is retried
@@ -2310,6 +2528,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   Future<void> _flushPlayUploads() async {
     if (_playUploadInFlight || !signedIn) return;
     _playUploadInFlight = true;
+    var uploaded = false;
     try {
       while (_playUploads.isNotEmpty) {
         final _PlayReport report = _playUploads.first;
@@ -2319,12 +2538,24 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
             playedSeconds: report.seconds,
           );
           _playUploads.removeAt(0);
+          uploaded = true;
         } catch (_) {
           break;
         }
       }
     } finally {
       _playUploadInFlight = false;
+      final int uid = _user.userId;
+      if (uploaded) {
+        unawaited(_persistPlayUploads());
+        if (uid > 0) {
+          await catalog.invalidatePlayStats(uid);
+          // The loaded list predates this play; make the next library visit
+          // fetch the updated record instead of short-circuiting on the old
+          // in-memory copy.
+          if (_playStatsUid == uid) _playStatsUid = null;
+        }
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -28,6 +28,7 @@ import '../widgets/listen_together_dialog.dart';
 import '../widgets/lyric_viewport.dart';
 import '../widgets/playback_queue_view.dart';
 import '../widgets/player_seek_bar.dart';
+import '../widgets/playlist_picker_dialog.dart';
 import '../widgets/song_comments_view.dart';
 import 'desktop_now_playing.dart';
 
@@ -455,7 +456,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   /// The lyric canvas is the most expensive painter in the player — one
   /// blurred layer per visible row, all of them re-blurred whenever the words
   /// move — and the entrance slide re-rasterises the whole page on every
-  /// frame. Muting its ticker for those 420 ms removes the two costs from the
+  /// frame. Muting its ticker for those 500 ms removes the two costs from the
   /// same frame budget; the rows are already laid out, so nothing jumps when
   /// it resumes. The gate owns the viewport as a plain child, so unmuting
   /// rebuilds one `TickerMode` node instead of the page.
@@ -535,6 +536,19 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                 icon: const Icon(Icons.lyrics_outlined),
               ),
             AccessibleIconButton(
+              tooltip: '添加到歌单',
+              onPressed: int.tryParse(widget.state.current?.id ?? '') == null
+                  ? null
+                  : () => unawaited(
+                      showAddToPlaylistDialog(
+                        context,
+                        widget.state,
+                        track: widget.state.current!,
+                      ),
+                    ),
+              icon: const Icon(Icons.playlist_add_rounded),
+            ),
+            AccessibleIconButton(
               tooltip: '下载歌曲',
               onPressed: widget.state.current == null
                   ? null
@@ -586,7 +600,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                   // strip the song's album-colour flow from here.
                   mode: LegacyBackgroundMode.nowPlayingDynamic,
                   pageColor: Colors.black,
-                  animationsEnabled: settled,
+                  animationsEnabled: settled && widget.state.playing,
                   // Reads the live preference: the shell rebuilds this page on
                   // every state report, so dragging the slider is reflected on
                   // the next frame instead of on the next opening.

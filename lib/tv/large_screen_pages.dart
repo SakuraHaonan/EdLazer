@@ -536,10 +536,10 @@ class _LargeScreenLibraryPageState extends State<LargeScreenLibraryPage> {
   @override
   void initState() {
     super.initState();
-    // Refresh from the cloud whenever the library is opened: the play record
-    // is the account's source of truth, and a listen on another device should
-    // show up here too.
-    unawaited(widget.state.loadPlayStats(force: true));
+    // The play record is cached for five minutes, so re-entering the library
+    // is instant; a listen on another device shows up once that snapshot
+    // expires instead of stalling every visit on a network round trip.
+    unawaited(widget.state.loadPlayStats());
   }
 
   @override
@@ -1969,16 +1969,25 @@ class LargeScreenSettingsPage extends StatelessWidget {
     super.key,
     required this.state,
     required this.onOpenLocalMusic,
+    this.backgroundImagePicker,
   });
 
   final AppState state;
   final VoidCallback onOpenLocalMusic;
 
+  /// Forwarded to [LegacySettingsPage]; the television UI shares the same
+  /// picture picker so a big-screen install can change its backdrop too.
+  final Future<String?> Function()? backgroundImagePicker;
+
   @override
   Widget build(BuildContext context) => LargeScreenReusedPage(
     maxWidth: 980,
     bottomInset: LargeScreenMetrics.floatingBarInset,
-    child: LegacySettingsPage(state: state, onOpenLocalMusic: onOpenLocalMusic),
+    child: LegacySettingsPage(
+      state: state,
+      onOpenLocalMusic: onOpenLocalMusic,
+      backgroundImagePicker: backgroundImagePicker,
+    ),
   );
 }
 

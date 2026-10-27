@@ -103,7 +103,7 @@ Future<void> _openPlayer(WidgetTester tester, {Size size = _phone}) async {
     ),
   );
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 460));
+  await tester.pump(const Duration(milliseconds: 540));
   expect(find.byType(NowPlayingPage), findsOneWidget);
   expect(find.byType(PlayerPullDownRegion), findsOneWidget);
 }
@@ -151,7 +151,7 @@ void main() {
     );
     await gesture.up();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(find.byType(NowPlayingPage), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -162,14 +162,14 @@ void main() {
     await _openPlayer(tester);
 
     await _slowDrag(tester, const Offset(195, 160), const Offset(0, 60));
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(find.byType(NowPlayingPage), findsOneWidget);
     expect(_slide(tester), 0, reason: 'a short pull returns to the open state');
 
     // The strip floats above the header, so its buttons must keep working.
     await tester.tap(find.byTooltip('\u8fd4\u56de'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(find.byType(NowPlayingPage), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -180,7 +180,7 @@ void main() {
     await _openPlayer(tester);
 
     await _slowDrag(tester, const Offset(195, 470), const Offset(0, 240));
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(find.byType(NowPlayingPage), findsOneWidget);
     expect(_slide(tester), 0);
     expect(tester.takeException(), isNull);
@@ -190,7 +190,7 @@ void main() {
     await _openPlayer(tester);
 
     await _slowDrag(tester, const Offset(195, 220), const Offset(0, -200));
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(find.byType(NowPlayingPage), findsOneWidget);
     expect(_slide(tester), 0);
     expect(tester.takeException(), isNull);
@@ -292,7 +292,7 @@ void main() {
     );
     expect(afterRelease, greaterThan(pulled));
     expect(afterRelease, lessThan(1));
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(find.byType(NowPlayingPage), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -311,7 +311,7 @@ void main() {
       const Offset(0, 480),
       steps: 16,
     );
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(find.byType(NowPlayingPage), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -328,7 +328,7 @@ void main() {
       const Offset(0, 240),
       steps: 12,
     );
-    await tester.pump(const Duration(milliseconds: 460));
+    await tester.pump(const Duration(milliseconds: 540));
     expect(find.byType(NowPlayingPage), findsOneWidget);
     expect(_slide(tester), 0);
     expect(tester.takeException(), isNull);

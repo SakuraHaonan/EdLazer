@@ -1,4 +1,4 @@
-# Now Playing / Lyric Engine Rewrite
+﻿# Now Playing / Lyric Engine Rewrite
 
 The player stack was rebuilt from scratch. The old page, desktop/mobile
 implementations and the old lyric renderer are no longer used.
@@ -83,9 +83,10 @@ The lyric canvas follows the AMLL/Apple Music reading rhythm:
   table and the last-word intensity multiplier all match the reference. Glow
   is drawn per grapheme from the character's `motion.glow` and
   `motion.glowRadiusEm`, not as one fixed line-wide shadow. The karaoke sweep
-  is a soft half-glyph-height gradient, completed words keep their upward
-  float instead of snapping back, and word repaints are pumped once per vsync
-  by a `Ticker`; inactive rows are not re-rasterised on word frames.
+  is a soft half-glyph-height gradient, completed words paint directly into a
+  clip (no per-glyph `saveLayer`), and word repaints are pumped once per vsync
+  by a `Ticker`. There is no longer a 5 ms follow timer: the ticker drives
+  follow while playing and the 100 ms transport lane catches everything else.
 - `LineBrightness` is ported as a real two-layer line: an unmasked dim clone
   at 0.2 opacity plus the bright animated layer. Activation cross-fades over
   300 ms and deactivation over 450 ms, both ease-out, matching
@@ -96,8 +97,13 @@ The lyric canvas follows the AMLL/Apple Music reading rhythm:
   first/last lyric focus bounds, so it cannot expose empty lyric space above
   the first line or below the last one. Blur is calculated from distance to
   the focus band, not from line index alone.
-- Inactive rows are cached rasters behind `RepaintBoundary`; the viewport no
-  longer rebuilds on every 100 ms transport tick.
+- Inactive rows are cached rasters behind `RepaintBoundary`; only the active
+  word row (and a row whose scale is still easing) repaints per frame. The
+  edge mask is built once per layout, not once per frame, and blur sigmas are
+  quantized to 1/8 px so frames reuse one filter object. A transport tick
+  repaints nothing unless a paused seek changes the word mask. The wide
+  desktop canvas keeps only the vertical mask pass; its 18 px gutter already
+  contains the blur halo, while compact layouts retain the left/right pass.
 - The animated lyric rows are intentionally excluded from the platform
   semantics tree. One stable, keyed live-region node exposes the current lyric
   and translation, so scrolling, scale/blur transitions and line lifecycle are
@@ -148,7 +154,7 @@ The shell no longer pushes the player as a new Navigator route. It mounts the
 player as a same-route overlay over the existing app root:
 
 - the whole player uses Material's open-upwards motion: a compositor-only
-  slide from `Offset(0, 1)` to `Offset.zero`, 420 ms, closing on the same
+  slide from `Offset(0, 1)` to `Offset.zero`, 500 ms, closing on the same
   motion reversed. The curve is decelerating, not symmetric: a third of the
   travel is covered in the first tenth of the duration and the landing is
   soft, so the page answers the tap immediately instead of easing away from
@@ -171,7 +177,7 @@ player as a same-route overlay over the existing app root:
 - the lyric canvas is the one exception, and it is gated narrowly: the slide
   re-executes the page display list on every frame, and the lyric painter
   carries one blurred layer per visible row, so its 60 fps tick is muted for
-  the 420 ms of travel. The gate owns the viewport as a plain child, so
+  the 500 ms of travel. The gate owns the viewport as a plain child, so
   unmuting it rebuilds a single `TickerMode` node — not the page — and the
   rows are already laid out, so nothing jumps when it resumes;
 - the album-colour mesh flow is held back until the entrance has settled, and

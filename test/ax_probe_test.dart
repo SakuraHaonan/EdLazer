@@ -46,7 +46,10 @@ class _Catalog extends Catalog {
     albums: <Album>[],
   );
   @override
-  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => GatewayLyrics(
     lrc: List<String>.generate(
@@ -122,7 +125,7 @@ void main() {
       if (i % 10 == 0) report('seek $i');
     }
 
-    final Finder line = find.byKey(const ValueKey<String>('lyric-line-1-20'));
+    final Finder line = find.byKey(const ValueKey<String>('lyric-line-20'));
     if (line.evaluate().isNotEmpty) {
       await tester.longPress(line.first);
       await frames(tester, 30);

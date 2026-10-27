@@ -1,4 +1,4 @@
-﻿import 'dart:ui' as ui;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -39,8 +39,7 @@ void main() {
       final bytes = (await image.toByteData(
         format: ui.ImageByteFormat.rawRgba,
       ))!;
-      int alpha(int x, int y) =>
-          bytes.getUint8((y * image.width + x) * 4 + 3);
+      int alpha(int x, int y) => bytes.getUint8((y * image.width + x) * 4 + 3);
       for (final int Function(int) sample in <int Function(int)>[
         (n) => alpha(n, 160),
         (n) => alpha(239 - n, 160),
@@ -55,5 +54,26 @@ void main() {
       expect(alpha(120, 160), 255);
       image.dispose();
     });
+  });
+
+  testWidgets('a wide canvas can keep only the vertical mask pass', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: LyricEdgeFade(
+          verticalExtent: 40,
+          horizontal: false,
+          child: SizedBox.expand(),
+        ),
+      ),
+    );
+    final Finder fade = find.byType(LyricEdgeFade);
+    expect(
+      find.descendant(of: fade, matching: find.byType(ShaderMask)),
+      findsOneWidget,
+      reason: 'the gutter already contains the horizontal blur halo',
+    );
   });
 }

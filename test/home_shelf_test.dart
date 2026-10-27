@@ -56,6 +56,9 @@ class _Catalog extends Catalog {
   Future<List<Track>> playlistTracks(String id) async => const <Track>[_track];
 
   @override
+  Future<List<Track>?> cachedPlaylistTracks(String playlistId) async => null;
+
+  @override
   Future<MusicChart> prepareChart(MusicChart chart, {bool force = false}) async =>
       chart;
 

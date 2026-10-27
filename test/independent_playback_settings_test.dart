@@ -125,7 +125,7 @@ void main() {
   testWidgets(
     'Legacy settings toggle independent playback in the playback group',
     (tester) async {
-      tester.view.physicalSize = const Size(1280, 2400);
+      tester.view.physicalSize = const Size(1280, 3000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final state = AppState(catalog: _Catalog());

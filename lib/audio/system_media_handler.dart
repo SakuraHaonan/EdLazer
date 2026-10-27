@@ -145,8 +145,11 @@ class LazerMediaHandler extends BaseAudioHandler {
 
   void _startClock() {
     _clock?.cancel();
+    // Play/pause/seek already publish through [_stateChanged]; this clock only
+    // refreshes the interpolated position, so a slow beat is enough and keeps
+    // the platform channel off the playback hot path.
     _clock = Timer.periodic(
-      AppState.playbackInterval,
+      const Duration(seconds: 1),
       (_) => _publishPlayback(),
     );
   }

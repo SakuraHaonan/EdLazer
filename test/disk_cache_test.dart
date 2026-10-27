@@ -94,6 +94,8 @@ void main() {
     await recent.setLastModified(DateTime(2021));
     await cache.find(CacheBucket.audio, 'recent');
     await cache.put(CacheBucket.audio, 'new', () => Stream.value([7, 8, 9]));
+    // Pruning runs after the write returns; wait for the shared LRU pass.
+    await cache.settle();
     expect(await old.exists(), isFalse);
     expect(await recent.exists(), isTrue);
     expect(await cache.find(CacheBucket.audio, 'new'), isNotNull);

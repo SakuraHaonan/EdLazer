@@ -819,6 +819,81 @@ class NeteaseGateway {
     });
   }
 
+  /// Creates a playlist on the signed-in account and returns it.
+  ///
+  /// [privacy] maps to the official client's 私密 mode: a private playlist is
+  /// still created in the cloud but is visible only to its owner. A missing
+  /// playlist in the response is tolerated — the created id is enough for the
+  /// caller to add a song right away.
+  Future<GatewayPlaylist?> createPlaylist(
+    String name, {
+    bool privacy = false,
+  }) async {
+    final String trimmed = name.trim();
+    if (trimmed.isEmpty) throw ArgumentError('name cannot be blank.');
+    if (trimmed.length > 40) {
+      throw ArgumentError('name cannot be longer than 40 characters.');
+    }
+    final Map<String, dynamic> body = await _transport.request(
+      '/playlist/create',
+      <String, String>{'name': trimmed, 'privacy': privacy ? '10' : '0'},
+    );
+    final dynamic data = body['data'];
+    final dynamic nestedPlaylist = data is Map<String, dynamic>
+        ? data['playlist']
+        : null;
+    final dynamic raw = body['playlist'] ?? nestedPlaylist;
+    if (raw is Map<String, dynamic>) {
+      final GatewayPlaylist playlist = GatewayPlaylist.fromJson(raw);
+      if (playlist.id > 0) return playlist;
+    }
+    final dynamic rawId =
+        body['id'] ??
+        body['playlistId'] ??
+        (data is Map<String, dynamic>
+            ? (data['id'] ?? data['playlistId'])
+            : null);
+    final int id = rawId is num
+        ? rawId.toInt()
+        : (rawId is String ? int.tryParse(rawId) ?? 0 : 0);
+    if (id <= 0) return null;
+    return GatewayPlaylist(id: id, name: trimmed, created: true);
+  }
+
+  /// Adds [trackIds] to a playlist the account owns.
+  ///
+  /// The service's manipulate endpoint answers with the playlist's new id
+  /// list; callers invalidate their cached copy instead of parsing it.
+  Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) async {
+    if (playlistId <= 0) throw ArgumentError.value(playlistId, 'playlistId');
+    if (trackIds.isEmpty) throw ArgumentError('trackIds cannot be empty.');
+    if (trackIds.any((int id) => id <= 0)) {
+      throw ArgumentError.value(trackIds, 'trackIds', 'must be positive IDs.');
+    }
+    await _transport.request('/playlist/tracks', <String, String>{
+      'op': 'add',
+      'pid': '$playlistId',
+      'tracks': trackIds.join(','),
+    });
+  }
+
+  /// Removes [trackIds] from a playlist the account owns.
+  Future<void> removeTracksFromPlaylist(
+    int playlistId,
+    List<int> trackIds,
+  ) async {
+    if (playlistId <= 0) throw ArgumentError.value(playlistId, 'playlistId');
+    if (trackIds.isEmpty) throw ArgumentError('trackIds cannot be empty.');
+    if (trackIds.any((int id) => id <= 0)) {
+      throw ArgumentError.value(trackIds, 'trackIds', 'must be positive IDs.');
+    }
+    await _transport.request('/playlist/tracks', <String, String>{
+      'op': 'del',
+      'pid': '$playlistId',
+      'tracks': trackIds.join(','),
+    });
+  }
+
   Future<GatewayPlaylist?> topPlaylist(int id) async {
     final Map<String, dynamic> detail = await playlistDetail(id);
     final dynamic playlist = detail['playlist'];

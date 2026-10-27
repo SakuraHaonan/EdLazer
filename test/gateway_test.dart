@@ -269,6 +269,43 @@ void main() {
       );
     });
 
+    test('maps cloud playlist creation and track manipulation', () {
+      final NeteaseRequest create = buildNeteaseRequest(
+        '/playlist/create',
+        <String, String>{'name': '夜行', 'privacy': '10'},
+      );
+      expect(create.path, '/api/playlist/create');
+      expect(create.encoding, NeteaseEncoding.weapi);
+      expect(create.payload['name'], '夜行');
+      expect(create.payload['privacy'], '10');
+      expect(create.payload['type'], 'NORMAL');
+
+      final NeteaseRequest add = buildNeteaseRequest(
+        '/playlist/tracks',
+        <String, String>{'op': 'add', 'pid': '42', 'tracks': '7,8'},
+      );
+      expect(add.path, '/api/playlist/manipulate/tracks');
+      expect(add.encoding, NeteaseEncoding.weapi);
+      expect(add.payload['op'], 'add');
+      expect(add.payload['pid'], '42');
+      expect(add.payload['trackIds'], '[7,8]');
+      expect(add.payload['imme'], 'true');
+
+      expect(
+        () => buildNeteaseRequest('/playlist/create', <String, String>{
+          'name': '   ',
+        }),
+        throwsArgumentError,
+      );
+      expect(
+        () => buildNeteaseRequest('/playlist/tracks', <String, String>{
+          'pid': '0',
+          'tracks': '7',
+        }),
+        throwsArgumentError,
+      );
+    });
+
     test('rejects unsupported aliases and bad ids', () {
       expect(
         () => buildNeteaseRequest('/unknown', const <String, String>{}),
@@ -437,6 +474,66 @@ void main() {
       expect(gateway.sessionCookie, 'MUSIC_U=abc; __csrf=t');
     });
   });
+  group('cloud playlists', () {
+    test('creates a private playlist and adds tracks', () async {
+      final _PlaylistTransport transport = _PlaylistTransport();
+      final NeteaseGateway gateway = NeteaseGateway(transport: transport);
+      final GatewayPlaylist? created = await gateway.createPlaylist(
+        '夜行',
+        privacy: true,
+      );
+      expect(created?.id, 99);
+      expect(created?.name, '夜行');
+      expect(transport.requests.single.$1, '/playlist/create');
+      expect(transport.requests.single.$2['privacy'], '10');
+
+      await gateway.addTracksToPlaylist(99, <int>[7, 8]);
+      expect(transport.requests.last.$1, '/playlist/tracks');
+      expect(transport.requests.last.$2['pid'], '99');
+      expect(transport.requests.last.$2['tracks'], '7,8');
+    });
+
+    test('rejects invalid names and track ids before any request', () async {
+      final _PlaylistTransport transport = _PlaylistTransport();
+      final NeteaseGateway gateway = NeteaseGateway(transport: transport);
+      await expectLater(gateway.createPlaylist('  '), throwsArgumentError);
+      await expectLater(
+        gateway.addTracksToPlaylist(0, <int>[7]),
+        throwsArgumentError,
+      );
+      await expectLater(
+        gateway.addTracksToPlaylist(1, <int>[0]),
+        throwsArgumentError,
+      );
+      expect(transport.requests, isEmpty);
+    });
+  });
+}
+
+/// Playlist transport that records the calls and answers like the service.
+class _PlaylistTransport extends NeteaseTransport {
+  final List<(String, Map<String, String>)> requests =
+      <(String, Map<String, String>)>[];
+
+  @override
+  Future<Map<String, dynamic>> request(
+    String alias,
+    Map<String, String> parameters,
+  ) async {
+    requests.add((alias, Map<String, String>.of(parameters)));
+    if (alias == '/playlist/create') {
+      return <String, dynamic>{
+        'code': 200,
+        'playlist': <String, dynamic>{
+          'id': 99,
+          'name': parameters['name'],
+          'trackCount': 0,
+          'created': true,
+        },
+      };
+    }
+    return <String, dynamic>{'code': 200};
+  }
 }
 
 /// Poll transport that answers a confirmed scan with the fresh session.
