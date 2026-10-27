@@ -74,7 +74,7 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
                         child: Text(
                           context.tr('一起听'),
                           style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                              ?.copyWith(fontWeight: FontWeight.w400),
                         ),
                       ),
                       IconButton(
@@ -125,7 +125,7 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
       context.tr('正在一起听'),
       style: Theme.of(
         context,
-      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w400),
     ),
     const SizedBox(height: 10),
     SelectableText(
@@ -143,7 +143,7 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
         context.tr('一起听的人'),
         style: Theme.of(
           context,
-        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w400),
       ),
       const SizedBox(height: 8),
       for (final ListenTogetherMember member in room.members)
@@ -211,7 +211,7 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
           context.tr('或加入朋友的房间'),
           style: Theme.of(
             context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w400),
         ),
         const SizedBox(height: 12),
         TextField(

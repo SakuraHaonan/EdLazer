@@ -258,7 +258,7 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
                       '登录',
                       style: theme.textTheme.headlineSmall?.copyWith(
                         color: apple.label,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),

@@ -228,8 +228,8 @@ class _TrackRowState extends State<TrackRow> {
                         overflow: TextOverflow.ellipsis,
                         style: context.type.bodySm.copyWith(
                           fontWeight: widget.isCurrent
-                              ? FontWeight.w600
-                              : FontWeight.w400,
+                              ? FontWeight.w400
+                              : FontWeight.w300,
                         ),
                       ),
                       Text(

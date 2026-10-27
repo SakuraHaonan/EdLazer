@@ -142,7 +142,7 @@ class _LocalMusicCardState extends State<LocalMusicCard> {
                         context.tr('导入'),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: apple.accent,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                 onTap: _busy ? null : () => unawaited(_import()),
@@ -165,7 +165,7 @@ class _LocalMusicCardState extends State<LocalMusicCard> {
                         context.tr('扫描'),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: apple.accent,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                 onTap: _busy ? null : () => unawaited(_scan()),

@@ -467,7 +467,7 @@ class _CommentRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: scheme.onSurface,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                     if (comment.time > 0) ...<Widget>[

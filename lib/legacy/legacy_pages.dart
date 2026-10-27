@@ -299,7 +299,7 @@ class _ArtistHero extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.displaySmall?.copyWith(
             color: apple.label,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             letterSpacing: -1.1,
           ),
         ),
@@ -386,7 +386,7 @@ class _ArtistTrackCardState extends State<_ArtistTrackCard> {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: widget.current ? apple.accent : apple.label,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                       Text(
@@ -449,7 +449,7 @@ class _ArtistReleaseShelf extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                   Text(
@@ -636,7 +636,7 @@ class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
                                           .bodyLarge
                                           ?.copyWith(
                                             color: apple.label,
-                                            fontWeight: FontWeight.w600,
+                                            fontWeight: FontWeight.w400,
                                           ),
                                     ),
                                     if (detail.isNotEmpty) ...<Widget>[
@@ -1501,7 +1501,7 @@ class _HomeReleaseShelf extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(
                   context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w400),
               ),
               Text(
                 album.artist,
@@ -1573,7 +1573,7 @@ class _EditorialPlaylistShelf extends StatelessWidget {
                         context.tr('网易云编辑精选'),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: Colors.white70,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -1584,7 +1584,7 @@ class _EditorialPlaylistShelf extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
                               color: Colors.white,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w400,
                               height: 1.15,
                             ),
                       ),
@@ -1681,7 +1681,7 @@ class ChartShelf extends StatelessWidget {
                             ?.copyWith(
                               fontSize: large ? 27 : null,
                               color: Colors.white,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w400,
                               letterSpacing: -.6,
                             ),
                       ),
@@ -1705,7 +1705,7 @@ class ChartShelf extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: large ? 17 : null,
                                     color: Colors.white60,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w400,
                                   ),
                                 ),
                               ),
@@ -1717,7 +1717,7 @@ class ChartShelf extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: large ? 17 : null,
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w400,
                                   ),
                                 ),
                               ),
@@ -1785,7 +1785,7 @@ class _ChartLogo extends StatelessWidget {
           color: Colors.white,
           fontSize: large ? 21 : 16,
           height: 1,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w400,
           letterSpacing: .5,
         ),
       );
@@ -1811,7 +1811,7 @@ class _ChartLogo extends StatelessWidget {
                 color: Colors.white,
                 fontSize: large ? 25 : 18,
                 height: 1,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w400,
                 letterSpacing: -.6,
               ),
             ),
@@ -2026,7 +2026,7 @@ class FilledCoverCard extends StatelessWidget {
                               ?.copyWith(
                                 fontSize: large ? 21 : null,
                                 color: Colors.white,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w400,
                               ),
                         ),
                         Text(
@@ -2319,7 +2319,7 @@ class _ChartHero extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.displaySmall?.copyWith(
           color: Colors.white,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w400,
           letterSpacing: -1.1,
         ),
       ),
@@ -2479,7 +2479,7 @@ class _ChartIssuePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
       color: Colors.white,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w400,
     );
     if (chart.issues.length < 2) {
       return TrText(chart.issueLabel, style: textStyle);
@@ -2586,7 +2586,7 @@ class _ChartTrackRow extends StatelessWidget {
                 textAlign: TextAlign.right,
                 style: Theme.of(
                   context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w400),
               ),
             ),
             const SizedBox(width: 6),
@@ -2602,7 +2602,7 @@ class _ChartTrackRow extends StatelessWidget {
         entry.title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w600),
+        style: const TextStyle(fontWeight: FontWeight.w400),
       ),
       subtitle: Text(
         <String>[
@@ -2623,7 +2623,7 @@ class _ChartTrackRow extends StatelessWidget {
               '${_formatChartScore(entry.score!)} 点',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: apple.secondaryLabel,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
             const SizedBox(width: 10),
@@ -2648,7 +2648,7 @@ class _ChartTrackRow extends StatelessWidget {
               entry.changeLabel!,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: apple.secondaryLabel,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
@@ -2840,7 +2840,7 @@ class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
                                       color: Colors.white.withValues(
                                         alpha: .72,
                                       ),
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.w400,
                                       letterSpacing: .4,
                                     ),
                               ),
@@ -2852,7 +2852,7 @@ class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
                                 style: Theme.of(context).textTheme.headlineSmall
                                     ?.copyWith(
                                       color: Colors.white,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w400,
                                       letterSpacing: -.4,
                                     ),
                               ),
@@ -3625,7 +3625,7 @@ class _PlaylistHeader extends StatelessWidget {
           textAlign: compact ? TextAlign.center : TextAlign.start,
           style: theme.textTheme.headlineLarge?.copyWith(
             color: apple.label,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             letterSpacing: -.6,
           ),
         ),
@@ -3641,7 +3641,7 @@ class _PlaylistHeader extends StatelessWidget {
             textAlign: compact ? TextAlign.center : TextAlign.start,
             style: theme.textTheme.titleMedium?.copyWith(
               color: apple.secondaryLabel,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
@@ -4025,7 +4025,7 @@ class _SearchTabButton extends StatelessWidget {
                 context.tr(label),
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
                   color: active ? apple.label : apple.secondaryLabel,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                  fontWeight: active ? FontWeight.w400 : FontWeight.w300,
                 ),
               ),
             ),
@@ -4832,7 +4832,7 @@ class _LegacySectionLabel extends StatelessWidget {
         context.tr(label),
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
           color: apple.secondaryLabel,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w400,
         ),
       ),
     );

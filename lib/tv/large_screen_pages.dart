@@ -688,7 +688,7 @@ class _RailLabel extends StatelessWidget {
         context.tr(label),
         style: TextStyle(
           fontSize: 12.5,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           letterSpacing: 1.1,
           color: apple.tertiaryLabel,
         ),
@@ -758,8 +758,8 @@ class _RailButtonState extends State<_RailButton> {
                   style: LargeScreenType.cardTitle(context).copyWith(
                     fontSize: 19,
                     fontWeight: widget.selected
-                        ? FontWeight.w700
-                        : FontWeight.w500,
+                        ? FontWeight.w400
+                        : FontWeight.w300,
                     color: widget.selected
                         ? apple.label
                         : apple.label.withValues(alpha: .82),
@@ -1527,7 +1527,7 @@ class _LargeScreenChartPageState extends State<LargeScreenChartPage> {
                         _chart.source,
                         style: const TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w400,
                           letterSpacing: 1.1,
                           color: Color(0xCCFFFFFF),
                         ),
@@ -1540,7 +1540,7 @@ class _LargeScreenChartPageState extends State<LargeScreenChartPage> {
                         style: const TextStyle(
                           fontSize: 36,
                           height: 1.14,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w400,
                           color: Colors.white,
                         ),
                       ),

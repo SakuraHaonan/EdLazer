@@ -199,7 +199,7 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: apple.label,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
                 if (detail.isNotEmpty) ...<Widget>[
@@ -346,8 +346,8 @@ class _LegacyTrackRowState extends State<LegacyTrackRow> {
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: titleColor,
                             fontWeight: widget.current
-                                ? FontWeight.w600
-                                : FontWeight.w500,
+                                ? FontWeight.w400
+                                : FontWeight.w300,
                           ),
                         ),
                       ),
@@ -436,7 +436,7 @@ class LegacySectionHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleLarge?.copyWith(
                     color: apple.label,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w400,
                     letterSpacing: -.35,
                   ),
                 ),
@@ -535,8 +535,8 @@ class _LegacyRailItemState extends State<LegacyRailItem> {
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: labelColor,
                       fontWeight: widget.selected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
+                          ? FontWeight.w400
+                          : FontWeight.w300,
                     ),
                   ),
                 ),

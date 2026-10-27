@@ -64,7 +64,7 @@ class DownloadQueueView extends StatelessWidget {
                         Text(
                           context.tr('下载任务'),
                           style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
                         Text(
@@ -185,7 +185,7 @@ class _DownloadRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
                 Text(

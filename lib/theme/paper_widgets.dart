@@ -80,7 +80,7 @@ class _ClayButtonState extends State<ClayButton> {
           textAlign: TextAlign.center,
           style: context.type.bodySm.copyWith(
             color: enabled ? Colors.white : context.colors.cloudDark,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w400,
             letterSpacing: 0,
           ),
         ),
@@ -154,7 +154,7 @@ class _IvoryButtonState extends State<IvoryButton> {
                 TrText(
                   widget.label,
                   style: context.type.bodySm.copyWith(
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w400,
                     color: enabled
                         ? context.colors.slateDark
                         : context.colors.cloudMedium,
@@ -239,7 +239,7 @@ class _OutlinedButton2State extends State<OutlinedButton2> {
                   style: context.type.caption.copyWith(
                     color: fg,
                     fontSize: 13,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
@@ -404,7 +404,7 @@ class InlineLabel extends StatelessWidget {
       text.toUpperCase(),
       style: context.type.caption.copyWith(
         color: color ?? context.colors.cloudDark,
-        fontWeight: strong ? FontWeight.w600 : FontWeight.w500,
+        fontWeight: strong ? FontWeight.w400 : FontWeight.w300,
         letterSpacing: 1.6,
       ),
     );

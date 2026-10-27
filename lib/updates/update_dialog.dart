@@ -95,7 +95,7 @@ class _UpdateDialog extends StatelessWidget {
                 context.tr('预发布版本'),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: scheme.primary,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
@@ -110,7 +110,7 @@ class _UpdateDialog extends StatelessWidget {
             Text(
               release.name,
               style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
             const SizedBox(height: 4),

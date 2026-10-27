@@ -82,7 +82,7 @@ class ApplePageTitle extends StatelessWidget {
         .copyWith(
           fontSize: compact ? 34 : 32,
           height: (compact ? 41 : 38) / (compact ? 34 : 32),
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           letterSpacing: .37,
           color: apple.label,
         );
@@ -164,7 +164,7 @@ class AppleSectionHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleLarge?.copyWith(
                       color: apple.label,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w400,
                       letterSpacing: -.4,
                     ),
                   ),

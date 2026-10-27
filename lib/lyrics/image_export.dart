@@ -707,7 +707,7 @@ class LyricImageCard extends StatelessWidget {
                       style: context.type.body.copyWith(
                         fontSize: 20,
                         height: 1.5,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                         color: primaryText,
                       ),
                     ),

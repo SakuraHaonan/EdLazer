@@ -266,23 +266,23 @@ TextTheme appleTextTheme({Color? color, String? fontFamily}) {
   );
 
   return TextTheme(
-    // Global weight shift: headlines/titles one step lighter so MiSans
-    // reads thinner app-wide while emphasis (w500 titles) remains.
-    displayLarge: s(34, 41, FontWeight.w500, spacing: .37),
-    displayMedium: s(28, 34, FontWeight.w500, spacing: .36),
-    displaySmall: s(24, 30, FontWeight.w500, spacing: .35),
-    headlineLarge: s(34, 41, FontWeight.w500, spacing: .37),
-    headlineMedium: s(28, 34, FontWeight.w500, spacing: .36),
-    headlineSmall: s(22, 28, FontWeight.w500, spacing: .35),
-    titleLarge: s(20, 25, FontWeight.w500, spacing: .38),
-    titleMedium: s(17, 22, FontWeight.w500, spacing: -.24),
-    titleSmall: s(15, 20, FontWeight.w500, spacing: -.23),
+    // Global thin pass: titles/headlines max w400 (MiSans Regular),
+    // body/labels on Light (w300). Hard overrides elsewhere also softened.
+    displayLarge: s(34, 41, FontWeight.w400, spacing: .37),
+    displayMedium: s(28, 34, FontWeight.w400, spacing: .36),
+    displaySmall: s(24, 30, FontWeight.w400, spacing: .35),
+    headlineLarge: s(34, 41, FontWeight.w400, spacing: .37),
+    headlineMedium: s(28, 34, FontWeight.w400, spacing: .36),
+    headlineSmall: s(22, 28, FontWeight.w400, spacing: .35),
+    titleLarge: s(20, 25, FontWeight.w400, spacing: .38),
+    titleMedium: s(17, 22, FontWeight.w400, spacing: -.24),
+    titleSmall: s(15, 20, FontWeight.w400, spacing: -.23),
     bodyLarge: s(17, 22, FontWeight.w300, spacing: -.24),
     bodyMedium: s(15, 20, FontWeight.w300, spacing: -.23),
     bodySmall: s(13, 18, FontWeight.w300, spacing: -.18),
-    labelLarge: s(15, 20, FontWeight.w400, spacing: -.23),
-    labelMedium: s(13, 18, FontWeight.w400, spacing: -.18),
-    labelSmall: s(11, 13, FontWeight.w400, spacing: .06),
+    labelLarge: s(15, 20, FontWeight.w300, spacing: -.23),
+    labelMedium: s(13, 18, FontWeight.w300, spacing: -.18),
+    labelSmall: s(11, 13, FontWeight.w300, spacing: .06),
   );
 }
 
@@ -451,7 +451,7 @@ ThemeData buildAppleTheme({
           color: states.contains(WidgetState.selected)
               ? apple.accent
               : apple.secondaryLabel,
-          fontWeight: FontWeight.w400,
+          fontWeight: FontWeight.w300,
         ),
       ),
     ),
@@ -462,7 +462,7 @@ ThemeData buildAppleTheme({
       unselectedIconTheme: IconThemeData(color: apple.secondaryLabel),
       selectedLabelTextStyle: text.bodyMedium?.copyWith(
         color: apple.label,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w400,
       ),
       unselectedLabelTextStyle: text.bodyMedium?.copyWith(
         color: apple.secondaryLabel,
@@ -485,7 +485,7 @@ ThemeData buildAppleTheme({
         disabledBackgroundColor: apple.fill,
         disabledForegroundColor: apple.tertiaryLabel,
         shape: const StadiumBorder(),
-        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w500),
+        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w400),
         elevation: 0,
       ),
     ),
@@ -496,7 +496,7 @@ ThemeData buildAppleTheme({
         backgroundColor: apple.secondaryGroupedBackground,
         foregroundColor: apple.label,
         shape: const StadiumBorder(),
-        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w500),
+        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w400),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -506,7 +506,7 @@ ThemeData buildAppleTheme({
         foregroundColor: apple.accent,
         side: BorderSide(color: apple.separator),
         shape: const StadiumBorder(),
-        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w500),
+        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w400),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -514,7 +514,7 @@ ThemeData buildAppleTheme({
         minimumSize: const Size(44, 40),
         foregroundColor: apple.accent,
         shape: const StadiumBorder(),
-        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w500),
+        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w400),
       ),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(

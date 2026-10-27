@@ -149,32 +149,32 @@ const TextTheme legacyTextTheme = TextTheme(
   ),
   headlineMedium: TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w400,
     fontSize: 28,
     height: 36 / 28,
     letterSpacing: -0.25,
   ),
   headlineSmall: TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w400,
     fontSize: 24,
     height: 32 / 24,
   ),
   titleLarge: TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w400,
     fontSize: 22,
     height: 28 / 22,
   ),
   titleMedium: TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w300,
     fontSize: 16,
     height: 24 / 16,
   ),
   titleSmall: TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w300,
     fontSize: 14,
     height: 20 / 14,
   ),
@@ -198,19 +198,19 @@ const TextTheme legacyTextTheme = TextTheme(
   ),
   labelLarge: TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w300,
     fontSize: 14,
     height: 20 / 14,
   ),
   labelMedium: TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w300,
     fontSize: 12,
     height: 16 / 12,
   ),
   labelSmall: TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w300,
     fontSize: 11,
     height: 16 / 11,
   ),
@@ -313,8 +313,8 @@ ThemeData buildLegacyTheme({
               ? scheme.onSurface
               : onSurfaceVariant,
           fontWeight: states.contains(WidgetState.selected)
-              ? FontWeight.w500
-              : FontWeight.w400,
+              ? FontWeight.w400
+              : FontWeight.w300,
         ),
       ),
     ),

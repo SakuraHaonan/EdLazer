@@ -223,7 +223,7 @@ class _FrameStatsOverlayState extends State<FrameStatsOverlay> {
                           stats.live && stats.fps > 0
                               ? '${stats.fps.toStringAsFixed(0)} fps'
                               : context.tr('帧率 —'),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: const TextStyle(fontWeight: FontWeight.w400),
                         ),
                         const SizedBox(width: 8),
                         Text(

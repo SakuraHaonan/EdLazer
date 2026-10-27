@@ -1005,7 +1005,7 @@ class _LegacyShellState extends State<LegacyShell>
                 'Lazer',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: apple.label,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w400,
                   letterSpacing: -.5,
                 ),
               ),
@@ -1078,7 +1078,7 @@ class _LegacyShellState extends State<LegacyShell>
                                   style: Theme.of(context).textTheme.labelSmall
                                       ?.copyWith(
                                         color: apple.secondaryLabel,
-                                        fontWeight: FontWeight.w600,
+                                        fontWeight: FontWeight.w400,
                                       ),
                                 ),
                                 if (state.signedIn) ...<Widget>[
@@ -1142,7 +1142,7 @@ class _LegacyShellState extends State<LegacyShell>
         context.tr(label),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: apple.secondaryLabel,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w400,
         ),
       ),
     );
@@ -1176,7 +1176,7 @@ class _LegacyShellState extends State<LegacyShell>
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: apple.label,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
@@ -1215,7 +1215,7 @@ class _LegacyShellState extends State<LegacyShell>
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: apple.label,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
@@ -1378,7 +1378,7 @@ class _LegacyShellState extends State<LegacyShell>
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: apple.label,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                   Text(
@@ -1743,7 +1743,7 @@ class _Avatar extends StatelessWidget {
               context.tr(label),
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: Colors.white,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
     );
@@ -1857,8 +1857,8 @@ class _RailPlaylistState extends State<_RailPlaylist> {
                           ? apple.label
                           : apple.secondaryLabel,
                       fontWeight: widget.selected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
+                          ? FontWeight.w400
+                          : FontWeight.w300,
                     ),
                   ),
                 ),

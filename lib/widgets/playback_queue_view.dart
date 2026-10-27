@@ -232,8 +232,8 @@ class _QueueRowState extends State<_QueueRow> {
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: current ? apple.accent : apple.label,
                                   fontWeight: current
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
+                                      ? FontWeight.w400
+                                      : FontWeight.w300,
                                 ),
                               ),
                             ),

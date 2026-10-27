@@ -120,7 +120,7 @@ abstract final class LargeScreenType {
       _base(context, Theme.of(context).textTheme.displayLarge).copyWith(
         fontSize: 40,
         height: 1.12,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w400,
         letterSpacing: -.8,
         color: AppleSemanticColors.of(context).label,
       );
@@ -129,7 +129,7 @@ abstract final class LargeScreenType {
       _base(context, Theme.of(context).textTheme.titleLarge).copyWith(
         fontSize: 26,
         height: 1.18,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w400,
         letterSpacing: -.5,
         color: AppleSemanticColors.of(context).label,
       );
@@ -138,7 +138,7 @@ abstract final class LargeScreenType {
       _base(context, Theme.of(context).textTheme.titleMedium).copyWith(
         fontSize: 20,
         height: 1.24,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w400,
         color: AppleSemanticColors.of(context).label,
       );
 
@@ -153,7 +153,7 @@ abstract final class LargeScreenType {
       _base(context, Theme.of(context).textTheme.bodyLarge).copyWith(
         fontSize: 20,
         height: 1.26,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w400,
         color: AppleSemanticColors.of(context).label,
       );
 
@@ -167,7 +167,7 @@ abstract final class LargeScreenType {
   static TextStyle button(BuildContext context) => _base(
     context,
     Theme.of(context).textTheme.titleSmall,
-  ).copyWith(fontSize: 17, height: 1.2, fontWeight: FontWeight.w600);
+  ).copyWith(fontSize: 17, height: 1.2, fontWeight: FontWeight.w400);
 
   static TextStyle _base(BuildContext context, TextStyle? style) =>
       style ?? Theme.of(context).textTheme.bodyMedium ?? const TextStyle();
@@ -333,7 +333,7 @@ class _LargeScreenFeatureCardState extends State<LargeScreenFeatureCard> {
                       style: TextStyle(
                         fontSize: 20,
                         height: 1.22,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w400,
                         letterSpacing: -.2,
                         color: Colors.white,
                       ),
@@ -673,8 +673,8 @@ class _LargeScreenTrackRowState extends State<LargeScreenTrackRow> {
                       style: LargeScreenType.rowTitle(context).copyWith(
                         color: widget.current ? apple.accent : apple.label,
                         fontWeight: widget.current || _focused
-                            ? FontWeight.w600
-                            : FontWeight.w500,
+                            ? FontWeight.w400
+                            : FontWeight.w300,
                       ),
                     ),
                   ),
