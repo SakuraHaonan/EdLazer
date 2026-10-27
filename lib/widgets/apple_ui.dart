@@ -1,4 +1,4 @@
-﻿import 'dart:ui' as ui;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -432,6 +432,7 @@ class AppleSearchField extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onChanged,
+    this.onSubmitted,
     this.hintText,
     this.onClear,
     this.autofocus = false,
@@ -441,6 +442,9 @@ class AppleSearchField extends StatelessWidget {
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+
+  /// Runs only when the user submits the field (Enter / IME search action).
+  final ValueChanged<String>? onSubmitted;
   final String? hintText;
   final VoidCallback? onClear;
   final bool autofocus;
@@ -456,6 +460,7 @@ class AppleSearchField extends StatelessWidget {
       child: SearchBar(
         controller: controller,
         onChanged: onChanged,
+        onSubmitted: onSubmitted,
         hintText: context.tr(hintText ?? '搜索歌曲、歌手或歌单'),
         autoFocus: autofocus,
         // A search field, not a button: no elevation, no shadow and no hover

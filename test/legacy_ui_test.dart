@@ -54,7 +54,10 @@ class _Catalog extends Catalog {
     albums: <Album>[],
   );
   @override
-  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async =>
       const GatewayLyrics(lrc: '[00:00.00]第一句');
@@ -125,7 +128,10 @@ class _UnmatchedChartCatalog extends _Catalog {
   bool forced = false;
 
   @override
-  Future<MusicChart> prepareChart(MusicChart chart, {bool force = false}) async {
+  Future<MusicChart> prepareChart(
+    MusicChart chart, {
+    bool force = false,
+  }) async {
     prepareCalls++;
     forced = forced || force;
     // Answers, but never resolves a playable row: this is the board the user
@@ -229,25 +235,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the rail opens settings from the entry under the account block', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final AppState state = AppState(catalog: _Catalog());
-    addTearDown(state.dispose);
-    await tester.pumpWidget(_legacyApp(state));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'the rail opens settings from the entry under the account block',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final AppState state = AppState(catalog: _Catalog());
+      addTearDown(state.dispose);
+      await tester.pumpWidget(_legacyApp(state));
+      await tester.pumpAndSettle();
 
-    // The entry sits under the account row, so settings opens without the
-    // account menu having to be expanded first.
-    expect(find.text('设置'), findsOneWidget);
-    await tester.tap(find.text('设置'));
-    await tester.pumpAndSettle();
-    expect(find.text('配色'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      // The entry sits under the account row, so settings opens without the
+      // account menu having to be expanded first.
+      expect(find.text('设置'), findsOneWidget);
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      expect(find.text('配色'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('artist links open an Apple-style detail in the content pane', (
     tester,
@@ -481,6 +488,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'まにまに');
     await tester.pump(const Duration(milliseconds: 400));
+    // Typing alone must not start a request; the tab strip appears only after
+    // the user commits the query with Enter / the IME search action.
+    expect(find.text('歌曲'), findsNothing);
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
     expect(find.text('歌曲'), findsOneWidget);
     expect(find.text('歌单'), findsOneWidget);
@@ -588,7 +599,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildLegacyTheme(),
-        home: Scaffold(body: LegacyChartPage(state: state, chart: source)),
+        home: Scaffold(
+          body: LegacyChartPage(state: state, chart: source),
+        ),
       ),
     );
     await tester.pumpAndSettle();

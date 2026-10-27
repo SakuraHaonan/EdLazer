@@ -294,6 +294,35 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('the large-screen search waits for the Enter commit', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final AppState state = AppState(catalog: _Catalog());
+      addTearDown(state.dispose);
+      await tester.pumpWidget(_largeScreenApp(state));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('large-screen-search')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, '夜航');
+      await tester.pump(const Duration(milliseconds: 400));
+      // The idle notice is still there: typing alone must not search. The
+      // field's own editable text is not a result, so assert on the artist
+      // that only the result row renders.
+      expect(find.text('搜索歌曲、歌手或歌单'), findsWidgets);
+      expect(find.text('测试歌手'), findsNothing);
+
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.text('测试歌手'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('Select on the focused card opens the collection page', (
       WidgetTester tester,
     ) async {

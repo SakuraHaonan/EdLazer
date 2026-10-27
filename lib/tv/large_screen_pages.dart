@@ -1657,7 +1657,6 @@ class LargeScreenSearchPage extends StatefulWidget {
 
 class _LargeScreenSearchPageState extends State<LargeScreenSearchPage> {
   final TextEditingController _controller = TextEditingController();
-  Timer? _debounce;
   SearchResults _results = SearchResults.empty;
   _SearchKind _kind = _SearchKind.songs;
   bool _searching = false;
@@ -1666,24 +1665,29 @@ class _LargeScreenSearchPageState extends State<LargeScreenSearchPage> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
   void _onChanged(String value) {
-    _debounce?.cancel();
-    final String query = value.trim();
-    setState(() => _query = query);
-    if (query.isEmpty) {
-      setState(() {
-        _results = SearchResults.empty;
-        _searching = false;
-        _error = null;
-      });
+    // Typing only updates the clear affordance. A query is committed on
+    // Enter, so the remote/keyboard does not fire a request per keystroke.
+    if (value.trim().isNotEmpty) {
+      setState(() {});
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 320), () => _search(query));
+    setState(() {
+      _query = '';
+      _results = SearchResults.empty;
+      _searching = false;
+      _error = null;
+    });
+  }
+
+  void _submit(String value) {
+    final String query = value.trim();
+    setState(() => _query = query);
+    if (query.isNotEmpty) unawaited(_search(query));
   }
 
   Future<void> _search(String query) async {
@@ -1725,6 +1729,7 @@ class _LargeScreenSearchPageState extends State<LargeScreenSearchPage> {
             child: AppleSearchField(
               controller: _controller,
               onChanged: _onChanged,
+              onSubmitted: _submit,
               hintText: '搜索歌曲、歌手或歌单',
               height: 68,
               onClear: () {

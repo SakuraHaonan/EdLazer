@@ -148,7 +148,7 @@ The shell no longer pushes the player as a new Navigator route. It mounts the
 player as a same-route overlay over the existing app root:
 
 - the whole player uses Material's open-upwards motion: a compositor-only
-  slide from `Offset(0, 1)` to `Offset.zero`, 300 ms, closing on the same
+  slide from `Offset(0, 1)` to `Offset.zero`, 420 ms, closing on the same
   motion reversed. The curve is decelerating, not symmetric: a third of the
   travel is covered in the first tenth of the duration and the landing is
   soft, so the page answers the tap immediately instead of easing away from
@@ -171,7 +171,7 @@ player as a same-route overlay over the existing app root:
 - the lyric canvas is the one exception, and it is gated narrowly: the slide
   re-executes the page display list on every frame, and the lyric painter
   carries one blurred layer per visible row, so its 60 fps tick is muted for
-  the 300 ms of travel. The gate owns the viewport as a plain child, so
+  the 420 ms of travel. The gate owns the viewport as a plain child, so
   unmuting it rebuilds a single `TickerMode` node — not the page — and the
   rows are already laid out, so nothing jumps when it resumes;
 - the album-colour mesh flow is held back until the entrance has settled, and

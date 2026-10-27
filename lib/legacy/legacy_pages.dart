@@ -3558,7 +3558,6 @@ class LegacySearchPage extends StatefulWidget {
 
 class _LegacySearchPageState extends State<LegacySearchPage> {
   final TextEditingController _search = TextEditingController();
-  Timer? _debounce;
   SearchResults? _results;
   _SearchTab _tab = _SearchTab.songs;
   String _query = '';
@@ -3568,23 +3567,30 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _search.dispose();
     super.dispose();
   }
 
   void _onChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      unawaited(_run(value.trim()));
+    // The field must not search while the user is still typing. Only Enter
+    // (or the IME search action) commits the query; clearing the text resets
+    // the page immediately.
+    if (value.trim().isNotEmpty) {
+      setState(() {});
+      return;
+    }
+    _generation++;
+    setState(() {
+      _query = '';
+      _results = null;
+      _loading = false;
+      _error = null;
     });
-    // Rebuild right away for the clear affordance; the query stays debounced.
-    setState(() {});
   }
 
+  void _submit(String value) => unawaited(_run(value.trim()));
+
   void _clear() {
-    _debounce?.cancel();
     _search.clear();
     _generation++;
     setState(() {
@@ -3642,6 +3648,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
                 controller: _search,
                 autofocus: true,
                 onChanged: _onChanged,
+                onSubmitted: _submit,
                 onClear: _clear,
               ),
             ),

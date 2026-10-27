@@ -306,15 +306,23 @@ class _LyricViewportState extends State<LyricViewport>
     final positions = [
       for (var i = 0; i < _lines.length; i++) _prefix[i] - anchor,
     ];
-    final params = lyricPositionPolicy(
-      seeking: seeking,
-      intervalMs: focus > 0
-          ? (_lines[focus].time - _lines[focus - 1].time).inMilliseconds
-          : null,
-      endOfSong:
-          widget.state.position >=
-          (widget.state.current?.duration ?? const Duration(days: 1)),
-    );
+    // The first and last line have no neighbouring interval, and the upstream
+    // policy gives them a soft under-damped spring. On a long sheet every row
+    // then kept oscillating at the edges and the 60 fps ticker never settled.
+    // Use the same damped baseline as the middle transitions instead; seeking
+    // keeps its intentionally soft animation.
+    final bool atEdge = focus == 0 || focus == _lines.length - 1;
+    final params = !seeking && atEdge
+        ? const LyricSpringParams(mass: .9, stiffness: 170, damping: 29)
+        : lyricPositionPolicy(
+            seeking: seeking,
+            intervalMs: focus > 0
+                ? (_lines[focus].time - _lines[focus - 1].time).inMilliseconds
+                : null,
+            endOfSong:
+                widget.state.position >=
+                (widget.state.current?.duration ?? const Duration(days: 1)),
+          );
     final delays = lyricStaggerDelays(
       positions,
       _heights,
@@ -323,7 +331,19 @@ class _LyricViewportState extends State<LyricViewport>
     );
     for (var i = 0; i < _ys.length; i++) {
       _ys[i].setParameters(params);
-      _ys[i].setTarget(positions[i], delay: delays[i]);
+      // Rows that are nowhere near the viewport do not need a spring or a
+      // stagger delay: put them at their new position immediately. This is
+      // what keeps the opening and closing seconds of a long lyric sheet from
+      // animating hundreds of invisible rows.
+      final double target = positions[i];
+      final bool nearViewport =
+          target + _heights[i] >= -_size.height * 0.5 &&
+          target <= _size.height * 1.5;
+      if (nearViewport) {
+        _ys[i].setTarget(target, delay: delays[i]);
+      } else {
+        _ys[i].setPosition(target);
+      }
     }
     _scaleTargets();
     _start();
@@ -407,7 +427,11 @@ class _LyricViewportState extends State<LyricViewport>
     }
     if (replaced) {
       _ys = [
-        for (var i = 0; i < _lines.length; i++) LyricSpring(size.height * 2),
+        // The first reveal used to start two screens below the viewport; the
+        // whole sheet then travelled that distance on the soft edge spring.
+        // A shorter runway keeps the opening frame cheap and still reads as a
+        // reveal.
+        for (var i = 0; i < _lines.length; i++) LyricSpring(size.height * .7),
       ];
       _scales = [
         for (var i = 0; i < _lines.length; i++)

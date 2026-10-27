@@ -94,7 +94,7 @@ Large-screen motion is deliberately non-linear — fast first, slow on arrival:
 - **Track changes in the player** dissolve the cover over 420 ms with a
   symmetric ease-in-out and a 1.2% scale settle, so one artwork melts into the
   next rather than sliding across.
-- **The player slide** keeps its 300 ms decelerating curve.
+- **The player slide** uses the same decelerating curve over 420 ms.
 
 ## Performance
 

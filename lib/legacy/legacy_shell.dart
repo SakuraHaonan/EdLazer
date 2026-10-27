@@ -97,9 +97,9 @@ class _LegacyShellState extends State<LegacyShell>
   late final PlayerPullDown _playerPull = _PlayerPull(this);
 
   /// The player's open and close motion: decelerating, i.e. fast first and
-  /// slow on arrival. A third of the travel is covered in the first tenth of
-  /// the 300 ms, which is what makes the page feel like it snapped up in
-  /// response to the tap instead of easing away from it.
+  /// slow on arrival. A third of the travel is covered early, which makes the
+  /// page answer the tap immediately; the 420 ms tail lets the cover dissolve
+  /// and the sheet settle without feeling rushed.
   ///
   /// The curve shapes time, never the offset: the pull-down writes
   /// `_nowPlayingMotion.value` straight through and reads it back, so the page
@@ -146,8 +146,8 @@ class _LegacyShellState extends State<LegacyShell>
     super.initState();
     _nowPlayingMotion = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 420),
+      reverseDuration: const Duration(milliseconds: 420),
       // Never let the platform's reduced-motion flag scale this to 5%: the
       // player is dragged by the finger, so a released pull has to finish the
       // distance it was left at (80-260 ms) instead of snapping away in a
@@ -496,7 +496,7 @@ class _LegacyShellState extends State<LegacyShell>
     _nowPlayingMotion.value = 0;
     _nowPlayingMotion.animateTo(
       1,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 420),
       curve: _playerMotionCurve,
     );
   }
@@ -514,7 +514,7 @@ class _LegacyShellState extends State<LegacyShell>
     // would never be retired.
     _nowPlayingMotion.animateBack(
       0,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 420),
       curve: _playerMotionCurve,
     );
   }

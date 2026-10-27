@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -93,7 +93,7 @@ void main() {
     expect(tester.getSemantics(rootFinder).id, rootBefore.id);
     await tester.tap(find.byKey(const ValueKey<String>('desktop-close')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 340));
+    await tester.pump(const Duration(milliseconds: 460));
     await tester.pump();
     expect(find.byType(NowPlayingPage), findsNothing);
     expect(tester.getSemantics(rootFinder).id, rootBefore.id);
@@ -128,7 +128,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 340));
+    await tester.pump(const Duration(milliseconds: 460));
 
     expect(find.byType(NowPlayingPage), findsOneWidget);
     await tester.tap(find.byIcon(Icons.group_rounded).first);

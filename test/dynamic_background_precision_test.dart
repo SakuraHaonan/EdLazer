@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -254,7 +254,7 @@ void main() {
     expect(playerFlow().quality, 0.5);
     expect(lyricGate(), isFalse);
 
-    for (int i = 0; i < 24; i++) {
+    for (int i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
     expect(playerFlow().preview, isFalse);

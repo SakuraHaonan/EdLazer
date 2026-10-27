@@ -455,7 +455,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   /// The lyric canvas is the most expensive painter in the player — one
   /// blurred layer per visible row, all of them re-blurred whenever the words
   /// move — and the entrance slide re-rasterises the whole page on every
-  /// frame. Muting its ticker for those 300 ms removes the two costs from the
+  /// frame. Muting its ticker for those 420 ms removes the two costs from the
   /// same frame budget; the rows are already laid out, so nothing jumps when
   /// it resumes. The gate owns the viewport as a plain child, so unmuting
   /// rebuilds one `TickerMode` node instead of the page.
