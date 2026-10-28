@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../data/models.dart';
 import '../state/ui_preferences.dart';
@@ -105,7 +106,7 @@ class AlbumFlowBackground extends StatefulWidget {
 
 class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  static const Duration _paletteFade = Duration(milliseconds: 650);
+  static const Duration _paletteFade = Duration(milliseconds: 400);
 
   /// The mesh drifts on a ten-second time base: over one 120 fps frame the
   /// change is a fraction of a percent of the warp. Re-rendering it at the
@@ -127,7 +128,8 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
   final ValueNotifier<int> _frames = ValueNotifier<int>(0);
   final Stopwatch _clock = Stopwatch();
   Timer? _timer;
-  Duration _lastAdvance = Duration.zero;
+  int? _frameCallback;
+  Duration? _lastFrameStamp;
   double _phase = 0;
   bool _reduceMotion = false;
   bool _tickerAllowed = true;
@@ -208,6 +210,7 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
       // rebuild.
       _timer?.cancel();
       _timer = null;
+      _cancelFrame();
       _syncPlayback();
       _frames.value++;
     }
@@ -222,6 +225,7 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _cancelFrame();
     _palette
       ..removeListener(_onPaletteFrame)
       ..removeStatusListener(_onPaletteStatus)
@@ -243,22 +247,42 @@ class _AlbumFlowBackgroundState extends State<AlbumFlowBackground>
         _clock
           ..reset()
           ..start();
-        _lastAdvance = Duration.zero;
-        _timer = Timer.periodic(_precision.frameInterval, (_) => _advance());
+        _lastFrameStamp = null;
+        // The timer only sets the cadence; the actual update is taken on the
+        // next vsync with the frame's own timestamp. Advancing from the timer
+        // (off-vsync, wall-clock deltas) made the drift judder against the
+        // display and could land mid-frame.
+        _timer = Timer.periodic(_precision.frameInterval, (_) => _request());
       }
     } else {
       _timer?.cancel();
       _timer = null;
+      _cancelFrame();
       _clock.stop();
     }
   }
 
-  void _advance() {
-    final Duration elapsed = _clock.elapsed;
-    final double delta =
-        (elapsed - _lastAdvance).inMicroseconds /
-        Duration.microsecondsPerSecond;
-    _lastAdvance = elapsed;
+  void _request() {
+    if (_frameCallback != null) return;
+    _frameCallback = SchedulerBinding.instance.scheduleFrameCallback(_advance);
+  }
+
+  void _cancelFrame() {
+    final int? id = _frameCallback;
+    if (id != null) SchedulerBinding.instance.cancelFrameCallbackWithId(id);
+    _frameCallback = null;
+    _lastFrameStamp = null;
+  }
+
+  void _advance(Duration stamp) {
+    _frameCallback = null;
+    if (!mounted || !_runs) return;
+    final Duration? last = _lastFrameStamp;
+    _lastFrameStamp = stamp;
+    final double delta = last == null
+        ? _precision.frameInterval.inMicroseconds /
+              Duration.microsecondsPerSecond
+        : (stamp - last).inMicroseconds / Duration.microsecondsPerSecond;
     // Slowly rotating/breathing mesh: AMLL drives its WebGL mesh from a
     // 10-second time base, with a volume-responsive UV rotation.
     _phase = (_phase + delta.clamp(0.0, .1)) % 10000;

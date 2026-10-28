@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart'
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
+import 'fade_page_transitions.dart';
 import 'tokens.dart';
 
 /// Apple-platform semantic colours and typography.
@@ -386,14 +387,15 @@ ThemeData buildAppleTheme({
     visualDensity: VisualDensity.standard,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     extensions: <ThemeExtension<dynamic>>[apple],
+    // Quick fades everywhere; iOS keeps Cupertino for its edge swipe-back.
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.macOS: EdFadePageTransitionsBuilder(),
+        TargetPlatform.android: EdFadePageTransitionsBuilder(),
+        TargetPlatform.fuchsia: EdFadePageTransitionsBuilder(),
+        TargetPlatform.windows: EdFadePageTransitionsBuilder(),
+        TargetPlatform.linux: EdFadePageTransitionsBuilder(),
       },
     ),
     appBarTheme: AppBarTheme(

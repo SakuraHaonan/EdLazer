@@ -14,6 +14,7 @@ class AppPalette {
       accent: theme.colorScheme.primary,
     );
   }
+
   Color get slateDark => dark ? const Color(0xFFF0EEE6) : AppColors.slateDark;
   Color get ivoryMedium =>
       dark ? const Color(0xFF191918) : AppColors.ivoryMedium;

@@ -20,6 +20,7 @@ import '../widgets/interaction_feedback.dart';
 import '../widgets/listen_together_dialog.dart';
 import '../widgets/playlist_picker_dialog.dart';
 import '../widgets/volume_control.dart';
+import '../theme/tokens.dart';
 
 enum DesktopNowPlayingPane { lyrics, comments, queue }
 
@@ -487,9 +488,9 @@ class _DesktopDock extends StatelessWidget {
     builder: (context, _) => AnimatedSwitcher(
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
-          : const Duration(milliseconds: 360),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+          : AppMotion.standard,
+      switchInCurve: AppMotion.standardCurve,
+      switchOutCurve: AppMotion.exitCurve,
       transitionBuilder: (child, animation) => SizeTransition(
         axis: Axis.vertical,
         sizeFactor: animation,

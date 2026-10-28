@@ -81,8 +81,8 @@ void main() {
     await tester.pump();
     expect(remaining(), closeTo(1, .001), reason: 'it starts below the window');
 
-    // First third of the 500 ms entrance.
-    await tester.pump(const Duration(milliseconds: 160));
+    // First third of the 250 ms entrance.
+    await tester.pump(const Duration(milliseconds: 80));
     final double firstLeg = 1 - remaining();
     expect(
       firstLeg,
@@ -91,12 +91,12 @@ void main() {
     );
 
     // Second third: less travel than the first, i.e. it is slowing down.
-    await tester.pump(const Duration(milliseconds: 160));
+    await tester.pump(const Duration(milliseconds: 80));
     final double secondLeg = 1 - remaining() - firstLeg;
     expect(secondLeg, lessThan(firstLeg / 2));
     expect(1 - remaining(), greaterThan(.9));
 
-    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 100));
     expect(remaining(), closeTo(0, .001));
 
     // The close is the same curve, reversed: it drops away at once and eases
@@ -105,7 +105,8 @@ void main() {
     await tester.pump();
     expect(remaining(), closeTo(0, .001));
 
-    await tester.pump(const Duration(milliseconds: 160));
+    // The 200 ms exit is a touch quicker than the entrance.
+    await tester.pump(const Duration(milliseconds: 70));
     final double firstLegOut = remaining();
     expect(
       firstLegOut,
@@ -113,11 +114,11 @@ void main() {
       reason: 'the exit must not hang at the start either',
     );
 
-    await tester.pump(const Duration(milliseconds: 160));
+    await tester.pump(const Duration(milliseconds: 70));
     final double secondLegOut = remaining() - firstLegOut;
     expect(secondLegOut, lessThan(firstLegOut / 2));
 
-    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 80));
     await tester.pump();
     expect(find.byType(NowPlayingPage), findsNothing);
     expect(tester.takeException(), isNull);

@@ -124,5 +124,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
+    // Blur is a desktop/iOS effect; Android renders lyrics without it.
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
 }

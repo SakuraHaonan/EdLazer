@@ -146,8 +146,8 @@ class _LegacyShellState extends State<LegacyShell>
     super.initState();
     _nowPlayingMotion = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
-      reverseDuration: const Duration(milliseconds: 500),
+      duration: AppMotion.emphasized,
+      reverseDuration: AppMotion.standard,
       // Never let the platform's reduced-motion flag scale this to 5%: the
       // player is dragged by the finger, so a released pull has to finish the
       // distance it was left at (80-260 ms) instead of snapping away in a
@@ -156,10 +156,8 @@ class _LegacyShellState extends State<LegacyShell>
       animationBehavior: AnimationBehavior.preserve,
     )..addStatusListener(_onNowPlayingStatus);
     // Mirrors the page switcher's duration in [_content].
-    _contentMotion = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 420),
-    )..addStatusListener(_onContentMotionStatus);
+    _contentMotion = AnimationController(vsync: this, duration: AppMotion.page)
+      ..addStatusListener(_onContentMotionStatus);
     state.addListener(_onAppStateChanged);
     // The first frame is not a switch: only a change from here on is one.
     _shownContentKey = _contentKey;
@@ -496,7 +494,7 @@ class _LegacyShellState extends State<LegacyShell>
     _nowPlayingMotion.value = 0;
     _nowPlayingMotion.animateTo(
       1,
-      duration: const Duration(milliseconds: 500),
+      duration: AppMotion.emphasized,
       curve: _playerMotionCurve,
     );
   }
@@ -514,7 +512,7 @@ class _LegacyShellState extends State<LegacyShell>
     // would never be retired.
     _nowPlayingMotion.animateBack(
       0,
-      duration: const Duration(milliseconds: 500),
+      duration: AppMotion.standard,
       curve: _playerMotionCurve,
     );
   }
@@ -531,7 +529,7 @@ class _LegacyShellState extends State<LegacyShell>
         ? false
         : (velocity > 900 && pulled > .02) || pulled >= .22;
     final Duration duration = Duration(
-      milliseconds: ((dismiss ? open : pulled) * 260).round().clamp(80, 260),
+      milliseconds: ((dismiss ? open : pulled) * 220).round().clamp(80, 220),
     );
     if (!dismiss) {
       _nowPlayingMotion.animateTo(
@@ -1437,9 +1435,10 @@ class _LegacyShellState extends State<LegacyShell>
     final bool largeScreen = largeScreenModeOf(context);
     return AnimatedSwitcher(
       // [_contentMotion] mirrors this duration: keep the two in step.
-      duration: motion ? const Duration(milliseconds: 420) : Duration.zero,
-      switchInCurve: Curves.easeOutQuart,
-      switchOutCurve: Curves.easeInCubic,
+      duration: motion ? AppMotion.page : Duration.zero,
+      reverseDuration: motion ? AppMotion.exit : Duration.zero,
+      switchInCurve: Curves.linear,
+      switchOutCurve: Curves.linear,
       layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
         alignment: Alignment.topCenter,
         children: <Widget>[
@@ -1471,8 +1470,8 @@ class _LegacyShellState extends State<LegacyShell>
           parent: animation,
           // A gentle Apple-style arrival: most of the travel happens early,
           // the last pixels settle slowly.
-          curve: const Cubic(0.32, 0.72, 0, 1),
-          reverseCurve: Curves.easeInCubic,
+          curve: AppMotion.fadeCurve,
+          reverseCurve: AppMotion.exitCurve,
         );
         // Fast first, slow on arrival. The slide is a few pixels of vertical
         // travel (a compositor transform), not a layout change, and the fade
@@ -1481,7 +1480,10 @@ class _LegacyShellState extends State<LegacyShell>
           opacity: eased,
           child: SlideTransition(
             position: Tween<Offset>(
-              begin: Offset(0, largeScreen ? .012 : .04),
+              begin: Offset(
+                0,
+                largeScreen ? AppMotion.pageSlide / 2 : AppMotion.pageSlide,
+              ),
               end: Offset.zero,
             ).animate(eased),
             child: RepaintBoundary(child: child),

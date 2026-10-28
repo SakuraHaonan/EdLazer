@@ -1,7 +1,8 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:window_manager/window_manager.dart';
 
 import '../data/audio_quality.dart';
@@ -17,6 +18,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../theme/design_tokens.dart';
 import '../theme/paper_widgets.dart';
+import '../theme/tokens.dart';
 import '../tv/tv_mode.dart';
 import '../utils/cover_save.dart';
 import '../widgets/accessible_controls.dart';
@@ -319,13 +321,25 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     // Retire floating tooltip nodes before their anchors become invisible.
     // Wait for real animation completion, including on a delayed frame.
     if (Tooltip.dismissAllToolTips()) {
-      _hideTimer = Timer(const Duration(milliseconds: 16), _hideControls);
+      // Re-check on the next real frame instead of polling a 16 ms timer.
+      _hideTimer?.cancel();
+      _hideTimer = null;
+      final int generation = ++_hideGeneration;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (generation == _hideGeneration) _hideControls();
+      });
+      SchedulerBinding.instance.ensureVisualUpdate();
       return;
     }
     setState(() => _controlsVisible = false);
   }
 
+  /// Bumped whenever the controls wake, so a hide queued for the next frame
+  /// is dropped instead of hiding controls the user just touched.
+  int _hideGeneration = 0;
+
   void _wakeControls() {
+    _hideGeneration++;
     _hideTimer?.cancel();
     if (!_controlsVisible && mounted) setState(() => _controlsVisible = true);
   }
@@ -650,9 +664,8 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
             ),
             _headerAction(
               tooltip: '播放音质',
-              onPressed: () => unawaited(
-                showPlaybackQualityPicker(context, widget.state),
-              ),
+              onPressed: () =>
+                  unawaited(showPlaybackQualityPicker(context, widget.state)),
               icon: const Icon(Icons.high_quality_outlined),
             ),
             _headerAction(
@@ -826,15 +839,15 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
 
   Widget _readingPane(Track track) => RepaintBoundary(
     child: AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      // Cover <-> lyrics: a plain cross-fade (the old 0.96 scale-in read as
+      // a pop).
+      duration: AppMotion.standard,
+      reverseDuration: AppMotion.exit,
+      switchInCurve: AppMotion.fadeCurve,
+      switchOutCurve: AppMotion.exitCurve,
       transitionBuilder: (child, animation) => FadeTransition(
         opacity: animation,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
-          child: RepaintBoundary(child: child),
-        ),
+        child: RepaintBoundary(child: child),
       ),
       layoutBuilder: (current, previous) => Stack(
         fit: StackFit.expand,
@@ -877,14 +890,15 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
               IgnorePointer(
                 ignoring: !visible,
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 360),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, animation) => SizeTransition(
-                    axis: Axis.horizontal,
-                    sizeFactor: animation,
-                    child: FadeTransition(opacity: animation, child: child),
-                  ),
+                  // Fade only: a SizeTransition here relaid out the lyric
+                  // viewport on every frame of the 360 ms reveal, which was
+                  // the main stutter when controls auto-hid on Android.
+                  duration: AppMotion.standard,
+                  reverseDuration: AppMotion.exit,
+                  switchInCurve: AppMotion.fadeCurve,
+                  switchOutCurve: AppMotion.exitCurve,
+                  transitionBuilder: (child, animation) =>
+                      FadeTransition(opacity: animation, child: child),
                   child: !visible
                       ? const SizedBox.shrink(key: ValueKey('hidden'))
                       : SizedBox(
@@ -926,13 +940,14 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
           IgnorePointer(
             ignoring: !visible,
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 360),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) => SizeTransition(
-                sizeFactor: animation,
-                child: FadeTransition(opacity: animation, child: child),
-              ),
+              // Fade only (see the landscape branch): no per-frame relayout
+              // of the lyric viewport while the controls come and go.
+              duration: AppMotion.standard,
+              reverseDuration: AppMotion.exit,
+              switchInCurve: AppMotion.fadeCurve,
+              switchOutCurve: AppMotion.exitCurve,
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
               child: visible
                   ? Padding(
                       key: const ValueKey('controls'),

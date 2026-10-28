@@ -193,6 +193,8 @@ void main() {
       expect(tester.widget<ImageFiltered>(blur).enabled, false);
       expect(tester.takeException(), isNull);
     },
+    // Blur is a desktop/iOS effect; Android renders lyrics without it.
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
   testWidgets('manual lyric scrolling stops at the first and last line', (
     tester,

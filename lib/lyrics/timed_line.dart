@@ -15,6 +15,8 @@ class TimedLyricText extends StatefulWidget {
     required this.position,
     required this.repaint,
     this.emphasis,
+    this.lift,
+    this.lite = false,
   });
   final LyricLine line;
   final TextStyle style;
@@ -22,6 +24,13 @@ class TimedLyricText extends StatefulWidget {
   final Duration Function() position;
   final Listenable repaint;
   final double Function()? emphasis;
+
+  /// 0..1 brightening of an unfocused row (lyric selection).
+  final double Function()? lift;
+
+  /// Cheap rendering for mobile GPUs: no glyph glow (blur saveLayer) and no
+  /// emphasis pulse; words still sweep and rise.
+  final bool lite;
   @override
   State<TimedLyricText> createState() => _TimedLyricTextState();
 }
@@ -62,6 +71,8 @@ class _TimedLyricTextState extends State<TimedLyricText> {
                 layout: _layout!,
                 position: widget.position,
                 emphasis: widget.emphasis ?? () => widget.active ? 1.0 : 0.0,
+                lift: widget.lift,
+                lite: widget.lite,
                 repaint: widget.repaint,
               ),
             ),
@@ -110,6 +121,17 @@ class _WordLayout {
         text: line.text,
         style: style.copyWith(
           color: (style.color ?? Colors.black).withValues(alpha: .28),
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      locale: locale,
+    )..layout(maxWidth: width);
+    rest = TextPainter(
+      text: TextSpan(
+        text: line.text,
+        style: style.copyWith(
+          color: (style.color ?? Colors.black).withValues(alpha: restAlpha),
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -182,13 +204,18 @@ class _WordLayout {
     }
   }
   final LyricLine line;
-  late final TextPainter bright, dim;
+
+  /// Alpha of a resting (unfocused) line. Painted directly by [rest] so idle
+  /// rows need no colour-filter or opacity layer.
+  static const double restAlpha = .48;
+  late final TextPainter bright, dim, rest;
   late final double fontSize;
   final List<_Segment> segments = [];
   final Path baseClip = Path();
   void dispose() {
     bright.dispose();
     dim.dispose();
+    rest.dispose();
   }
 }
 
@@ -197,36 +224,57 @@ class _WordPainter extends CustomPainter {
     required this.layout,
     required this.position,
     required this.emphasis,
+    required this.lift,
+    required this.lite,
     required Listenable repaint,
   }) : super(repaint: repaint);
   final _WordLayout layout;
   final Duration Function() position;
   final double Function() emphasis;
+  final double Function()? lift;
+  final bool lite;
   static final cjk = RegExp(r'[぀-ヿ㐀-鿿가-힯]');
   @override
   void paint(Canvas canvas, Size size) {
     final focus = emphasis().clamp(0.0, 1.0);
+    // Bounded layers: the rising glyphs travel at most ~.3em, so the row's
+    // own box (plus that margin) is enough; a null bound made every layer as
+    // large as the whole repaint boundary.
+    final Rect bounds = (Offset.zero & size).inflate(layout.fontSize * .4);
     if (focus <= 0) {
-      // Fully unfocused rows are painted by the parent's colour filter; the
-      // old code still pushed an opaque saveLayer here for every visible
-      // word-timed line on every frame of the song.
+      final double l = (lift?.call() ?? 0).clamp(0.0, 1.0);
+      if (l <= 0) {
+        layout.rest.paint(canvas, Offset.zero);
+        return;
+      }
+      canvas.saveLayer(
+        bounds,
+        Paint()
+          ..color = Colors.white.withValues(
+            alpha: _WordLayout.restAlpha + (1 - _WordLayout.restAlpha) * l,
+          ),
+      );
       layout.bright.paint(canvas, Offset.zero);
+      canvas.restore();
       return;
     }
     if (focus < 1) {
       canvas.saveLayer(
-        null,
+        bounds,
         Paint()..color = Colors.white.withValues(alpha: 1 - focus),
       );
-      layout.bright.paint(canvas, Offset.zero);
+      layout.rest.paint(canvas, Offset.zero);
       canvas.restore();
     }
     // Retain the word painter while the row exits; fade its emphasis using
-    // the same spring as the row's scale and color instead of swapping to Text.
-    canvas.saveLayer(
-      null,
-      Paint()..color = Colors.white.withValues(alpha: focus),
-    );
+    // the same eased value as the row's scale and colour.
+    final bool layered = focus < 1;
+    if (layered) {
+      canvas.saveLayer(
+        bounds,
+        Paint()..color = Colors.white.withValues(alpha: focus),
+      );
+    }
     final now = position().inMicroseconds / 1000;
     // Each clipped glyph used to repaint the entire dim lyric line. Paint the
     // same base once, then retain the existing per-glyph highlight effects.
@@ -237,7 +285,7 @@ class _WordPainter extends CustomPainter {
     for (final segment in layout.segments) {
       final elapsed = now - segment.startMs;
       final duration = segment.durationMs;
-      final motion = segment.emphasized
+      final motion = segment.emphasized && !lite
           ? LyricWordMotion.emphasized(
               elapsed,
               duration,
@@ -279,7 +327,7 @@ class _WordPainter extends CustomPainter {
           canvas.restore();
         } else {
           canvas.saveLayer(clip, Paint());
-          if (motion.glow > .001) {
+          if (!lite && motion.glow > .001) {
             canvas.saveLayer(
               clip,
               Paint()
@@ -311,12 +359,14 @@ class _WordPainter extends CustomPainter {
       }
       canvas.restore();
     }
-    canvas.restore();
+    if (layered) canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _WordPainter oldDelegate) =>
       oldDelegate.layout != layout ||
       oldDelegate.position != position ||
-      oldDelegate.emphasis != emphasis;
+      oldDelegate.emphasis != emphasis ||
+      oldDelegate.lift != lift ||
+      oldDelegate.lite != lite;
 }

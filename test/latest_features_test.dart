@@ -38,7 +38,10 @@ class _Catalog extends Catalog {
   @override
   Future<HomeFeed?> loadHome({int? userId}) async => null;
   @override
-  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => null;
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => null;
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics(
     lrc: '[00:00]First line\n[00:02]Second line\n[00:04]Third line',
@@ -55,7 +58,10 @@ const _delegates = <LocalizationsDelegate<dynamic>>[
 
 class _WordCatalog extends _Catalog {
   @override
-  Future<String?> audioUrlFor(Track track, {AudioQuality quality = AudioQuality.exhigh}) async => 'fixture';
+  Future<String?> audioUrlFor(
+    Track track, {
+    AudioQuality quality = AudioQuality.exhigh,
+  }) async => 'fixture';
   @override
   Future<GatewayLyrics?> lyricsFor(Track track) async => const GatewayLyrics(
     yrc: '[0,1000](0,500,0)最初(500,500,0)の行\n[1000,1500](1000,1500,0)次の行',
@@ -326,6 +332,8 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     },
+    // Blur is a desktop/iOS effect; Android renders lyrics without it.
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
   testWidgets(
     'word lines follow the engine clock between transport ticks and repaint paused seeks',
@@ -408,6 +416,8 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
+    // Blur is a desktop/iOS effect; Android renders lyrics without it.
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
   testWidgets(
     'word painting preserves wrapping, graphemes, semantics and deterministic seeking',

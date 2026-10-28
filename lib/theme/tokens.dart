@@ -51,23 +51,54 @@ abstract final class AppShape {
   static const BorderRadius full = BorderRadius.all(Radius.circular(999));
 }
 
-/// Material 3 motion tokens. Durations are deliberately short: the interface
-/// targets a 100 Hz minimum frame budget, and M3 expressive transitions still read as
-/// immediate at 90–320 ms.
+/// Shared motion tokens — the single source for every duration and curve.
+///
+/// EdLazer motion style: crisp and quick. Mostly fades, very little travel,
+/// no overshoot. Everything is driven by vsync (AnimationController / Ticker /
+/// implicit animations); nothing animates from a [Timer].
 abstract final class AppMotion {
-  static const Duration instant = Duration(milliseconds: 90);
-  static const Duration quick = Duration(milliseconds: 140);
+  /// Hover, press, toggles.
+  static const Duration instant = Duration(milliseconds: 100);
+
+  /// Small state changes: icons, chips, colour fades.
+  static const Duration quick = Duration(milliseconds: 150);
+
+  /// Default for fades, cross-fades and page switches.
   static const Duration standard = Duration(milliseconds: 200);
-  static const Duration emphasized = Duration(milliseconds: 320);
+
+  /// Largest movement in the app: sheets, the player opening.
+  static const Duration emphasized = Duration(milliseconds: 250);
+
+  /// Exits are a touch faster than entrances.
+  static const Duration exit = Duration(milliseconds: 180);
+
+  /// Page / section switches inside the shell.
+  static const Duration page = standard;
+
+  /// Cover art and backdrop palette cross-fades.
+  static const Duration crossFade = standard;
 
   static const Curve standardCurve = Curves.easeOutCubic;
-  static const Curve emphasizedCurve = Cubic(0.2, 0, 0, 1);
+  static const Curve emphasizedCurve = Curves.easeOutCubic;
+  static const Curve fadeCurve = Curves.easeOut;
+  static const Curve inOutCurve = Curves.easeInOut;
 
-  /// Material 3 easing for properties entering or leaving the screen.
-  static const Curve emphasizedDecelerate = Cubic(0.05, 0.7, 0.1, 1);
-  static const Curve emphasizedAccelerate = Cubic(0.3, 0, 0.8, 0.15);
+  /// Entering / leaving properties. Kept as names for older call sites; both
+  /// are plain eases now (no M3 "expressive" overshoot-like tails).
+  static const Curve emphasizedDecelerate = Curves.easeOutCubic;
+  static const Curve emphasizedAccelerate = Curves.easeInCubic;
+  static const Curve exitCurve = Curves.easeInCubic;
 
-  /// The minimum frame budget the app is tuned for: 100 fps.
+  /// Tiny vertical travel used together with a fade (fraction of height).
+  static const double pageSlide = .012;
+
+  /// Duration honouring the platform's reduce-motion switch.
+  static Duration of(BuildContext context, Duration duration) =>
+      (MediaQuery.maybeDisableAnimationsOf(context) ?? false)
+      ? Duration.zero
+      : duration;
+
+  /// The frame-time overlay's reference budget (diagnostics only).
   static const double frameBudgetMs = 1000 / 100;
 }
 

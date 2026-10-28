@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -15,6 +16,7 @@ import '../data/lyrics.dart';
 import '../data/lyric_selection.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
+import '../theme/tokens.dart';
 import 'lyrics_import.dart';
 import '../widgets/lyric_selection_toolbar.dart';
 import '../widgets/lyric_image_dialog.dart';
@@ -40,12 +42,41 @@ class LyricViewport extends StatefulWidget {
   State<LyricViewport> createState() => _LyricViewportState();
 }
 
+/// Crisp, non-bouncing line motion: critically damped (ζ≈1), settles in
+/// ~300 ms with no overshoot. Replaces the stagger + under-damped policy.
+const LyricSpringParams _kLineSpring = LyricSpringParams(
+  mass: 1,
+  stiffness: 260,
+  damping: 33,
+);
+
+/// A seek travels further; a slightly softer (still critically damped)
+/// spring keeps it from snapping.
+const LyricSpringParams _kSeekSpring = LyricSpringParams(
+  mass: 1,
+  stiffness: 170,
+  damping: 27,
+);
+
+/// Active-line emphasis (scale 97→100 and colour), eased in ~250 ms.
+const LyricSpringParams _kEmphasisSpring = LyricSpringParams(
+  mass: 1,
+  stiffness: 300,
+  damping: 35,
+);
+
 class _LyricViewportState extends State<LyricViewport>
     with TickerProviderStateMixin {
+  /// Mobile GPUs (Android) get the cheap path: no per-row distance blur, no
+  /// glyph glow, a single vertical edge mask. Those were offscreen layers
+  /// re-rendered on every frame of every moving row.
+  // Read per frame rather than cached so tests (and platform overrides) can
+  // flip it.
+  static bool get _lite => defaultTargetPlatform == TargetPlatform.android;
   Ticker? _ticker;
   late final AnimationController _blur = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 320),
+    duration: AppMotion.standard,
     value: widget.state.lyricBlurEnabled ? 1 : 0,
   );
   final ValueNotifier<int> _frames = ValueNotifier(0);
@@ -119,8 +150,8 @@ class _LyricViewportState extends State<LyricViewport>
     final active = _activeAt(widget.state.precisePosition);
     if (active == _active) return;
     setState(() {
+      _invalidateRows(_active, active);
       _active = active;
-      _rowCache.clear();
       _targets();
       _scaleTargets();
     });
@@ -193,8 +224,12 @@ class _LyricViewportState extends State<LyricViewport>
     }
     if (changed || typographyChanged || active != _active) {
       setState(() {
+        if (changed || typographyChanged) {
+          _rowCache.clear();
+        } else {
+          _invalidateRows(_active, active);
+        }
         _active = active;
-        _rowCache.clear();
         if (!changed && !_manual) _targets(seeking: seeking);
         _scaleTargets();
       });
@@ -220,11 +255,19 @@ class _LyricViewportState extends State<LyricViewport>
     _updateBlur();
   }
 
+  /// A line change only alters the outgoing and incoming rows; every other
+  /// cached row (and its laid-out paragraphs) is kept. Clearing the whole
+  /// cache here rebuilt and re-laid-out every visible line on each change.
+  void _invalidateRows(int previous, int next) {
+    _rowCache.remove(previous);
+    _rowCache.remove(next);
+  }
+
   void _updateBlur() {
     final target = widget.state.lyricBlurEnabled && !_manual ? 1.0 : 0.0;
     if (_blurTarget != target) {
       _blurTarget = target;
-      _blur.animateTo(target, curve: Curves.easeOutCubic);
+      _blur.animateTo(target, curve: AppMotion.standardCurve);
     }
   }
 
@@ -232,7 +275,7 @@ class _LyricViewportState extends State<LyricViewport>
   /// gap, so it ramps in and out as rows travel rather than snapping to zero
   /// the instant a line becomes active.
   double _sigma(int i) {
-    if (_rowUnit <= 0 || _blur.value <= 0) return 0;
+    if (_lite || _rowUnit <= 0 || _blur.value <= 0) return 0;
     final centre = _ys[i].value + _heights[i] * 0.5;
     final distance = (centre - _size.height * 0.35).abs() / _rowUnit;
     return math.min(5.0, distance * 1.55) * _blur.value;
@@ -248,7 +291,9 @@ class _LyricViewportState extends State<LyricViewport>
     // The desktop canvas is wide enough for its 18 px gutter to contain the
     // blur halo, so skipping the horizontal offscreen pass saves one
     // full-pane blend per frame without changing what is visible.
-    horizontal: _size.width < 520,
+    // Phones skip it too: without the blur halo there is nothing for it to
+    // hide, and it was a second full-pane ShaderMask layer per frame.
+    horizontal: !_lite && _size.width < 520,
     child: child,
   );
 
@@ -314,24 +359,10 @@ class _LyricViewportState extends State<LyricViewport>
     // then kept oscillating at the edges and the 60 fps ticker never settled.
     // Use the same damped baseline as the middle transitions instead; seeking
     // keeps its intentionally soft animation.
-    final bool atEdge = focus == 0 || focus == _lines.length - 1;
-    final params = !seeking && atEdge
-        ? const LyricSpringParams(mass: .9, stiffness: 170, damping: 29)
-        : lyricPositionPolicy(
-            seeking: seeking,
-            intervalMs: focus > 0
-                ? (_lines[focus].time - _lines[focus - 1].time).inMilliseconds
-                : null,
-            endOfSong:
-                widget.state.position >=
-                (widget.state.current?.duration ?? const Duration(days: 1)),
-          );
-    final delays = lyricStaggerDelays(
-      positions,
-      _heights,
-      focus,
-      disabled: seeking || !stagger,
-    );
+    // Crisp motion: every row eases to its slot together on a critically
+    // damped spring. No per-row stagger, no under-damped edge/seek springs —
+    // those were the overshoot and "wobble" in the old sheet.
+    final params = seeking ? _kSeekSpring : _kLineSpring;
     for (var i = 0; i < _ys.length; i++) {
       _ys[i].setParameters(params);
       // Rows that are nowhere near the viewport do not need a spring or a
@@ -343,7 +374,7 @@ class _LyricViewportState extends State<LyricViewport>
           target + _heights[i] >= -_size.height * 0.5 &&
           target <= _size.height * 1.5;
       if (nearViewport) {
-        _ys[i].setTarget(target, delay: delays[i]);
+        _ys[i].setTarget(target);
       } else {
         _ys[i].setPosition(target);
       }
@@ -438,14 +469,7 @@ class _LyricViewportState extends State<LyricViewport>
       ];
       _scales = [
         for (var i = 0; i < _lines.length; i++)
-          LyricSpring(
-            i == _active ? 100 : 97,
-            params: const LyricSpringParams(
-              mass: 2,
-              damping: 25,
-              stiffness: 100,
-            ),
-          ),
+          LyricSpring(i == _active ? 100 : 97, params: _kEmphasisSpring),
       ];
       for (final notifier in _rowFrames) {
         notifier.dispose();
@@ -640,89 +664,83 @@ class _LyricViewportState extends State<LyricViewport>
   /// widgets every time the active line changes.
   Widget _cachedRow(int index) => _rowCache[index] ??= _row(index);
 
-  Widget _row(int index) => Semantics(
-    selected: _selection.active
-        ? _selection.keys.contains(lyricSelectionKey(_lines[index]))
-        : null,
-    child: TweenAnimationBuilder<double>(
-      tween: Tween(
-        end: _selection.keys.contains(lyricSelectionKey(_lines[index])) ? 1 : 0,
+  Widget _row(int index) {
+    final bool selectedKey = _selection.keys.contains(
+      lyricSelectionKey(_lines[index]),
+    );
+    final Widget body = _rowBody(index, selectedKey ? 1 : 0);
+    return Semantics(
+      selected: _selection.active ? selectedKey : null,
+      // Opacity only while selecting; at 1.0 AnimatedOpacity adds no layer.
+      child: AnimatedOpacity(
+        opacity: _selection.active && !selectedKey ? 0.54 : 1,
+        duration: AppMotion.quick,
+        curve: AppMotion.fadeCurve,
+        child: body,
       ),
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      builder: (context, selected, _) => AnimatedOpacity(
-        opacity: _selection.active ? 0.54 + selected * 0.46 : 1,
-        duration: const Duration(milliseconds: 180),
-        child: _rowBody(index, selected),
-      ),
-    ),
-  );
+    );
+  }
 
+  /// Row colour is painted straight into the text (no ColorFiltered): the old
+  /// srcIn colour filter was a saveLayer per visible row, re-composited on
+  /// every frame while the sheet moved.
   Widget _rowBody(int index, double selected) {
     final focused = index == _active;
     final Listenable rowFrames = index < _rowFrames.length
         ? _rowFrames[index]
         : _frames;
     double emphasis() => ((_scales[index].value - 97) / 3).clamp(0.0, 1.0);
-    double mainAlpha() => 0.48 + emphasis() * 0.52;
+    double mainAlpha() {
+      final double a = 0.48 + emphasis() * 0.52;
+      return a + (1 - a) * selected;
+    }
+
     final style = _originalStyle.copyWith(color: Colors.white);
+    final LyricLine line = _lines[index];
+    final Widget main = line.words.isNotEmpty
+        ? TimedLyricText(
+            line: line,
+            style: style,
+            active: focused,
+            emphasis: emphasis,
+            lift: () => selected,
+            lite: _lite,
+            position: () => widget.state.precisePosition,
+            repaint: rowFrames,
+          )
+        : AnimatedBuilder(
+            animation: rowFrames,
+            builder: (context, _) => Text(
+              line.text.isEmpty ? ' ' : line.text,
+              textAlign: TextAlign.left,
+              textDirection: TextDirection.ltr,
+              style: style.copyWith(
+                color: Colors.white.withValues(alpha: mainAlpha()),
+              ),
+            ),
+          );
     return SizedBox(
       width: _textWidth,
       height: _heights[index],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AnimatedBuilder(
-            animation: rowFrames,
-            builder: (context, child) => ColorFiltered(
-              key: ValueKey('lyric-color-$index'),
-              colorFilter: ColorFilter.mode(
-                Color.lerp(
-                  Colors.white.withValues(alpha: mainAlpha()),
-                  Colors.white,
-                  selected,
-                )!,
-                BlendMode.srcIn,
-              ),
-              child: child,
-            ),
-            child: _interactiveText(
-              index,
-              _lines[index].text,
-              style,
-              _lines[index].words.isNotEmpty
-                  ? TimedLyricText(
-                      line: _lines[index],
-                      style: style,
-                      active: focused,
-                      emphasis: emphasis,
-                      position: () => widget.state.precisePosition,
-                      repaint: rowFrames,
-                    )
-                  : Text(
-                      _lines[index].text.isEmpty ? ' ' : _lines[index].text,
-                      textAlign: TextAlign.left,
-                      textDirection: TextDirection.ltr,
-                      style: style,
-                    ),
-            ),
-          ),
-          if (_lines[index].translation != null) ...[
+          _interactiveText(index, line.text, style, main),
+          if (line.translation != null) ...[
             const SizedBox(height: 5),
-            ColorFiltered(
-              colorFilter: ColorFilter.mode(
-                Colors.white.withValues(alpha: mainAlpha() * 0.58),
-                BlendMode.srcIn,
-              ),
-              child: _interactiveText(
-                index,
-                _lines[index].translation!,
-                _translationStyle,
-                Text(
-                  _lines[index].translation!,
+            _interactiveText(
+              index,
+              line.translation!,
+              _translationStyle,
+              AnimatedBuilder(
+                animation: rowFrames,
+                builder: (context, _) => Text(
+                  line.translation!,
                   textAlign: TextAlign.left,
                   textDirection: TextDirection.ltr,
-                  style: _translationStyle,
+                  style: _translationStyle.copyWith(
+                    color: Colors.white.withValues(alpha: mainAlpha() * 0.58),
+                  ),
                 ),
               ),
             ),
@@ -904,18 +922,22 @@ class _LyricViewportState extends State<LyricViewport>
                   // The edge mask is built once per layout change, not once
                   // per animation frame: rebuilding the double ShaderMask at
                   // 60 fps reconfigured a full-pane offscreen layer each frame.
-                  child: _edgeFade(
-                    AnimatedBuilder(
-                      animation: Listenable.merge([_frames, _blur]),
-                      builder: (context, _) => Stack(
-                        fit: StackFit.expand,
-                        clipBehavior: Clip.none,
-                        children: [
-                          for (var i = 0; i < _lines.length; i++)
-                            if (_ys[i].value + _heights[i] >= -80 &&
-                                _ys[i].value <= _size.height + 80)
-                              _positionedRow(i),
-                        ],
+                  // Own layer: the moving sheet never dirties the backdrop or
+                  // the player controls around it.
+                  child: RepaintBoundary(
+                    child: _edgeFade(
+                      AnimatedBuilder(
+                        animation: Listenable.merge([_frames, _blur]),
+                        builder: (context, _) => Stack(
+                          fit: StackFit.expand,
+                          clipBehavior: Clip.none,
+                          children: [
+                            for (var i = 0; i < _lines.length; i++)
+                              if (_ys[i].value + _heights[i] >= -80 &&
+                                  _ys[i].value <= _size.height + 80)
+                                _positionedRow(i),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -930,14 +952,15 @@ class _LyricViewportState extends State<LyricViewport>
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 480),
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 260),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
+                      duration: AppMotion.standard,
+                      reverseDuration: AppMotion.exit,
+                      switchInCurve: AppMotion.fadeCurve,
+                      switchOutCurve: AppMotion.exitCurve,
                       transitionBuilder: (child, animation) => FadeTransition(
                         opacity: animation,
                         child: SlideTransition(
                           position: Tween(
-                            begin: const Offset(0, .35),
+                            begin: const Offset(0, .12),
                             end: Offset.zero,
                           ).animate(animation),
                           child: child,

@@ -22,7 +22,7 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
   final AppState state;
 
   /// Time the pull takes to cover its whole travel when it settles.
-  static const Duration _settleDuration = Duration(milliseconds: 260);
+  static const Duration _settleDuration = AppMotion.standard;
 
   /// Push and pop decelerate: fast on the way out of the tap, slow on arrival.
   static const Curve _transitionCurve = AppMotion.standardCurve;
@@ -80,10 +80,10 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
   bool get opaque => true;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 300);
+  Duration get transitionDuration => AppMotion.emphasized;
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 300);
+  Duration get reverseTransitionDuration => AppMotion.standard;
 
   @override
   Color? get barrierColor => null;

@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart'
     show CupertinoFullscreenDialogTransition;
+import '../theme/tokens.dart';
 
 /// A vertical page transition with a platform-independent top-edge back drag.
 /// The route animation exposes the actual previous page during the gesture.
@@ -18,9 +19,9 @@ class PullDownPageRoute<T> extends MaterialPageRoute<T> {
   @override
   bool canTransitionFrom(TransitionRoute<dynamic> previousRoute) => false;
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 420);
+  Duration get transitionDuration => AppMotion.emphasized;
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 340);
+  Duration get reverseTransitionDuration => AppMotion.standard;
 
   bool get _canStartPull =>
       !_disposed &&
@@ -75,9 +76,9 @@ class PullDownPageRoute<T> extends MaterialPageRoute<T> {
       final duration = reduceMotion
           ? Duration.zero
           : Duration(
-              milliseconds: (remaining * (leaving ? 340 : 280)).round().clamp(
-                120,
-                340,
+              milliseconds: (remaining * (leaving ? 220 : 200)).round().clamp(
+                90,
+                220,
               ),
             );
       if (leaving) {

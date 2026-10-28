@@ -38,6 +38,7 @@ import '../utils/byte_format.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
 import 'legacy_widgets.dart';
+import '../theme/tokens.dart';
 
 /// Apple Music-inspired artist overview that lives inside the shell's content
 /// pane. It deliberately keeps the hero compact and lets releases carry the
@@ -1205,8 +1206,8 @@ class _PagedHorizontalShelfState extends State<_PagedHorizontalShelf> {
       target,
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
-          : const Duration(milliseconds: 340),
-      curve: Curves.easeOutCubic,
+          : AppMotion.emphasized,
+      curve: AppMotion.standardCurve,
     );
   }
 
@@ -3393,8 +3394,8 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     );
     await _scroll.animateTo(
       target,
-      duration: const Duration(milliseconds: 360),
-      curve: Curves.easeOutCubic,
+      duration: AppMotion.emphasized,
+      curve: AppMotion.standardCurve,
     );
   }
 
@@ -4575,8 +4576,9 @@ class LegacySettingsPage extends StatelessWidget {
                       subtitle: action.detail,
                       trailing: OutlinedButton(
                         key: ValueKey('media-shortcut-${action.name}'),
-                        onPressed: () =>
-                            unawaited(_editMediaShortcut(context, state, action)),
+                        onPressed: () => unawaited(
+                          _editMediaShortcut(context, state, action),
+                        ),
                         child: Text(
                           state.mediaShortcutFor(action)?.label ??
                               context.tr('未设置'),
