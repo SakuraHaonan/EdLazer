@@ -890,15 +890,19 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
               IgnorePointer(
                 ignoring: !visible,
                 child: AnimatedSwitcher(
-                  // Fade only: a SizeTransition here relaid out the lyric
-                  // viewport on every frame of the 360 ms reveal, which was
-                  // the main stutter when controls auto-hid on Android.
-                  duration: AppMotion.standard,
-                  reverseDuration: AppMotion.exit,
-                  switchInCurve: AppMotion.fadeCurve,
+                  // The controls slide the lyric pane wider/narrower again.
+                  // The viewport no longer re-measures every row on each
+                  // frame of that width change: it keeps its measured width
+                  // until the pane holds still, then re-wraps once.
+                  duration: AppMotion.emphasized,
+                  reverseDuration: AppMotion.standard,
+                  switchInCurve: AppMotion.emphasizedCurve,
                   switchOutCurve: AppMotion.exitCurve,
-                  transitionBuilder: (child, animation) =>
-                      FadeTransition(opacity: animation, child: child),
+                  transitionBuilder: (child, animation) => SizeTransition(
+                    axis: Axis.horizontal,
+                    sizeFactor: animation,
+                    child: FadeTransition(opacity: animation, child: child),
+                  ),
                   child: !visible
                       ? const SizedBox.shrink(key: ValueKey('hidden'))
                       : SizedBox(
@@ -940,14 +944,16 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
           IgnorePointer(
             ignoring: !visible,
             child: AnimatedSwitcher(
-              // Fade only (see the landscape branch): no per-frame relayout
-              // of the lyric viewport while the controls come and go.
-              duration: AppMotion.standard,
-              reverseDuration: AppMotion.exit,
-              switchInCurve: AppMotion.fadeCurve,
+              // A height-only change of the lyric pane: the viewport just
+              // retargets its rows, nothing is re-measured.
+              duration: AppMotion.emphasized,
+              reverseDuration: AppMotion.standard,
+              switchInCurve: AppMotion.emphasizedCurve,
               switchOutCurve: AppMotion.exitCurve,
-              transitionBuilder: (child, animation) =>
-                  FadeTransition(opacity: animation, child: child),
+              transitionBuilder: (child, animation) => SizeTransition(
+                sizeFactor: animation,
+                child: FadeTransition(opacity: animation, child: child),
+              ),
               child: visible
                   ? Padding(
                       key: const ValueKey('controls'),

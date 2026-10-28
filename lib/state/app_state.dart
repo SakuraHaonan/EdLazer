@@ -21,6 +21,7 @@ import '../data/models.dart';
 import '../gateway/gateway.dart';
 import '../gateway/transport.dart';
 import '../lyrics/imported_lyrics_store.dart';
+import '../lyrics/lyric_quality.dart';
 import '../updates/release_version.dart';
 import '../updates/update_checker.dart';
 import '../utils/background_image.dart';
@@ -571,6 +572,9 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
 
   double lyricControlsSeconds = 1.5;
   bool lyricBlurEnabled = true;
+
+  /// 歌词特效质量: 高 / 自动 / 低.
+  LyricFxQuality lyricFxQuality = LyricFxQuality.auto;
   bool showFrameStats = const bool.fromEnvironment('LAZER_FRAME_STATS');
   double lyricFontSize = 22;
   int lyricFontWeight = 600;
@@ -679,6 +683,15 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     await (await SharedPreferences.getInstance()).setBool(
       'lazer_lyric_blur',
       value,
+    );
+  }
+
+  Future<void> setLyricFxQuality(LyricFxQuality value) async {
+    lyricFxQuality = value;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setInt(
+      'lazer_lyric_fx_quality',
+      value.index,
     );
   }
 
@@ -955,6 +968,10 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
       lyricControlsSeconds =
           (prefs.getDouble('lazer_lyric_controls_seconds') ?? 1.5).clamp(1, 10);
       lyricBlurEnabled = prefs.getBool('lazer_lyric_blur') ?? true;
+      final int fxQuality =
+          prefs.getInt('lazer_lyric_fx_quality') ?? LyricFxQuality.auto.index;
+      lyricFxQuality = LyricFxQuality
+          .values[fxQuality.clamp(0, LyricFxQuality.values.length - 1)];
       showFrameStats =
           prefs.getBool('lazer_show_frame_stats') ?? showFrameStats;
       lyricFontSize = (prefs.getDouble('lazer_lyric_font_size') ?? 22).clamp(

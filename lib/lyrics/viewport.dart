@@ -17,6 +17,8 @@ import '../data/lyric_selection.dart';
 import '../scrolling/scroll_motion.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
+import 'cached_blur.dart';
+import 'lyric_quality.dart';
 import 'lyrics_import.dart';
 import '../widgets/lyric_selection_toolbar.dart';
 import '../widgets/lyric_image_dialog.dart';
@@ -67,12 +69,22 @@ const LyricSpringParams _kEmphasisSpring = LyricSpringParams(
 
 class _LyricViewportState extends State<LyricViewport>
     with TickerProviderStateMixin {
-  /// Mobile GPUs (Android) get the cheap path: no per-row distance blur, no
-  /// glyph glow, a single vertical edge mask. Those were offscreen layers
-  /// re-rendered on every frame of every moving row.
+  /// Android (Impeller, no raster cache) renders the distance blur through
+  /// [CachedBlur]: each row is blurred once per sigma bucket and then drawn
+  /// as a bitmap, instead of re-running ten blur passes on every frame.
   // Read per frame rather than cached so tests (and platform overrides) can
   // flip it.
-  static bool get _lite => defaultTargetPlatform == TargetPlatform.android;
+  static bool get _android => defaultTargetPlatform == TargetPlatform.android;
+
+  /// The effect tier: the user's 歌词特效质量 setting, or for 自动 the frame
+  /// timing governor's current pick.
+  LyricFxTier get _tier => lyricFxTierFor(widget.state.lyricFxQuality);
+
+  /// Minimal tier: the beta.7 cheap path (no blur, glow or pulse, one
+  /// vertical edge mask).
+  bool get _lite => _tier == LyricFxTier.minimal;
+  bool get _cachedBlur => _android || _tier == LyricFxTier.reduced;
+  late LyricFxTier _lastTier = _tier;
   Ticker? _ticker;
   late final AnimationController _blur = AnimationController(
     vsync: this,
@@ -91,9 +103,17 @@ class _LyricViewportState extends State<LyricViewport>
   final Map<int, Widget> _rowCache = <int, Widget>{};
   List<ValueNotifier<int>> _rowFrames = const <ValueNotifier<int>>[];
   Size _size = Size.zero;
+
+  /// The width rows were last measured at. A width that is still changing
+  /// (the landscape controls sliding in or out) is not re-measured on every
+  /// frame; rows keep this width until the pane has held still for a frame.
+  double _layoutWidth = 0;
+  bool _widthCheckScheduled = false;
+  bool _applyWidth = false;
+  double _probeWidth = -1;
   double get _gutter =>
-      math.min(LyricEdgeFade.horizontalExtent, _size.width * 0.1);
-  double get _textWidth => math.max(1.0, _size.width - _gutter * 2);
+      math.min(LyricEdgeFade.horizontalExtent, _layoutWidth * 0.1);
+  double get _textWidth => math.max(1.0, _layoutWidth - _gutter * 2);
   TextScaler? _textScaler;
   double? _fontSize;
   int? _fontWeight;
@@ -125,6 +145,19 @@ class _LyricViewportState extends State<LyricViewport>
     super.initState();
     _trackId = widget.state.current?.id;
     widget.state.all.addListener(_onLane);
+    LyricFxGovernor.instance.addListener(_onTier);
+  }
+
+  /// A tier change (setting or governor) rebuilds the cached rows so their
+  /// glow / pulse flags and blur path follow.
+  void _onTier() {
+    if (!mounted) return;
+    final LyricFxTier tier = _tier;
+    if (tier == _lastTier) return;
+    setState(() {
+      _lastTier = tier;
+      _rowCache.clear();
+    });
   }
 
   @override
@@ -253,6 +286,7 @@ class _LyricViewportState extends State<LyricViewport>
     }
     _lastLanePosition = precise;
     _updateBlur();
+    _onTier();
   }
 
   /// A line change only alters the outgoing and incoming rows; every other
@@ -289,10 +323,8 @@ class _LyricViewportState extends State<LyricViewport>
       math.max(28.0, _rowUnit * 1.15),
     ),
     // The desktop canvas is wide enough for its 18 px gutter to contain the
-    // blur halo, so skipping the horizontal offscreen pass saves one
-    // full-pane blend per frame without changing what is visible.
-    // Phones skip it too: without the blur halo there is nothing for it to
-    // hide, and it was a second full-pane ShaderMask layer per frame.
+    // blur halo. Compact panes fade the sides too; that is folded into the
+    // same single ShaderMask pass rather than a second nested one.
     horizontal: !_lite && _size.width < 520,
     child: child,
   );
@@ -302,6 +334,7 @@ class _LyricViewportState extends State<LyricViewport>
     if (ticker != null && !ticker.isActive) {
       _lastFrame = Duration.zero;
       ticker.start();
+      LyricFxGovernor.instance.setAnimating(this, true);
     }
   }
 
@@ -337,7 +370,10 @@ class _LyricViewportState extends State<LyricViewport>
       }
     }
     _frames.value++;
-    if (!moving) _ticker?.stop();
+    if (!moving) {
+      _ticker?.stop();
+      LyricFxGovernor.instance.setAnimating(this, false);
+    }
   }
 
   void _scaleTargets() {
@@ -414,18 +450,34 @@ class _LyricViewportState extends State<LyricViewport>
     final typographyChanged =
         _fontSize != widget.state.lyricFontSize ||
         _fontWeight != widget.state.lyricFontWeight;
+    final bool applyWidth = _applyWidth;
+    _applyWidth = false;
     if (!replaced &&
         !typographyChanged &&
         size == _size &&
-        scaler == _textScaler) {
+        scaler == _textScaler &&
+        !(applyWidth && size.width != _layoutWidth)) {
       return;
     }
+    final bool widthChanged = size.width != _layoutWidth;
+    // Only a pure width change is deferred, and only once rows exist; new
+    // lyrics, typography or text scale always measure right away.
+    final bool deferWidth =
+        widthChanged &&
+        !applyWidth &&
+        !replaced &&
+        !typographyChanged &&
+        scaler == _textScaler &&
+        _layoutWidth > 0 &&
+        _heights.isNotEmpty;
     final needsMeasure =
         replaced ||
         typographyChanged ||
-        size.width != _size.width ||
+        (widthChanged && !deferWidth) ||
         scaler != _textScaler;
     _size = size;
+    if (deferWidth) _scheduleWidthCheck();
+    if (needsMeasure) _layoutWidth = size.width;
     _textScaler = scaler;
     _fontSize = widget.state.lyricFontSize;
     _fontWeight = widget.state.lyricFontWeight;
@@ -484,6 +536,25 @@ class _LyricViewportState extends State<LyricViewport>
     } else {
       _targets(stagger: false);
     }
+  }
+
+  /// Re-measures rows once the pane width has stopped changing: a post-frame
+  /// check that waits for one frame at the same width. Post-frame callbacks
+  /// (not timers) keep widget tests free of pending timers.
+  void _scheduleWidthCheck() {
+    if (_widthCheckScheduled) return;
+    _widthCheckScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _widthCheckScheduled = false;
+      if (!mounted || _size.width == _layoutWidth) return;
+      if (_size.width == _probeWidth) {
+        setState(() => _applyWidth = true);
+      } else {
+        _probeWidth = _size.width;
+        _scheduleWidthCheck();
+        SchedulerBinding.instance.ensureVisualUpdate();
+      }
+    });
   }
 
   void _beginManual({bool stopMomentum = true}) {
@@ -668,15 +739,19 @@ class _LyricViewportState extends State<LyricViewport>
     final bool selectedKey = _selection.keys.contains(
       lyricSelectionKey(_lines[index]),
     );
-    final Widget body = _rowBody(index, selectedKey ? 1 : 0);
     return Semantics(
       selected: _selection.active ? selectedKey : null,
-      // Opacity only while selecting; at 1.0 AnimatedOpacity adds no layer.
-      child: AnimatedOpacity(
-        opacity: _selection.active && !selectedKey ? 0.54 : 1,
-        duration: AppMotion.quick,
-        curve: AppMotion.fadeCurve,
-        child: body,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: selectedKey ? 1 : 0),
+        duration: AppMotion.emphasized,
+        curve: AppMotion.standardCurve,
+        // Opacity only while selecting; at 1.0 AnimatedOpacity adds no layer.
+        builder: (context, selected, _) => AnimatedOpacity(
+          opacity: _selection.active ? 0.54 + selected * 0.46 : 1,
+          duration: AppMotion.quick,
+          curve: AppMotion.fadeCurve,
+          child: _rowBody(index, selected),
+        ),
       ),
     );
   }
@@ -705,6 +780,7 @@ class _LyricViewportState extends State<LyricViewport>
             emphasis: emphasis,
             lift: () => selected,
             lite: _lite,
+            glow: _tier == LyricFxTier.full,
             position: () => widget.state.precisePosition,
             repaint: rowFrames,
           )
@@ -766,17 +842,35 @@ class _LyricViewportState extends State<LyricViewport>
         child: Transform.scale(
           scale: _scales[index].value / 100,
           alignment: Alignment.centerLeft,
-          child: ImageFiltered(
-            key: ValueKey('lyric-blur-$index'),
-            enabled: sigma > 0.02,
-            imageFilter: _blurFilter(sigma),
-            // Every row gets its own layer: a per-word row otherwise repaints
-            // the whole lyric stack on each of its animation frames.
-            child: RepaintBoundary(child: _cachedRow(index)),
-          ),
+          child: _cachedBlur
+              ? CachedBlur(
+                  key: ValueKey('lyric-blur-$index'),
+                  sigma: _cachedSigma(sigma),
+                  devicePixelRatio: _devicePixelRatio,
+                  coarse: _tier == LyricFxTier.reduced,
+                  // CachedBlur is itself the row's repaint boundary.
+                  child: _cachedRow(index),
+                )
+              : ImageFiltered(
+                  key: ValueKey('lyric-blur-$index'),
+                  enabled: sigma > 0.02,
+                  imageFilter: _blurFilter(sigma),
+                  // Every row gets its own layer: a per-word row otherwise
+                  // repaints the whole lyric stack on each of its frames.
+                  child: RepaintBoundary(child: _cachedRow(index)),
+                ),
         ),
       ),
     );
+  }
+
+  double _devicePixelRatio = 1;
+
+  /// Cached rows re-rasterize only when their sigma crosses a bucket: half a
+  /// pixel on the full tier, a whole pixel on the reduced one.
+  double _cachedSigma(double sigma) {
+    final double step = _tier == LyricFxTier.reduced ? 1 : .5;
+    return (sigma / step).round() * step;
   }
 
   /// Blur sigmas are quantized so neighbouring frames reuse one filter object
@@ -841,6 +935,7 @@ class _LyricViewportState extends State<LyricViewport>
           Size(box.maxWidth, box.maxHeight),
           MediaQuery.textScalerOf(context),
         );
+        _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
         return PopScope<void>(
           canPop: !_selection.active,
           onPopInvokedWithResult: (didPop, result) {
@@ -998,6 +1093,8 @@ class _LyricViewportState extends State<LyricViewport>
     }
     _copiedTimer?.cancel();
     widget.state.all.removeListener(_onLane);
+    LyricFxGovernor.instance.removeListener(_onTier);
+    LyricFxGovernor.instance.release(this);
     _ticker?.dispose();
     _blur.dispose();
     _frames.dispose();

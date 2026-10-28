@@ -18,6 +18,7 @@ import '../l10n/app_localizations.dart';
 import '../local/local_music_import.dart';
 import '../local/local_music_page.dart';
 import '../scrolling/scroll_motion.dart';
+import '../lyrics/lyric_quality.dart';
 import '../state/app_state.dart';
 import '../state/media_shortcuts.dart';
 import '../state/ui_preferences.dart';
@@ -4629,6 +4630,25 @@ class LegacySettingsPage extends StatelessWidget {
                     onChanged: (bool value) =>
                         unawaited(state.setLyricBlurEnabled(value)),
                   ),
+                  _LegacyChoiceRow(
+                    label: '歌词特效质量',
+                    valueText: context.tr(switch (state.lyricFxQuality) {
+                      LyricFxQuality.high => '高',
+                      LyricFxQuality.auto => '自动',
+                      LyricFxQuality.low => '低',
+                    }),
+                    previewWeight: false,
+                    choices: const <int>[2, 1, 0],
+                    selected: state.lyricFxQuality.index,
+                    labelOf: (int index) => context.tr(switch (index) {
+                      2 => '高',
+                      1 => '自动',
+                      _ => '低',
+                    }),
+                    onSelected: (int index) => unawaited(
+                      state.setLyricFxQuality(LyricFxQuality.values[index]),
+                    ),
+                  ),
                   _LegacySliderRow(
                     label: '手动浏览后恢复跟随',
                     valueText:
@@ -5033,10 +5053,14 @@ class _LegacyChoiceRow extends StatelessWidget {
     required this.selected,
     required this.labelOf,
     required this.onSelected,
+    this.previewWeight = true,
   });
 
   final String label;
   final String valueText;
+
+  /// Choices are font weights and each chip previews its own weight.
+  final bool previewWeight;
   final List<int> choices;
   final int selected;
   final String Function(int value) labelOf;
@@ -5084,7 +5108,9 @@ class _LegacyChoiceRow extends StatelessWidget {
                     label: Text(
                       context.tr(labelOf(choice)),
                       style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.values[choice ~/ 100 - 1],
+                        fontWeight: previewWeight
+                            ? FontWeight.values[choice ~/ 100 - 1]
+                            : null,
                         color: selected == choice ? apple.accent : apple.label,
                       ),
                     ),

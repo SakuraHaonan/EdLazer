@@ -17,6 +17,7 @@ class TimedLyricText extends StatefulWidget {
     this.emphasis,
     this.lift,
     this.lite = false,
+    this.glow = true,
   });
   final LyricLine line;
   final TextStyle style;
@@ -31,6 +32,9 @@ class TimedLyricText extends StatefulWidget {
   /// Cheap rendering for mobile GPUs: no glyph glow (blur saveLayer) and no
   /// emphasis pulse; words still sweep and rise.
   final bool lite;
+
+  /// Glyph glow on the sweeping word. Off on the reduced quality tier.
+  final bool glow;
   @override
   State<TimedLyricText> createState() => _TimedLyricTextState();
 }
@@ -73,6 +77,7 @@ class _TimedLyricTextState extends State<TimedLyricText> {
                 emphasis: widget.emphasis ?? () => widget.active ? 1.0 : 0.0,
                 lift: widget.lift,
                 lite: widget.lite,
+                glow: widget.glow && !widget.lite,
                 repaint: widget.repaint,
               ),
             ),
@@ -226,6 +231,7 @@ class _WordPainter extends CustomPainter {
     required this.emphasis,
     required this.lift,
     required this.lite,
+    required this.glow,
     required Listenable repaint,
   }) : super(repaint: repaint);
   final _WordLayout layout;
@@ -233,6 +239,7 @@ class _WordPainter extends CustomPainter {
   final double Function() emphasis;
   final double Function()? lift;
   final bool lite;
+  final bool glow;
   static final cjk = RegExp(r'[぀-ヿ㐀-鿿가-힯]');
   @override
   void paint(Canvas canvas, Size size) {
@@ -258,18 +265,27 @@ class _WordPainter extends CustomPainter {
       canvas.restore();
       return;
     }
-    if (focus < 1) {
+    // An easing row is dimmed as a whole, exactly like the former srcIn
+    // colour filter on the row: the outgoing bright line and the incoming
+    // word sweep both sit inside one bounded layer at the row's alpha.
+    final double l = (lift?.call() ?? 0).clamp(0.0, 1.0);
+    final double main =
+        _WordLayout.restAlpha + (1 - _WordLayout.restAlpha) * focus;
+    final double rowAlpha = main + (1 - main) * l;
+    final bool layered = focus < 1;
+    if (layered) {
+      if (rowAlpha < 1) {
+        canvas.saveLayer(
+          bounds,
+          Paint()..color = Colors.white.withValues(alpha: rowAlpha),
+        );
+      }
       canvas.saveLayer(
         bounds,
         Paint()..color = Colors.white.withValues(alpha: 1 - focus),
       );
-      layout.rest.paint(canvas, Offset.zero);
+      layout.bright.paint(canvas, Offset.zero);
       canvas.restore();
-    }
-    // Retain the word painter while the row exits; fade its emphasis using
-    // the same eased value as the row's scale and colour.
-    final bool layered = focus < 1;
-    if (layered) {
       canvas.saveLayer(
         bounds,
         Paint()..color = Colors.white.withValues(alpha: focus),
@@ -327,7 +343,7 @@ class _WordPainter extends CustomPainter {
           canvas.restore();
         } else {
           canvas.saveLayer(clip, Paint());
-          if (!lite && motion.glow > .001) {
+          if (glow && motion.glow > .001) {
             canvas.saveLayer(
               clip,
               Paint()
@@ -359,7 +375,10 @@ class _WordPainter extends CustomPainter {
       }
       canvas.restore();
     }
-    if (layered) canvas.restore();
+    if (layered) {
+      canvas.restore();
+      if (rowAlpha < 1) canvas.restore();
+    }
   }
 
   @override
@@ -368,5 +387,6 @@ class _WordPainter extends CustomPainter {
       oldDelegate.position != position ||
       oldDelegate.emphasis != emphasis ||
       oldDelegate.lift != lift ||
-      oldDelegate.lite != lite;
+      oldDelegate.lite != lite ||
+      oldDelegate.glow != glow;
 }

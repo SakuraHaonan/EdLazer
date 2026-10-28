@@ -544,5 +544,9 @@
   "设置快捷键": "Set Shortcut",
   "请按下新的快捷键…": "Press a new key combination…",
   "已用于「{action}」": "Already used for \"{action}\"",
-  "重新录入": "Record again"
+  "重新录入": "Record again",
+  "歌词特效质量": "Lyric effects quality",
+  "高": "High",
+  "自动": "Auto",
+  "低": "Low"
 }
