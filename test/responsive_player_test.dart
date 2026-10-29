@@ -167,7 +167,7 @@ void main() {
       await tester.pumpAndSettle();
       final rich = tester.widget<RichText>(
         find.descendant(
-          of: find.text('Lazer'),
+          of: find.text('EdLazer'),
           matching: find.byType(RichText),
         ),
       );

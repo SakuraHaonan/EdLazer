@@ -13,6 +13,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
+import '../motion/ed_motion.dart';
+
 import '../l10n/app_localizations.dart';
 import '../theme/apple_design.dart';
 import '../tv/tv_mode.dart';
@@ -229,16 +231,17 @@ class LargeScreenArtwork extends StatelessWidget {
             image: ArtworkImage(resolved),
             fit: BoxFit.cover,
             gaplessPlayback: true,
-            frameBuilder:
-                (
-                  BuildContext context,
-                  Widget child,
-                  int? frame,
-                  bool wasSynchronouslyLoaded,
-                ) => wasSynchronouslyLoaded || frame != null ? child : fallback,
-            errorBuilder:
-                (BuildContext context, Object error, StackTrace? stack) =>
-                    fallback,
+            frameBuilder: (
+              BuildContext context,
+              Widget child,
+              int? frame,
+              bool wasSynchronouslyLoaded,
+            ) => wasSynchronouslyLoaded || frame != null ? child : fallback,
+            errorBuilder: (
+              BuildContext context,
+              Object error,
+              StackTrace? stack,
+            ) => fallback,
           );
     return ClipRRect(
       borderRadius: circular
@@ -291,7 +294,7 @@ class _LargeScreenFeatureCardState extends State<LargeScreenFeatureCard> {
         focusScale: 1.035,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
+          curve: EdMotion.curve,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: const Color(0xFF1C1C1E),
@@ -416,7 +419,7 @@ class _LargeScreenMediaCardState extends State<LargeScreenMediaCard> {
           children: <Widget>[
             AnimatedContainer(
               duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOutCubic,
+              curve: EdMotion.curve,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: <BoxShadow>[
@@ -744,9 +747,8 @@ class LargeScreenPrimaryButton extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               context.tr(label),
-              style: LargeScreenType.button(
-                context,
-              ).copyWith(color: Colors.black),
+              style: LargeScreenType.button(context)
+                  .copyWith(color: Colors.black),
             ),
           ],
         ),
@@ -790,9 +792,8 @@ class LargeScreenSecondaryButton extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               context.tr(label),
-              style: LargeScreenType.button(
-                context,
-              ).copyWith(color: apple.label),
+              style: LargeScreenType.button(context)
+                  .copyWith(color: apple.label),
             ),
           ],
         ),
@@ -934,9 +935,8 @@ class LargeScreenPageTitle extends StatelessWidget {
                   context.tr(subtitle!),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: LargeScreenType.cardMeta(
-                    context,
-                  ).copyWith(fontSize: 17),
+                  style: LargeScreenType.cardMeta(context)
+                      .copyWith(fontSize: 17),
                 ),
               ],
             ],

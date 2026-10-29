@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -23,7 +25,7 @@ Future<ShortcutSelection?> showShortcutRecorderDialog(
   required MediaShortcutAction action,
   required MediaShortcutBinding? current,
   required MediaShortcutAction? Function(MediaShortcutBinding binding) conflict,
-}) => showDialog<ShortcutSelection>(
+}) => edShowDialog<ShortcutSelection>(
   context: context,
   builder: (BuildContext context) => _ShortcutRecorderDialog(
     action: action,
@@ -218,9 +220,9 @@ class _ShortcutRecorderDialogState extends State<_ShortcutRecorderDialog> {
           FilledButton(
             key: const ValueKey<String>('shortcut-save'),
             onPressed: canSave
-                ? () => Navigator.of(
-                    context,
-                  ).pop(ShortcutSelection.set(candidate))
+                ? () =>
+                      Navigator.of(context)
+                          .pop(ShortcutSelection.set(candidate))
                 : null,
             child: const TrText('保存'),
           ),

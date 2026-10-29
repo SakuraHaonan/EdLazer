@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../motion/ed_motion.dart';
+
 import '../state/build_safe_notifier.dart';
 import '../theme/apple_design.dart';
 
@@ -70,7 +72,7 @@ EdgeInsets tvSafeInsets(BuildContext context) => TvScope.isActive(context)
 void revealTvFocus(
   FocusNode node, {
   Duration duration = const Duration(milliseconds: 160),
-  Curve curve = Curves.easeOutCubic,
+  Curve curve = EdMotion.curve,
 }) {
   final BuildContext? target = node.context;
   node.requestFocus();
@@ -114,7 +116,7 @@ class LargeScreenTraversalPolicy extends ReadingOrderTraversalPolicy {
   }) => revealTvFocus(
     node,
     duration: duration ?? const Duration(milliseconds: 160),
-    curve: curve ?? Curves.easeOutCubic,
+    curve: curve ?? EdMotion.curve,
   );
 
   /// Tab (and any helper that walks the order) becomes a vertical step, which
@@ -180,7 +182,7 @@ class LargeScreenTraversalPolicy extends ReadingOrderTraversalPolicy {
       position.animateTo(
         next,
         duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
+        curve: EdMotion.curve,
       ),
     );
   }
@@ -319,7 +321,7 @@ class _TvTapTargetState extends State<TvTapTarget> {
       child: AnimatedScale(
         scale: _focused ? widget.focusScale : 1,
         duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
+        curve: EdMotion.curve,
         child: Stack(
           clipBehavior: Clip.none,
           children: <Widget>[
@@ -439,7 +441,7 @@ class _TvFocusHighlightState extends State<TvFocusHighlight> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 130),
-        curve: Curves.easeOutCubic,
+        curve: EdMotion.curve,
         decoration: BoxDecoration(
           color: _focused
               ? AppleSemanticColors.of(context).fill

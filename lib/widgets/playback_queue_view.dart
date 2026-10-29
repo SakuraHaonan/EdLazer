@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../motion/ed_motion.dart';
+
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
@@ -343,7 +345,7 @@ class _PlayingBarsState extends State<_PlayingBars> {
             for (int i = 0; i < 3; i++)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
+                curve: EdMotion.curve,
                 width: 2.5,
                 height: heights[i],
                 margin: const EdgeInsets.only(right: 2.5),

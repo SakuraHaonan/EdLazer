@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -21,7 +23,7 @@ Future<void> openArtists(
   if (available.isEmpty) return;
   final selected = available.length == 1
       ? available.single
-      : await showDialog<ArtistRef>(
+      : await edShowDialog<ArtistRef>(
           context: context,
           builder: (context) => AlertDialog(
             // The legacy theme squares off dialogs; the artist chooser wants

@@ -39,19 +39,13 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.pumpWidget(_host(_second));
-    await tester.pump(const Duration(milliseconds: 90));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
 
-    // The dissolve keeps both plates alive and drives them with a fade; there
-    // is no slide left in the cover transition.
+    // Fade-through keeps the outgoing plate only while it is still visible,
+    // then drops it. It is not a carousel slide.
     expect(find.byKey(const ValueKey<String>('cover-first')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('cover-second')), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byType(AnimatedTrackCover),
-        matching: find.byType(FadeTransition),
-      ),
-      findsWidgets,
-    );
     expect(
       find.descendant(
         of: find.byType(AnimatedTrackCover),
@@ -60,7 +54,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.pump(const Duration(milliseconds: 420));
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const ValueKey<String>('cover-first')), findsNothing);
     expect(find.byKey(const ValueKey<String>('cover-second')), findsOneWidget);
     expect(tester.takeException(), isNull);

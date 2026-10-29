@@ -12,6 +12,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../motion/ed_motion.dart';
+
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../theme/apple_design.dart';
@@ -191,7 +193,7 @@ class _NavChipState extends State<_NavChip> {
       focusScale: 1.06,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
+        curve: EdMotion.curve,
         height: 46,
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
         padding: EdgeInsets.symmetric(horizontal: widget.iconOnly ? 13 : 20),
@@ -216,9 +218,8 @@ class _NavChipState extends State<_NavChip> {
               if (widget.icon != null) const SizedBox(width: 8),
               Text(
                 context.tr(widget.label!),
-                style: LargeScreenType.button(
-                  context,
-                ).copyWith(fontSize: 18, color: foreground),
+                style: LargeScreenType.button(context)
+                    .copyWith(fontSize: 18, color: foreground),
               ),
             ],
           ],
@@ -253,9 +254,8 @@ class _NavBackButton extends StatelessWidget {
             Icon(Icons.chevron_left_rounded, size: 26, color: apple.label),
             Text(
               context.tr('返回'),
-              style: LargeScreenType.button(
-                context,
-              ).copyWith(color: apple.label),
+              style: LargeScreenType.button(context)
+                  .copyWith(color: apple.label),
             ),
           ],
         ),

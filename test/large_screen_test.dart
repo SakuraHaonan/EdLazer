@@ -373,9 +373,10 @@ void main() {
 
       await tester.tap(find.text('资料库'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      // The outgoing browse page is still composited while the library fades
-      // in; the switch is not silently zero-length.
+      await tester.pump(const Duration(milliseconds: 16));
+      // Fade-through still has the outgoing browse page on the first frames,
+      // so the switch is not silently zero-length. It drops that page once
+      // the outgoing opacity hits zero, which is earlier than a cross-fade.
       expect(find.text('精选推荐'), findsOneWidget);
       expect(find.text('播放列表'), findsWidgets);
 

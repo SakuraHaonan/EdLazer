@@ -10,6 +10,7 @@ import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/player/now_playing_page.dart';
+import 'package:lazer_nextgen/motion/ed_motion.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/ui_preferences.dart';
 
@@ -36,9 +37,7 @@ class _Catalog extends Catalog {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('the player rises fast and lands slow, and leaves the same way', (
-    tester,
-  ) async {
+  testWidgets('the player sheet tracks the shared spring', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -79,46 +78,39 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(remaining(), closeTo(1, .001), reason: 'it starts below the window');
+    expect(remaining(), closeTo(1, .02), reason: 'it starts below the window');
 
-    // First third of the 250 ms entrance.
-    await tester.pump(const Duration(milliseconds: 80));
+    // A spring released from rest accelerates: the second slice of the
+    // opening covers more of the window than the first. An ease-out does
+    // the opposite, which is how this stays distinct from the old curve.
+    await tester.pump(const Duration(milliseconds: 40));
     final double firstLeg = 1 - remaining();
-    expect(
-      firstLeg,
-      greaterThan(.6),
-      reason: 'a decelerating entrance covers most of the travel up front',
-    );
+    expect(firstLeg, closeTo(EdMotion.travelled(0.04), 0.08));
 
-    // Second third: less travel than the first, i.e. it is slowing down.
-    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 40));
     final double secondLeg = 1 - remaining() - firstLeg;
-    expect(secondLeg, lessThan(firstLeg / 2));
-    expect(1 - remaining(), greaterThan(.9));
+    expect(
+      secondLeg,
+      greaterThan(firstLeg),
+      reason: 'the sheet is still accelerating at 80 ms',
+    );
+    expect(1 - remaining(), closeTo(EdMotion.travelled(0.08), 0.08));
 
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(remaining(), closeTo(0, .001));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(remaining(), closeTo(0, .01));
 
-    // The close is the same curve, reversed: it drops away at once and eases
-    // into the bottom edge.
     await tester.tap(find.byKey(const ValueKey('desktop-close')));
     await tester.pump();
-    expect(remaining(), closeTo(0, .001));
-
-    // The 200 ms exit is a touch quicker than the entrance.
-    await tester.pump(const Duration(milliseconds: 70));
-    final double firstLegOut = remaining();
-    expect(
-      firstLegOut,
-      greaterThan(.6),
-      reason: 'the exit must not hang at the start either',
-    );
-
-    await tester.pump(const Duration(milliseconds: 70));
-    final double secondLegOut = remaining() - firstLegOut;
-    expect(secondLegOut, lessThan(firstLegOut / 2));
+    expect(remaining(), closeTo(0, .02));
 
     await tester.pump(const Duration(milliseconds: 80));
+    expect(
+      remaining(),
+      closeTo(EdMotion.travelled(0.08), 0.08),
+      reason: 'the close is the same spring, run toward the bottom edge',
+    );
+
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
     expect(find.byType(NowPlayingPage), findsNothing);
     expect(tester.takeException(), isNull);

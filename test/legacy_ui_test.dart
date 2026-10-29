@@ -389,7 +389,7 @@ void main() {
     // DPI 100% and the default scroll acceleration both read 100%.
     expect(find.text('100%'), findsWidgets);
     final Finder aboutTile = find.ancestor(
-      of: find.text('Lazer'),
+      of: find.text('EdLazer'),
       matching: find.byType(AppleListTile),
     );
     expect(aboutTile, findsOneWidget);

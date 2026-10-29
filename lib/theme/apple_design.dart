@@ -387,15 +387,15 @@ ThemeData buildAppleTheme({
     visualDensity: VisualDensity.standard,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     extensions: <ThemeExtension<dynamic>>[apple],
-    // Quick fades everywhere; iOS keeps Cupertino for its edge swipe-back.
+    // Shared-axis spring everywhere; iOS keeps Cupertino for its edge swipe.
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.macOS: EdFadePageTransitionsBuilder(),
-        TargetPlatform.android: EdFadePageTransitionsBuilder(),
-        TargetPlatform.fuchsia: EdFadePageTransitionsBuilder(),
-        TargetPlatform.windows: EdFadePageTransitionsBuilder(),
-        TargetPlatform.linux: EdFadePageTransitionsBuilder(),
+        TargetPlatform.macOS: EdSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.android: EdSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.fuchsia: EdSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.windows: EdSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.linux: EdSharedAxisPageTransitionsBuilder(),
       },
     ),
     appBarTheme: AppBarTheme(

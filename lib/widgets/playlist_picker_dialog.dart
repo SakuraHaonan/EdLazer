@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -21,7 +23,7 @@ Future<void> showAddToPlaylistDialog(
 }) async {
   final Brightness brightness = Theme.of(context).brightness;
   final Color accent = state.legacyAccentSeed ?? AppleColors.musicRed;
-  final Object? result = await showDialog<Object>(
+  final Object? result = await edShowDialog<Object>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: .32),
     builder: (BuildContext context) => Theme(
@@ -41,7 +43,7 @@ Future<void> showCreateCloudPlaylistDialog(
 ) async {
   final Brightness brightness = Theme.of(context).brightness;
   final Color accent = state.legacyAccentSeed ?? AppleColors.musicRed;
-  final Object? result = await showDialog<Object>(
+  final Object? result = await edShowDialog<Object>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: .32),
     builder: (BuildContext context) => Theme(
@@ -168,9 +170,8 @@ class _AddToPlaylistDialogState extends State<_AddToPlaylistDialog> {
         await state.addSongToCloudPlaylist(created.id, track.id);
       }
       if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pop(track == null ? created : '已创建并添加到「${created.name}」');
+      Navigator.of(context)
+          .pop(track == null ? created : '已创建并添加到「${created.name}」');
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -191,9 +192,8 @@ class _AddToPlaylistDialogState extends State<_AddToPlaylistDialog> {
     title: const TrText('添加到歌单'),
     content: Text(
       context.tr('登录后可以把歌曲添加到云端歌单。'),
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-        color: AppleSemanticColors.of(context).secondaryLabel,
-      ),
+      style: Theme.of(context).textTheme.bodyMedium
+          ?.copyWith(color: AppleSemanticColors.of(context).secondaryLabel),
     ),
     actions: <Widget>[
       TextButton(
@@ -243,9 +243,8 @@ class _AddToPlaylistDialogState extends State<_AddToPlaylistDialog> {
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
                 child: Text(
                   context.tr('还没有创建的歌单，先新建一个吧。'),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: apple.secondaryLabel),
                 ),
               )
             else
@@ -270,9 +269,8 @@ class _AddToPlaylistDialogState extends State<_AddToPlaylistDialog> {
                 padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
                 child: Text(
                   context.tr(_error!),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: Theme.of(context).colorScheme.error),
                 ),
               ),
           ],
@@ -308,17 +306,15 @@ class _AddToPlaylistDialogState extends State<_AddToPlaylistDialog> {
                 decoration: InputDecoration(
                   labelText: context.tr('歌单名称'),
                   hintText: context.tr('例如：夜间散步'),
-                  counterStyle: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: apple.tertiaryLabel),
+                  counterStyle: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: apple.tertiaryLabel),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 context.tr('谁可以看到这个歌单'),
-                style: Theme.of(
-                  context,
-                ).textTheme.labelMedium?.copyWith(color: apple.secondaryLabel),
+                style: Theme.of(context).textTheme.labelMedium
+                    ?.copyWith(color: apple.secondaryLabel),
               ),
               const SizedBox(height: 8),
               SegmentedButton<bool>(
@@ -344,9 +340,8 @@ class _AddToPlaylistDialogState extends State<_AddToPlaylistDialog> {
                 const SizedBox(height: 12),
                 Text(
                   context.tr(_error!),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: Theme.of(context).colorScheme.error),
                 ),
               ],
             ],
@@ -404,9 +399,8 @@ class _CreateTile extends StatelessWidget {
       title: const TrText('新建歌单'),
       subtitle: Text(
         context.tr('上传到云端，多设备同步'),
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: apple.secondaryLabel),
       ),
     );
   }
@@ -440,9 +434,8 @@ class _PlaylistTile extends StatelessWidget {
       title: Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         context.tr('${playlist.trackCount} 首'),
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: apple.secondaryLabel),
       ),
       trailing: busy
           ? const SizedBox.square(

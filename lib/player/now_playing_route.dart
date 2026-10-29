@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../motion/ed_motion.dart';
 import '../navigation/pull_down_to_close.dart';
 import '../state/app_state.dart';
-import '../theme/tokens.dart';
 import 'now_playing_page.dart';
 
 /// Material open-upwards presentation: the player rises from the window
@@ -21,18 +21,14 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
 
   final AppState state;
 
-  /// Time the pull takes to cover its whole travel when it settles.
-  static const Duration _settleDuration = AppMotion.standard;
-
-  /// Push and pop decelerate: fast on the way out of the tap, slow on arrival.
-  static const Curve _transitionCurve = AppMotion.standardCurve;
-
   /// Whether a finger owns the transition right now.
   ///
   /// The drag writes [controller] directly, so the offset has to stay linear
-  /// with the finger; only the push, the pop and the settle after a released
-  /// pull are shaped by [_transitionCurve].
+  /// with the finger. The spring that finishes a released pull writes the
+  /// controller too ([_settling]); only a navigator push or pop is sampled
+  /// through [EdMotion.curve].
   bool _dragging = false;
+  bool _settling = false;
 
   /// A pull may only begin once the route has finished presenting itself.
   @override
@@ -64,26 +60,30 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
       navigator?.pop();
       return;
     }
-    controller?.animateTo(
+    final AnimationController? host = controller;
+    if (host == null) return;
+    _settling = true;
+    final NavigatorState? nav = navigator;
+    final bool navReady = nav != null && nav.mounted;
+    final double height = navReady ? MediaQuery.sizeOf(nav.context).height : 0;
+    final double unitsPerSecond = height <= 0 ? 0 : -velocity / height;
+    final bool reduced = navReady && EdMotion.reducedOf(nav.context);
+    EdMotion.springTo(
+      host,
       1,
-      duration: Duration(
-        milliseconds: (pulled * _settleDuration.inMilliseconds).round().clamp(
-          80,
-          260,
-        ),
-      ),
-      curve: _transitionCurve,
-    );
+      velocity: unitsPerSecond,
+      reduced: reduced,
+    ).whenCompleteOrCancel(() => _settling = false);
   }
 
   @override
   bool get opaque => true;
 
   @override
-  Duration get transitionDuration => AppMotion.emphasized;
+  Duration get transitionDuration => EdMotion.settleDuration;
 
   @override
-  Duration get reverseTransitionDuration => AppMotion.standard;
+  Duration get reverseTransitionDuration => EdMotion.settleDuration;
 
   @override
   Color? get barrierColor => null;
@@ -109,17 +109,16 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
     Widget child,
   ) {
     if (MediaQuery.disableAnimationsOf(context)) return child;
-    // A finger-driven pull stays linear — the drag writes the controller value
-    // itself, so a curve here would leave the page trailing behind the finger.
-    // Every other frame is shaped by the decelerating curve: the page leaves
-    // fast and settles into place instead of easing away and stopping dead.
+    // A finger-driven pull, and the spring that finishes it, stay linear:
+    // both write the controller value themselves. A navigator push or pop is
+    // a timed controller, so it samples the shared spring curve.
     return AnimatedBuilder(
       animation: animation,
       child: RepaintBoundary(child: child),
       builder: (BuildContext context, Widget? child) {
-        final double travelled = _dragging
+        final double travelled = _dragging || _settling
             ? animation.value
-            : _transitionCurve.transform(animation.value);
+            : EdMotion.curve.transform(animation.value);
         return FractionalTranslation(
           translation: Offset(0, 1 - travelled),
           child: child,

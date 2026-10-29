@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -16,7 +18,7 @@ Future<void> showDownloadQueueSheet(BuildContext context, AppState state) {
     onClose: () => Navigator.of(context).maybePop(),
   );
   if (wide) {
-    return showDialog<void>(
+    return edShowDialog<void>(
       context: context,
       builder: (BuildContext context) => Dialog(
         clipBehavior: Clip.antiAlias,
@@ -24,7 +26,7 @@ Future<void> showDownloadQueueSheet(BuildContext context, AppState state) {
       ),
     );
   }
-  return showModalBottomSheet<void>(
+  return edShowSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
@@ -121,10 +123,8 @@ class DownloadQueueView extends StatelessWidget {
                 child: ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                   itemCount: tasks.length,
-                  separatorBuilder: (_, _) => Divider(
-                    height: 1,
-                    color: apple.separator,
-                  ),
+                  separatorBuilder: (_, _) =>
+                      Divider(height: 1, color: apple.separator),
                   itemBuilder: (BuildContext context, int index) =>
                       _DownloadRow(manager: manager, task: tasks[index]),
                 ),
@@ -147,7 +147,8 @@ class _DownloadRow extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final AudioQuality granted = task.resolvedQuality ?? task.requestedQuality;
-    final String? degraded = task.resolvedQuality != null &&
+    final String? degraded =
+        task.resolvedQuality != null &&
             task.resolvedQuality != task.requestedQuality
         ? context.tr('${context.tr(granted.label)}（已降级）')
         : null;
@@ -239,9 +240,10 @@ class _DownloadRow extends StatelessWidget {
       switch (task.status) {
         DownloadStatus.queued => context.tr('等待中'),
         DownloadStatus.resolving => context.tr('正在获取地址…'),
-        DownloadStatus.downloading => task.total > 0
-            ? '${formatBytes(task.received)} / ${formatBytes(task.total)}'
-            : formatBytes(task.received),
+        DownloadStatus.downloading =>
+          task.total > 0
+              ? '${formatBytes(task.received)} / ${formatBytes(task.total)}'
+              : formatBytes(task.received),
         DownloadStatus.completed => context.tr(
           '已下载 · ${formatBytes(task.total)}',
         ),
