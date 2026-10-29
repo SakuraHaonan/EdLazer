@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -43,10 +45,7 @@ void showLocalImportResult(BuildContext context, LocalImportResult result) {
     if (result.skipped > 0) context.tr('${result.skipped} 首已在资料库'),
     if (result.failed > 0) context.tr('${result.failed} 个文件读取失败'),
   ];
-  _showLocalMessage(
-    context,
-    parts.isEmpty ? '没有选择音频文件' : parts.join(' · '),
-  );
+  _showLocalMessage(context, parts.isEmpty ? '没有选择音频文件' : parts.join(' · '));
 }
 
 void _showLocalMessage(BuildContext context, String message) {
@@ -116,7 +115,9 @@ class _LocalMusicCardState extends State<LocalMusicCard> {
                 title: context.tr('本地音乐'),
                 subtitle: count == 0
                     ? context.tr('导入本机的 MP3、FLAC、M4A 或 WAV')
-                    : context.tr('$count 首 · ${formatBytes(library.totalBytes)}'),
+                    : context.tr(
+                        '$count 首 · ${formatBytes(library.totalBytes)}',
+                      ),
                 leading: AppleIconTile(
                   icon: Icons.library_music_rounded,
                   color: apple.accent,
@@ -243,7 +244,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
 
   void _playAll(List<LocalTrack> playable) {
     if (playable.isEmpty) return;
-    state.playQueue(<Track>[for (final LocalTrack entry in playable) entry.track]);
+    state.playQueue(<Track>[
+      for (final LocalTrack entry in playable) entry.track,
+    ]);
   }
 
   Future<void> _showRowMenu(
@@ -269,30 +272,24 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
       items: <PopupMenuEntry<String>>[
         PopupMenuItem<String>(value: 'play', child: TrText('播放')),
         if (playable[index].isDownload)
-          PopupMenuItem<String>(
-            value: 'delete-file',
-            child: TrText('删除下载文件'),
-          ),
+          PopupMenuItem<String>(value: 'delete-file', child: TrText('删除下载文件')),
         PopupMenuItem<String>(value: 'remove', child: TrText('从资料库移除')),
       ],
     );
     if (!mounted || action == null) return;
     if (action == 'play') {
-      state.playQueue(
-        <Track>[for (final LocalTrack entry in playable) entry.track],
-        startIndex: index,
-      );
+      state.playQueue(<Track>[
+        for (final LocalTrack entry in playable) entry.track,
+      ], startIndex: index);
       return;
     }
     final LocalTrack entry = playable[index];
     if (action == 'delete-file') {
-      final bool? confirmed = await showDialog<bool>(
+      final bool? confirmed = await edShowDialog<bool>(
         context: context,
         builder: (BuildContext context) => AlertDialog(
           title: TrText('删除下载文件？'),
-          content: Text(
-            context.tr('「${entry.track.title}」的文件会从磁盘删除，无法恢复。'),
-          ),
+          content: Text(context.tr('「${entry.track.title}」的文件会从磁盘删除，无法恢复。')),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -328,9 +325,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
         final List<LocalTrack> playable = <LocalTrack>[
           for (final LocalTrack entry in state.localLibrary.tracks)
             if (!entry.missing) entry,
-        ]..sort(
-          (LocalTrack a, LocalTrack b) => b.addedAt.compareTo(a.addedAt),
-        );
+        ]..sort((LocalTrack a, LocalTrack b) => b.addedAt.compareTo(a.addedAt));
         final List<LocalTrack> missing = <LocalTrack>[
           for (final LocalTrack entry in state.localLibrary.tracks)
             if (entry.missing) entry,
@@ -387,10 +382,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                           strokeWidth: 2,
                                         ),
                                       )
-                                    : const Icon(
-                                        Icons.add_rounded,
-                                        size: 19,
-                                      ),
+                                    : const Icon(Icons.add_rounded, size: 19),
                                 label: TrText('导入'),
                               ),
                               const SizedBox(width: 4),
@@ -468,23 +460,21 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                     padding: EdgeInsets.symmetric(horizontal: inset),
                     sliver: SliverList.builder(
                       itemCount: playable.length,
-                      itemBuilder: (BuildContext context, int i) => LegacyTrackRow(
-                        key: ValueKey<String>('local-track-row-$i'),
-                        track: playable[i].track,
-                        index: i,
-                        current: state.current?.id == playable[i].id,
-                        playing: state.playing,
-                        onTap: () => state.playQueue(
-                          <Track>[
-                            for (final LocalTrack entry in playable)
-                              entry.track,
-                          ],
-                          startIndex: i,
-                        ),
-                        onMenuRequested: (Offset position) => unawaited(
-                          _showRowMenu(context, playable, i, position),
-                        ),
-                      ),
+                      itemBuilder: (BuildContext context, int i) =>
+                          LegacyTrackRow(
+                            key: ValueKey<String>('local-track-row-$i'),
+                            track: playable[i].track,
+                            index: i,
+                            current: state.current?.id == playable[i].id,
+                            playing: state.playing,
+                            onTap: () => state.playQueue(<Track>[
+                              for (final LocalTrack entry in playable)
+                                entry.track,
+                            ], startIndex: i),
+                            onMenuRequested: (Offset position) => unawaited(
+                              _showRowMenu(context, playable, i, position),
+                            ),
+                          ),
                     ),
                   ),
                 if (missing.isNotEmpty)
@@ -517,9 +507,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                     subtitle: entry.path,
                                     leading: AppleIconTile(
                                       icon: Icons.error_outline_rounded,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.error,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .error,
                                     ),
                                     trailing: IconButton(
                                       tooltip: context.tr('从资料库移除'),
@@ -548,12 +538,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
     );
   }
 
-  String _subtitle(
-    BuildContext context,
-    int count,
-    int bytes,
-    int missing,
-  ) {
+  String _subtitle(BuildContext context, int count, int bytes, int missing) {
     if (count == 0 && missing == 0) {
       return context.tr('从这台设备导入 MP3、FLAC、M4A 或 WAV');
     }

@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
+
+import '../motion/ed_motion.dart';
+
 import 'package:window_manager/window_manager.dart';
 
 import '../l10n/app_localizations.dart';
@@ -294,7 +297,7 @@ class _CaptionButtonState extends State<_CaptionButton> {
           onTap: widget.onPressed,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 90),
-            curve: Curves.easeOut,
+            curve: EdMotion.curve,
             width: kWindowCaptionButtonWidth,
             height: kWindowTitleAreaHeight,
             color: fill,

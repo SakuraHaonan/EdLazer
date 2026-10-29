@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import '../widgets/catalog_links.dart';
 
 import 'package:flutter/material.dart';
@@ -20,7 +21,8 @@ import '../widgets/interaction_feedback.dart';
 import '../widgets/listen_together_dialog.dart';
 import '../widgets/playlist_picker_dialog.dart';
 import '../widgets/volume_control.dart';
-import '../theme/tokens.dart';
+import '../motion/ed_motion.dart';
+import '../motion/ed_shell_transition.dart';
 
 enum DesktopNowPlayingPane { lyrics, comments, queue }
 
@@ -112,44 +114,17 @@ class DesktopNowPlaying extends StatelessWidget {
                           const SizedBox(width: 32),
                           const SizedBox(width: 16),
                           Expanded(
-                            child: RepaintBoundary(
-                              child: AnimatedSwitcher(
-                                duration:
-                                    MediaQuery.disableAnimationsOf(context)
-                                    ? Duration.zero
-                                    : const Duration(milliseconds: 240),
-                                switchInCurve: Curves.easeOutCubic,
-                                switchOutCurve: Curves.easeInCubic,
-                                transitionBuilder: (child, animation) =>
-                                    FadeTransition(
-                                      opacity: animation,
-                                      child: SlideTransition(
-                                        position: Tween(
-                                          begin: const Offset(.025, 0),
-                                          end: Offset.zero,
-                                        ).animate(animation),
-                                        child: RepaintBoundary(child: child),
-                                      ),
-                                    ),
-                                layoutBuilder: (current, previous) => Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    for (final old in previous)
-                                      ExcludeSemantics(
-                                        child: IgnorePointer(child: old),
-                                      ),
-                                    ?current,
-                                  ],
-                                ),
-                                child: KeyedSubtree(
-                                  key: ValueKey(pane),
-                                  child: switch (pane) {
-                                    DesktopNowPlayingPane.lyrics => lyrics,
-                                    DesktopNowPlayingPane.comments => comments,
-                                    DesktopNowPlayingPane.queue => queue,
-                                  },
-                                ),
+                            child: EdFadeThrough(
+                              switchKey: pane,
+                              duration: EdMotion.durationOf(
+                                context,
+                                EdMotion.throughDuration,
                               ),
+                              child: switch (pane) {
+                                DesktopNowPlayingPane.lyrics => lyrics,
+                                DesktopNowPlayingPane.comments => comments,
+                                DesktopNowPlayingPane.queue => queue,
+                              },
                             ),
                           ),
                         ],
@@ -291,8 +266,8 @@ class _PaneTab extends StatelessWidget {
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOut,
+                duration: EdMotion.pressDuration,
+                curve: EdMotion.curve,
                 padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
                   // The selected pane keeps a soft chip around its glyph, the
@@ -486,11 +461,9 @@ class _DesktopDock extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: state,
     builder: (context, _) => AnimatedSwitcher(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : AppMotion.standard,
-      switchInCurve: AppMotion.standardCurve,
-      switchOutCurve: AppMotion.exitCurve,
+      duration: EdMotion.durationOf(context, EdMotion.throughDuration),
+      switchInCurve: EdMotion.curve,
+      switchOutCurve: EdMotion.curve,
       transitionBuilder: (child, animation) => SizeTransition(
         axis: Axis.vertical,
         sizeFactor: animation,
@@ -513,7 +486,12 @@ class _DesktopDock extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
+                          duration: EdMotion.durationOf(
+                            context,
+                            EdMotion.pressDuration,
+                          ),
+                          switchInCurve: EdMotion.curve,
+                          switchOutCurve: EdMotion.curve,
                           transitionBuilder: (child, animation) =>
                               SizeTransition(
                                 sizeFactor: animation,

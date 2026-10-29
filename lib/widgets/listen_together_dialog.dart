@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -9,7 +11,7 @@ import '../state/listen_together.dart';
 
 /// Opens the 一起听 room sheet from any platform's player header or settings.
 Future<void> showListenTogetherDialog(BuildContext context, AppState state) =>
-    showDialog<void>(
+    edShowDialog<void>(
       context: context,
       builder: (BuildContext context) => _ListenTogetherDialog(state: state),
     );
@@ -38,9 +40,8 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
     final String invite = '${room.roomId}|${room.inviterId ?? 0}';
     await Clipboard.setData(ClipboardData(text: invite));
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(context.tr('邀请信息已复制'))));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(context.tr('邀请信息已复制'))));
   }
 
   @override
@@ -123,9 +124,8 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
   ) => <Widget>[
     Text(
       context.tr('正在一起听'),
-      style: Theme.of(
-        context,
-      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w400),
+      style: Theme.of(context).textTheme.titleMedium
+          ?.copyWith(fontWeight: FontWeight.w400),
     ),
     const SizedBox(height: 10),
     SelectableText(
@@ -141,9 +141,8 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
       const SizedBox(height: 16),
       Text(
         context.tr('一起听的人'),
-        style: Theme.of(
-          context,
-        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w400),
+        style: Theme.of(context).textTheme.titleSmall
+            ?.copyWith(fontWeight: FontWeight.w400),
       ),
       const SizedBox(height: 8),
       for (final ListenTogetherMember member in room.members)
@@ -209,9 +208,8 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
         const SizedBox(height: 20),
         Text(
           context.tr('或加入朋友的房间'),
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w400),
+          style: Theme.of(context).textTheme.titleSmall
+              ?.copyWith(fontWeight: FontWeight.w400),
         ),
         const SizedBox(height: 12),
         TextField(
@@ -249,9 +247,8 @@ class _ListenTogetherDialogState extends State<_ListenTogetherDialog> {
   Future<void> _join(ListenTogetherController room) async {
     final bool joined = await room.join(_invite.text);
     if (joined && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.tr('已加入一起听'))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(context.tr('已加入一起听'))));
     }
   }
 }

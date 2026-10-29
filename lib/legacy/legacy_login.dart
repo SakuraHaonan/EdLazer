@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,7 +14,7 @@ import '../theme/apple_design.dart';
 Future<void> showLegacyLoginDialog(BuildContext context, AppState state) {
   final Brightness brightness = Theme.of(context).brightness;
   final Color accent = state.legacyAccentSeed ?? AppleColors.musicRed;
-  return showDialog<void>(
+  return edShowDialog<void>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: .32),
     builder: (BuildContext context) => Theme(

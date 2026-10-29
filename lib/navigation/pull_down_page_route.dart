@@ -4,7 +4,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart'
     show CupertinoFullscreenDialogTransition;
-import '../theme/tokens.dart';
+
+import '../motion/ed_motion.dart';
 
 /// A vertical page transition with a platform-independent top-edge back drag.
 /// The route animation exposes the actual previous page during the gesture.
@@ -19,9 +20,9 @@ class PullDownPageRoute<T> extends MaterialPageRoute<T> {
   @override
   bool canTransitionFrom(TransitionRoute<dynamic> previousRoute) => false;
   @override
-  Duration get transitionDuration => AppMotion.emphasized;
+  Duration get transitionDuration => EdMotion.settleDuration;
   @override
-  Duration get reverseTransitionDuration => AppMotion.standard;
+  Duration get reverseTransitionDuration => EdMotion.settleDuration;
 
   bool get _canStartPull =>
       !_disposed &&
@@ -72,24 +73,18 @@ class PullDownPageRoute<T> extends MaterialPageRoute<T> {
         // the page continues from the exact position where the finger left.
         controller!.stop(canceled: false);
       }
-      final remaining = leaving ? controller!.value : 1 - controller!.value;
-      final duration = reduceMotion
-          ? Duration.zero
-          : Duration(
-              milliseconds: (remaining * (leaving ? 220 : 200)).round().clamp(
-                90,
-                220,
-              ),
-            );
-      if (leaving) {
-        await controller!
-            .animateBack(0, duration: duration, curve: Curves.easeOutCubic)
-            .orCancel;
-      } else {
-        await controller!
-            .animateTo(1, duration: duration, curve: Curves.easeOutCubic)
-            .orCancel;
-      }
+      final double height = nav.context.mounted
+          ? MediaQuery.sizeOf(nav.context).height
+          : 0;
+      // Finger velocity is pixels per second, downward-positive. The route
+      // controller falls as the page is pulled down.
+      final double unitsPerSecond = height <= 0 ? 0.0 : -velocity / height;
+      await EdMotion.springTo(
+        controller!,
+        leaving ? 0 : 1,
+        velocity: unitsPerSecond,
+        reduced: reduceMotion,
+      ).orCancel;
     } on TickerCanceled {
       // Removing the route or disposing its navigator cancels the settlement.
     } finally {
@@ -155,12 +150,9 @@ class PullDownPageRoute<T> extends MaterialPageRoute<T> {
             child: child!,
           );
         }
-        final progress = _pulling
+        final progress = _pulling || _settling
             ? animation.value
-            : (animation.status == AnimationStatus.reverse
-                      ? Curves.easeInCubic
-                      : Curves.easeOutCubic)
-                  .transform(animation.value);
+            : EdMotion.curve.transform(animation.value);
         return SlideTransition(
           key: const ValueKey('now-playing-page-transition'),
           position: AlwaysStoppedAnimation(

@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -99,7 +101,7 @@ Future<void> showSongComments(
     ],
   );
   if (compact) {
-    await showModalBottomSheet<void>(
+    await edShowSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.colors.ivoryLight,
@@ -111,7 +113,7 @@ Future<void> showSongComments(
     );
     return;
   }
-  await showDialog<void>(
+  await edShowDialog<void>(
     context: context,
     barrierColor: context.colors.slateDark.withValues(alpha: .2),
     builder: (dialogContext) => Dialog(
@@ -128,7 +130,7 @@ Future<void> showSongComments(
 /// Shared queue entry from the player header and desktop transport.
 Future<void> showPlaybackQueue(BuildContext context, AppState state) async {
   if (!useCompactLayout(state.uiMode, MediaQuery.sizeOf(context).width)) {
-    await showDialog<void>(
+    await edShowDialog<void>(
       context: context,
       barrierColor: context.colors.slateDark.withValues(alpha: .2),
       builder: (context) => Dialog(
@@ -145,7 +147,7 @@ Future<void> showPlaybackQueue(BuildContext context, AppState state) async {
     );
     return;
   }
-  await showModalBottomSheet<void>(
+  await edShowSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: context.colors.ivoryLight,
@@ -166,7 +168,7 @@ Future<void> showPlaybackQualityPicker(
   BuildContext context,
   AppState state,
 ) async {
-  await showModalBottomSheet<void>(
+  await edShowSheet<void>(
     context: context,
     backgroundColor: context.colors.ivoryLight,
     showDragHandle: true,
@@ -411,9 +413,8 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: TrText('无法切换全屏状态。')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: TrText('无法切换全屏状态。')));
     }
   }
 
@@ -483,7 +484,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   Future<void> _saveArtwork(Track track) async {
     if (_saving) return;
     _hideTimer?.cancel();
-    final confirmed = await showDialog<bool>(
+    final confirmed = await edShowDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const TrText('保存封面图片？'),
@@ -514,9 +515,8 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
     try {
       final saved = await saveCover(track.coverUrl!, track.title);
       if (mounted && saved) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: TrText('封面已保存')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: TrText('封面已保存')));
       }
     } catch (_) {
       if (mounted) {

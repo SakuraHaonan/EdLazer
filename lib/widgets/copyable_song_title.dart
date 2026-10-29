@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -31,7 +33,7 @@ class CopyableSongTitle extends StatelessWidget {
 /// The sheet is a rounded rectangle with the same soft elevation language as
 /// the player's floating cards.
 Future<void> showCopySongTitleDialog(BuildContext context, String title) async {
-  final bool? copy = await showDialog<bool>(
+  final bool? copy = await edShowDialog<bool>(
     context: context,
     builder: (BuildContext context) => Dialog(
       elevation: 24,
@@ -49,18 +51,16 @@ Future<void> showCopySongTitleDialog(BuildContext context, String title) async {
             children: <Widget>[
               Text(
                 context.tr('复制歌曲名'),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w400),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w400),
               ),
               const SizedBox(height: 10),
               Text(
                 title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w300),
+                style: Theme.of(context).textTheme.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w300),
               ),
               const SizedBox(height: 6),
               Text(
@@ -91,7 +91,6 @@ Future<void> showCopySongTitleDialog(BuildContext context, String title) async {
   if (copy != true || !context.mounted) return;
   await Clipboard.setData(ClipboardData(text: title));
   if (!context.mounted) return;
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(context.tr('已复制歌曲名'))));
+  ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(context.tr('已复制歌曲名'))));
 }

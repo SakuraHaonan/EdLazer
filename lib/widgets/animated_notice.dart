@@ -1,6 +1,9 @@
 import 'package:lazer_nextgen/theme/app_palette.dart';
+
 import '../l10n/app_localizations.dart';
+import '../motion/ed_motion.dart';
 import 'accessible_controls.dart';
+
 import 'package:flutter/material.dart';
 
 class AnimatedNotice extends StatelessWidget {
@@ -10,14 +13,20 @@ class AnimatedNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedSwitcher(
-    duration: const Duration(milliseconds: 220),
-    switchInCurve: Curves.easeOutCubic,
-    switchOutCurve: Curves.easeInCubic,
-    transitionBuilder: (child, animation) => SizeTransition(
-      sizeFactor: animation,
-      alignment: Alignment.topLeft,
-      child: FadeTransition(opacity: animation, child: child),
-    ),
+    duration: EdMotion.durationOf(context, EdMotion.entranceDuration),
+    switchInCurve: EdMotion.curve,
+    switchOutCurve: EdMotion.curve,
+    transitionBuilder: (Widget child, Animation<double> animation) =>
+        FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, EdMotion.travel),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        ),
     child: message == null
         ? const SizedBox.shrink(key: ValueKey('none'))
         : Padding(

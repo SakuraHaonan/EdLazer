@@ -8,6 +8,8 @@ import '../l10n/app_localizations.dart';
 import '../legacy/legacy_login.dart';
 import '../state/app_state.dart';
 import '../state/song_comments_controller.dart';
+import '../motion/ed_entrance.dart';
+import '../motion/ed_motion.dart';
 import '../theme/tokens.dart';
 import '../utils/artwork.dart';
 import 'accessible_controls.dart';
@@ -158,7 +160,8 @@ class _SongCommentsViewState extends State<SongCommentsView> {
               ),
             ),
             AnimatedSize(
-              duration: AppMotion.standard,
+              duration: EdMotion.durationOf(context, EdMotion.pressDuration),
+              curve: EdMotion.curve,
               alignment: Alignment.topLeft,
               child: _comments.loginRequired
                   ? Align(
@@ -174,25 +177,12 @@ class _SongCommentsViewState extends State<SongCommentsView> {
                   : const SizedBox.shrink(),
             ),
             Expanded(
-              child: TweenAnimationBuilder<double>(
+              child: EdEntrance(
                 key: ValueKey<(String, bool, bool)>((
                   widget.track.id,
                   initialLoading,
                   empty,
                 )),
-                tween: Tween<double>(begin: 0, end: 1),
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 240),
-                curve: AppMotion.emphasizedDecelerate,
-                builder: (BuildContext context, double value, Widget? child) =>
-                    Opacity(
-                      opacity: value,
-                      child: Transform.translate(
-                        offset: Offset(0, (1 - value) * 10),
-                        child: child,
-                      ),
-                    ),
                 child: initialLoading
                     ? const Center(
                         child: CircularProgressIndicator(strokeWidth: 2),
@@ -344,8 +334,7 @@ class _SongCommentsViewState extends State<SongCommentsView> {
                             comment: comments[index],
                             pending: _comments.isLiking(comments[index].id),
                             signedIn: widget.state.signedIn,
-                            onLike: () =>
-                                unawaited(_like(comments[index].id)),
+                            onLike: () => unawaited(_like(comments[index].id)),
                           ),
                         ),
                     ],
@@ -444,12 +433,11 @@ class _CommentRow extends StatelessWidget {
                               height: 96,
                             ),
                             fit: BoxFit.cover,
-                            errorBuilder:
-                                (
-                                  BuildContext context,
-                                  Object error,
-                                  StackTrace? _,
-                                ) => fallback,
+                            errorBuilder: (
+                              BuildContext context,
+                              Object error,
+                              StackTrace? _,
+                            ) => fallback,
                           ),
                   ),
                 ),
@@ -509,7 +497,12 @@ class _CommentRow extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
                         AnimatedSwitcher(
-                          duration: AppMotion.quick,
+                          duration: EdMotion.durationOf(
+                            context,
+                            EdMotion.pressDuration,
+                          ),
+                          switchInCurve: EdMotion.curve,
+                          switchOutCurve: EdMotion.curve,
                           transitionBuilder:
                               (Widget child, Animation<double> animation) =>
                                   ScaleTransition(
@@ -529,11 +522,15 @@ class _CommentRow extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         AnimatedSwitcher(
-                          duration: AppMotion.quick,
+                          duration: EdMotion.durationOf(
+                            context,
+                            EdMotion.pressDuration,
+                          ),
+                          switchInCurve: EdMotion.curve,
+                          switchOutCurve: EdMotion.curve,
                           child: Text(
-                            MaterialLocalizations.of(
-                              context,
-                            ).formatDecimal(comment.likedCount),
+                            MaterialLocalizations.of(context)
+                                .formatDecimal(comment.likedCount),
                             key: ValueKey<int>(comment.likedCount),
                             style: theme.textTheme.labelMedium?.copyWith(
                               color: accent,

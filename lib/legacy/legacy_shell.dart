@@ -12,7 +12,6 @@ import '../state/song_comments_controller.dart';
 import '../state/detail_requests.dart';
 import '../state/ui_preferences.dart';
 import '../theme/apple_design.dart';
-import '../theme/tokens.dart';
 import '../tv/large_screen_chrome.dart';
 import '../tv/large_screen_pages.dart';
 import '../tv/large_screen_widgets.dart';
@@ -26,6 +25,8 @@ import '../widgets/interaction_feedback.dart';
 import '../widgets/song_comments_view.dart';
 import 'legacy_background.dart';
 import 'legacy_login.dart';
+import '../motion/ed_motion.dart';
+import '../motion/ed_shell_transition.dart';
 import '../navigation/pull_down_to_close.dart';
 import '../player/now_playing_page.dart';
 import 'legacy_pages.dart';
@@ -96,29 +97,25 @@ class _LegacyShellState extends State<LegacyShell>
   /// the page follows the finger and settles from wherever it was left.
   late final PlayerPullDown _playerPull = _PlayerPull(this);
 
-  /// The player's open and close motion: decelerating, i.e. fast first and
-  /// slow on arrival. A third of the travel is covered early, which makes the
-  /// page answer the tap immediately; the 500 ms tail lets the cover dissolve
-  /// and the sheet settle without feeling rushed.
-  ///
-  /// The curve shapes time, never the offset: the pull-down writes
-  /// `_nowPlayingMotion.value` straight through and reads it back, so the page
-  /// keeps tracking the finger one to one while it is dragged.
-  static const Curve _playerMotionCurve = AppMotion.standardCurve;
+  /// Set while a close spring is running, including a pull that will dismiss.
+  /// The controller reports [AnimationStatus.completed] for a spring that was
+  /// started toward either bound, so the rest position — not the status name —
+  /// decides whether the sheet stays up.
+  bool _playerClosing = false;
 
   /// Drives the shell's own rebuilds. Playback reports ten times a second;
-  /// rebuilding the whole page for every tick while a switch is animating is
-  /// what turns a 420 ms cross-fade into a stutter, so [state] is filtered
-  /// through [_onAppStateChanged] instead of listened to directly.
+  /// rebuilding the whole page for every tick while a switch is animating
+  /// stalls the spring, so [state] is filtered through [_onAppStateChanged]
+  /// instead of listened to directly.
   final _ShellRepaint _repaint = _ShellRepaint();
   bool _stateReportScheduled = false;
 
-  /// Mirrors the page switcher's motion so ambient work can stand down while a
-  /// switch is running: the album mesh alone repaints the whole window at
-  /// 30 fps, which is budget the transition needs.
-  late final AnimationController _contentMotion;
+  /// True while a shell transition spring is running. The album mesh and
+  /// playback-driven rebuilds stand down for that window.
   bool _contentSwitching = false;
   String? _shownContentKey;
+  EdPattern _contentPattern = EdPattern.through;
+  int _contentDirection = 1;
 
   /// The browse tree is fully covered while the player is up. Caching it
   /// keeps playback notifications (track changes, lyric loads, download
@@ -146,18 +143,9 @@ class _LegacyShellState extends State<LegacyShell>
     super.initState();
     _nowPlayingMotion = AnimationController(
       vsync: this,
-      duration: AppMotion.emphasized,
-      reverseDuration: AppMotion.standard,
-      // Never let the platform's reduced-motion flag scale this to 5%: the
-      // player is dragged by the finger, so a released pull has to finish the
-      // distance it was left at (80-260 ms) instead of snapping away in a
-      // single frame. The motion is a compositor-only slide, not a vestibular
-      // trigger.
-      animationBehavior: AnimationBehavior.preserve,
+      duration: EdMotion.settleDuration,
+      reverseDuration: EdMotion.settleDuration,
     )..addStatusListener(_onNowPlayingStatus);
-    // Mirrors the page switcher's duration in [_content].
-    _contentMotion = AnimationController(vsync: this, duration: AppMotion.page)
-      ..addStatusListener(_onContentMotionStatus);
     state.addListener(_onAppStateChanged);
     // The first frame is not a switch: only a change from here on is one.
     _shownContentKey = _contentKey;
@@ -264,34 +252,68 @@ class _LegacyShellState extends State<LegacyShell>
     ].join('|');
   }
 
-  /// The switcher is already animating in this frame, so the mirror starts on
-  /// the next one: starting a controller while building would dirty the tree
-  /// from inside the build.
-  void _startContentMotion() {
+  void _onContentSettled() {
+    if (!mounted || !_contentSwitching) return;
+    // Reports held back during the switch need no replay: this rebuild
+    // already reads the newest state.
+    setState(() => _contentSwitching = false);
+  }
+
+  /// The transition widget was taken down mid-spring (a layout swap). Let the
+  /// mesh run again on the following frame — setState during its dispose is
+  /// not legal.
+  void _onContentAbandoned() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _contentMotion.forward(from: 0);
+      if (mounted && _contentSwitching) {
+        setState(() => _contentSwitching = false);
+      }
     });
   }
 
-  void _onContentMotionStatus(AnimationStatus status) {
-    if (!mounted) return;
-    if (status == AnimationStatus.completed) {
-      // Reports held back during the switch need no replay: this rebuild
-      // already reads the newest state.
-      setState(() => _contentSwitching = false);
-    }
-  }
+  int _playerMotionGeneration = 0;
 
   void _onNowPlayingStatus(AnimationStatus status) {
     if (!mounted) return;
-    if (status == AnimationStatus.completed && !_nowPlayingSettled) {
-      _playerSettled.value = true;
-    } else if (status == AnimationStatus.dismissed && _nowPlayingOpen) {
+    if (status != AnimationStatus.completed &&
+        status != AnimationStatus.dismissed) {
+      return;
+    }
+    _finishPlayer(_nowPlayingMotion.value < .5 ? 0 : 1);
+  }
+
+  /// Springs the sheet to [target]. A finger's [velocity] is in controller
+  /// units per second.
+  ///
+  /// This spring is not scaled down when the platform asks for reduced
+  /// motion. The page is tracking a finger; snapping the rest of the travel
+  /// in one frame is what made a released pull disappear. Page, tab and
+  /// dialog motion still honours that setting.
+  void _drivePlayer(double target, {double velocity = 0}) {
+    final int generation = ++_playerMotionGeneration;
+    final TickerFuture done = EdMotion.springTo(
+      _nowPlayingMotion,
+      target,
+      velocity: velocity,
+    );
+    done.then((_) {
+      if (!mounted || generation != _playerMotionGeneration) return;
+      _finishPlayer(target);
+    }, onError: (Object _, StackTrace _) {});
+  }
+
+  void _finishPlayer(double target) {
+    if (target <= 0) {
+      if (!_playerClosing || !_nowPlayingOpen) return;
       // The next opening builds a fresh page with fresh state.
       setState(() {
         _nowPlayingOpen = false;
         _playerPage = null;
+        _playerClosing = false;
       });
+      return;
+    }
+    if (!_playerClosing && !_nowPlayingSettled) {
+      _playerSettled.value = true;
     }
   }
 
@@ -335,9 +357,6 @@ class _LegacyShellState extends State<LegacyShell>
     state.removeListener(_onAppStateChanged);
     _playerSettled.dispose();
     _repaint.dispose();
-    _contentMotion
-      ..removeStatusListener(_onContentMotionStatus)
-      ..dispose();
     _nowPlayingMotion
       ..removeStatusListener(_onNowPlayingStatus)
       ..dispose();
@@ -487,40 +506,31 @@ class _LegacyShellState extends State<LegacyShell>
 
   void _openNowPlaying() {
     if (_nowPlayingOpen) return;
+    _playerClosing = false;
     setState(() {
       _nowPlayingOpen = true;
       _playerSettled.value = false;
     });
-    _nowPlayingMotion.value = 0;
-    _nowPlayingMotion.animateTo(
-      1,
-      duration: AppMotion.emphasized,
-      curve: _playerMotionCurve,
-    );
+    _drivePlayer(1);
   }
 
   void _closeNowPlaying() {
     if (!_nowPlayingOpen) return;
+    _playerClosing = true;
     setState(() {
       _playerSettled.value = false;
       // Rebuild the browse tree once so the uncovered page reflects whatever
       // changed while the player was on top.
       _coveredShellStale = true;
     });
-    // Going down must use animateBack: animateTo keeps the controller pointing
-    // forward, so a finished dismissal would report `completed` and the player
-    // would never be retired.
-    _nowPlayingMotion.animateBack(
-      0,
-      duration: AppMotion.standard,
-      curve: _playerMotionCurve,
-    );
+    _drivePlayer(0);
   }
 
-  /// Settles a finger-driven pull. The player closes when it has been dragged
-  /// far enough, or flung downward; otherwise it returns to the open position.
-  /// The duration follows the distance that is actually left, so a long pull
-  /// does not spend a whole transition on its last few pixels.
+  /// Settles a finger-driven pull on the same spring that opened the sheet.
+  ///
+  /// [velocity] is pixels per second, positive downward. The spring is given
+  /// that velocity in controller units, so a fling continues instead of being
+  /// replaced by a canned ease.
   void _settlePlayerPull(double velocity) {
     if (!_nowPlayingOpen) return;
     final double open = _nowPlayingMotion.value.clamp(0.0, 1.0);
@@ -528,28 +538,44 @@ class _LegacyShellState extends State<LegacyShell>
     final bool dismiss = velocity < -900
         ? false
         : (velocity > 900 && pulled > .02) || pulled >= .22;
-    final Duration duration = Duration(
-      milliseconds: ((dismiss ? open : pulled) * 220).round().clamp(80, 220),
-    );
+    final double height = MediaQuery.sizeOf(context).height;
+    final double unitsPerSecond = height <= 0 ? 0.0 : -velocity / height;
     if (!dismiss) {
-      _nowPlayingMotion.animateTo(
-        1,
-        duration: duration,
-        curve: _playerMotionCurve,
-      );
+      _playerClosing = false;
+      _drivePlayer(1, velocity: unitsPerSecond);
       return;
     }
     unawaited(state.feedback());
+    _playerClosing = true;
     setState(() {
       _playerSettled.value = false;
       // Rebuild the browse tree once so the uncovered page is current.
       _coveredShellStale = true;
     });
-    _nowPlayingMotion.animateBack(
-      0,
-      duration: duration,
-      curve: _playerMotionCurve,
-    );
+    _drivePlayer(0, velocity: unitsPerSecond);
+  }
+
+  /// Depth of a shell content key. Tabs sit at 0; a detail is 1; a detail's
+  /// own subpage (artist songs, a release group) is 2.
+  int _contentDepth(String key) {
+    if (key.startsWith('section:')) return 0;
+    if (key.startsWith('artist:') &&
+        (key.endsWith(':songs') || key.contains(':releases:'))) {
+      return 2;
+    }
+    return 1;
+  }
+
+  int _sectionIndex(String key) {
+    const List<String> order = <String>[
+      'section:home',
+      'section:search',
+      'section:library',
+      'section:likes',
+      'section:settings',
+    ];
+    final int index = order.indexOf(key);
+    return index < 0 ? 0 : index;
   }
 
   bool get _hasOpenDetail =>
@@ -587,15 +613,32 @@ class _LegacyShellState extends State<LegacyShell>
       child: AnimatedBuilder(
         animation: _repaint,
         builder: (BuildContext context, _) {
-          // The switcher starts its own motion the moment the key changes. A
-          // mirror of it flags the frame and then follows through the
-          // controller, so ambient work stops before the heavy frame is built.
+          // The transition widget starts its spring the moment the key changes.
+          // Flagging it in this build — before the mesh is built — is what
+          // stands the ambient work down on the same frame.
           final String contentKey = _contentKey;
           if (_shownContentKey != contentKey) {
+            final String? from = _shownContentKey;
+            final bool fromSection = from?.startsWith('section:') ?? false;
+            final bool toSection = contentKey.startsWith('section:');
+            if (fromSection && toSection) {
+              _contentPattern = EdPattern.through;
+              _contentDirection =
+                  _sectionIndex(contentKey) >= _sectionIndex(from!) ? 1 : -1;
+            } else {
+              final int fromDepth = from == null ? 0 : _contentDepth(from);
+              final int toDepth = _contentDepth(contentKey);
+              if (from != null && fromDepth == toDepth) {
+                _contentPattern = EdPattern.through;
+                _contentDirection = 1;
+              } else {
+                _contentPattern = EdPattern.axis;
+                _contentDirection = toDepth >= fromDepth ? 1 : -1;
+              }
+            }
             _shownContentKey = contentKey;
             if (!(MediaQuery.maybeOf(context)?.disableAnimations ?? false)) {
               _contentSwitching = true;
-              _startContentMotion();
             }
           }
           final AppleSemanticColors apple = AppleSemanticColors.of(context);
@@ -733,7 +776,15 @@ class _LegacyShellState extends State<LegacyShell>
                         ),
                       ),
                     ),
-                    if (_nowPlayingOpen)
+                    if (_nowPlayingOpen) ...<Widget>[
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: FadeTransition(
+                            opacity: _nowPlayingMotion,
+                            child: const ColoredBox(color: Color(0x38000000)),
+                          ),
+                        ),
+                      ),
                       Positioned.fill(
                         child: SlideTransition(
                           position: _nowPlayingSlide,
@@ -748,6 +799,7 @@ class _LegacyShellState extends State<LegacyShell>
                           ),
                         ),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -1433,70 +1485,21 @@ class _LegacyShellState extends State<LegacyShell>
     final Widget page = _contentPage();
     final bool motion = !MediaQuery.disableAnimationsOf(context);
     final bool largeScreen = largeScreenModeOf(context);
-    return AnimatedSwitcher(
-      // [_contentMotion] mirrors this duration: keep the two in step.
-      duration: motion ? AppMotion.page : Duration.zero,
-      reverseDuration: motion ? AppMotion.exit : Duration.zero,
-      switchInCurve: Curves.linear,
-      switchOutCurve: Curves.linear,
-      layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
-        alignment: Alignment.topCenter,
-        children: <Widget>[
-          // The outgoing page is already fading out: stop its own animations
-          // (the moving cover mosaics, list flings, progress spinners) so the
-          // transition only pays for the fade, not two live pages. Each child
-          // is also its own layer, which lets the opacity and slide below be
-          // composited instead of re-rasterising both pages every frame.
-          for (final Widget old in previous)
-            TickerMode(
-              enabled: false,
-              child: IgnorePointer(
-                child: ExcludeSemantics(child: RepaintBoundary(child: old)),
-              ),
-            ),
-          // Pause the incoming page's own tickers for the duration of the
-          // switch too: on a television the cover mosaics are the heaviest
-          // animation in the tree, and they can wait 420 ms for the page to
-          // land.
-          if (current != null)
-            TickerMode(
-              enabled: !_contentSwitching,
-              child: RepaintBoundary(child: current),
-            ),
-        ],
-      ),
-      transitionBuilder: (Widget child, Animation<double> animation) {
-        final Animation<double> eased = CurvedAnimation(
-          parent: animation,
-          // A gentle Apple-style arrival: most of the travel happens early,
-          // the last pixels settle slowly.
-          curve: AppMotion.fadeCurve,
-          reverseCurve: AppMotion.exitCurve,
-        );
-        // Fast first, slow on arrival. The slide is a few pixels of vertical
-        // travel (a compositor transform), not a layout change, and the fade
-        // keeps the outgoing page readable until the new one owns the frame.
-        return FadeTransition(
-          opacity: eased,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: Offset(
-                0,
-                largeScreen ? AppMotion.pageSlide / 2 : AppMotion.pageSlide,
-              ),
-              end: Offset.zero,
-            ).animate(eased),
-            child: RepaintBoundary(child: child),
-          ),
-        );
-      },
-      child: KeyedSubtree(
-        key: ValueKey<String>(_contentKey),
-        // Each page gets its own focus region. Opening a section, a playlist
-        // or an album therefore puts the remote on that page's first control
-        // instead of leaving focus behind on the element that opened it.
-        child: TvFocusRegion(focusToken: _nowPlayingOpen, child: page),
-      ),
+    return EdShellTransition(
+      switchKey: _contentKey,
+      pattern: _contentPattern,
+      direction: _contentDirection,
+      travel: largeScreen ? EdMotion.travelLarge : EdMotion.travel,
+      enabled: motion,
+      // On a television the cover mosaics are the heaviest animation in the
+      // tree. They wait until the spring has settled.
+      holdIncoming: _contentSwitching,
+      onSettled: _onContentSettled,
+      onAbandoned: _onContentAbandoned,
+      // Each page gets its own focus region. Opening a section, a playlist
+      // or an album therefore puts the remote on that page's first control
+      // instead of leaving focus behind on the element that opened it.
+      child: TvFocusRegion(focusToken: _nowPlayingOpen, child: page),
     );
   }
 
@@ -1704,10 +1707,7 @@ class _LibraryRefreshButtonState extends State<_LibraryRefreshButton>
         child: SizedBox.square(
           dimension: 16,
           child: RotationTransition(
-            turns: CurvedAnimation(
-              parent: _rotation,
-              curve: Curves.easeOutCubic,
-            ),
+            turns: CurvedAnimation(parent: _rotation, curve: EdMotion.curve),
             child: Icon(
               Icons.sync_rounded,
               size: 12,

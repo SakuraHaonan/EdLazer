@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 
 import 'design_tokens.dart';
 import 'app_palette.dart';
+import 'fade_page_transitions.dart';
 
 /// Builds the [ThemeData] for the parchment system.
 ///
@@ -45,11 +46,11 @@ ThemeData buildAppTheme({
     splashColor: palette.slateDark.withValues(alpha: 0.09),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+        TargetPlatform.android: EdSharedAxisPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.macOS: EdSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.windows: EdSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.linux: EdSharedAxisPageTransitionsBuilder(),
       },
     ),
     highlightColor: Colors.transparent,

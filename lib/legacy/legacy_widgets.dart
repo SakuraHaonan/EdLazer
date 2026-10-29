@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../motion/ed_motion.dart';
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/apple_design.dart';
@@ -74,9 +75,11 @@ class LegacyCover extends StatelessWidget {
             image: ArtworkImage(resolved),
             fit: BoxFit.cover,
             gaplessPlayback: true,
-            errorBuilder:
-                (BuildContext context, Object? error, StackTrace? _) =>
-                    fallback,
+            errorBuilder: (
+              BuildContext context,
+              Object? error,
+              StackTrace? _,
+            ) => fallback,
           );
     final Widget clipped = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
@@ -153,8 +156,8 @@ class _LegacyPlaylistCardState extends State<LegacyPlaylistCard> {
               children: <Widget>[
                 AnimatedScale(
                   scale: raised ? 1.018 : 1,
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
+                  duration: EdMotion.pressDuration,
+                  curve: EdMotion.curve,
                   child: Stack(
                     children: <Widget>[
                       RepaintBoundary(

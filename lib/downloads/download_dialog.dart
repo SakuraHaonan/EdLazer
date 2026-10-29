@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
@@ -35,13 +37,10 @@ Future<DownloadRequest?> showDownloadDialog(
   String? folderName,
 }) {
   if (tracks.isEmpty) return Future<DownloadRequest?>.value(null);
-  return showDialog<DownloadRequest>(
+  return edShowDialog<DownloadRequest>(
     context: context,
-    builder: (BuildContext context) => _DownloadDialog(
-      state: state,
-      tracks: tracks,
-      folderName: folderName,
-    ),
+    builder: (BuildContext context) =>
+        _DownloadDialog(state: state, tracks: tracks, folderName: folderName),
   );
 }
 
@@ -73,15 +72,9 @@ Future<void> showTrackActions(
           child: TrText('本地歌曲无需下载'),
         ),
       const PopupMenuDivider(),
-      PopupMenuItem<String>(
-        value: 'import-lyrics',
-        child: TrText('导入歌词…'),
-      ),
+      PopupMenuItem<String>(value: 'import-lyrics', child: TrText('导入歌词…')),
       if (hasImportedLyrics)
-        PopupMenuItem<String>(
-          value: 'remove-lyrics',
-          child: TrText('移除导入歌词'),
-        ),
+        PopupMenuItem<String>(value: 'remove-lyrics', child: TrText('移除导入歌词')),
     ],
   );
   if (!context.mounted) return;
@@ -195,14 +188,14 @@ class _DownloadDialogState extends State<_DownloadDialog> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = '无法打开目录选择器');  // i18n:key
+      setState(() => _error = '无法打开目录选择器'); // i18n:key
     }
   }
 
   Future<void> _confirm() async {
     final String? directory = _directory;
     if (directory == null || directory.trim().isEmpty) {
-      setState(() => _error = '请选择保存目录');  // i18n:key
+      setState(() => _error = '请选择保存目录'); // i18n:key
       return;
     }
     setState(() {
@@ -220,7 +213,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '这个目录不可写，请换一个位置';  // i18n:key
+        _error = '这个目录不可写，请换一个位置'; // i18n:key
       });
       return;
     }
@@ -247,9 +240,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
     final int estimate = _quality.estimatedBytes(total);
     return AlertDialog(
       title: TrText(
-        widget.tracks.length == 1
-            ? '下载歌曲'
-            : '下载 ${widget.tracks.length} 首歌曲',
+        widget.tracks.length == 1 ? '下载歌曲' : '下载 ${widget.tracks.length} 首歌曲',
       ),
       content: SizedBox(
         width: 430,

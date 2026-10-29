@@ -51,52 +51,28 @@ abstract final class AppShape {
   static const BorderRadius full = BorderRadius.all(Radius.circular(999));
 }
 
-/// Shared motion tokens — the single source for every duration and curve.
+/// Durations and curves frozen for the lyric view as of 2.0.0-beta.8.
 ///
-/// EdLazer motion style: crisp and quick. Mostly fades, very little travel,
-/// no overshoot. Everything is driven by vsync (AnimationController / Ticker /
-/// implicit animations); nothing animates from a [Timer].
+/// Chrome motion (pages, sheets, tabs, dialogs) lives in `EdMotion`. These
+/// values stay so the lyric viewport's blur ramp, row fade and controls
+/// cross-fade do not move when the chrome spring changes.
 abstract final class AppMotion {
-  /// Hover, press, toggles.
-  static const Duration instant = Duration(milliseconds: 100);
-
-  /// Small state changes: icons, chips, colour fades.
+  /// Small state changes inside the lyric view.
   static const Duration quick = Duration(milliseconds: 150);
 
-  /// Default for fades, cross-fades and page switches.
+  /// Lyric fades and the cover/lyrics cross-fade on the player.
   static const Duration standard = Duration(milliseconds: 200);
 
-  /// Largest movement in the app: sheets, the player opening.
+  /// Lyric emphasis and the player controls size change around the viewport.
   static const Duration emphasized = Duration(milliseconds: 250);
 
-  /// Exits are a touch faster than entrances.
+  /// Lyric exits.
   static const Duration exit = Duration(milliseconds: 180);
-
-  /// Page / section switches inside the shell.
-  static const Duration page = standard;
-
-  /// Cover art and backdrop palette cross-fades.
-  static const Duration crossFade = standard;
 
   static const Curve standardCurve = Curves.easeOutCubic;
   static const Curve emphasizedCurve = Curves.easeOutCubic;
   static const Curve fadeCurve = Curves.easeOut;
-  static const Curve inOutCurve = Curves.easeInOut;
-
-  /// Entering / leaving properties. Kept as names for older call sites; both
-  /// are plain eases now (no M3 "expressive" overshoot-like tails).
-  static const Curve emphasizedDecelerate = Curves.easeOutCubic;
-  static const Curve emphasizedAccelerate = Curves.easeInCubic;
   static const Curve exitCurve = Curves.easeInCubic;
-
-  /// Tiny vertical travel used together with a fade (fraction of height).
-  static const double pageSlide = .012;
-
-  /// Duration honouring the platform's reduce-motion switch.
-  static Duration of(BuildContext context, Duration duration) =>
-      (MediaQuery.maybeDisableAnimationsOf(context) ?? false)
-      ? Duration.zero
-      : duration;
 
   /// The frame-time overlay's reference budget (diagnostics only).
   static const double frameBudgetMs = 1000 / 100;

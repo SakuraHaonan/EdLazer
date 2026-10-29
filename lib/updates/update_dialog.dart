@@ -1,3 +1,5 @@
+import '../motion/ed_presentation.dart';
+
 import 'package:flutter/material.dart';
 
 import '../diagnostics/build_info.dart';
@@ -32,7 +34,7 @@ Future<void> showUpdateDialog(
   AppState state,
   AppRelease release,
 ) async {
-  final bool? skipped = await showDialog<bool>(
+  final bool? skipped = await edShowDialog<bool>(
     context: context,
     builder: (BuildContext context) =>
         _UpdateDialog(state: state, release: release),

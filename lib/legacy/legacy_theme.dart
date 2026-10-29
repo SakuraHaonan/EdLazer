@@ -1,4 +1,7 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
+
+import '../theme/fade_page_transitions.dart';
+
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
@@ -260,11 +263,11 @@ ThemeData buildLegacyTheme({
     materialTapTargetSize: MaterialTapTargetSize.padded,
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{
-        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: EdSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.linux: EdSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.macOS: EdSharedAxisPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+        TargetPlatform.android: EdSharedAxisPageTransitionsBuilder(),
       },
     ),
     appBarTheme: AppBarTheme(
