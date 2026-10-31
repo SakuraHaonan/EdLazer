@@ -53,6 +53,16 @@ class _QueueEngine implements AudioEngine, QueueAudioEngine {
     jumps++;
   }
 
+  /// Trims requested after a play-mode change.
+  int trims = 0;
+
+  @override
+  Future<bool> trimQueue(int queueId) async {
+    if (queueId != _queueId) return false;
+    trims++;
+    return true;
+  }
+
   @override
   Stream<int> get indexStream => _indexes.stream;
 
@@ -265,6 +275,81 @@ void main() {
 
     expect(state.queueIndex, 0);
     expect(engine.loads, <String>['url-1']);
+
+    state.dispose();
+  });
+
+  testWidgets('switching to repeat one replaces the queued follower', (
+    tester,
+  ) async {
+    final engine = _QueueEngine();
+    final state = AppState(catalog: _Catalog(), audioEngine: engine);
+    state.playQueue(<Track>[_track('1'), _track('2')]);
+    await tester.pump();
+    expect(engine.appends, <String>['url-2']);
+
+    state.cycleRepeat();
+    state.cycleRepeat();
+    await tester.pump();
+    expect(state.repeat, LoopMode.one);
+    expect(engine.trims, greaterThan(0));
+    expect(engine.appends.last, 'url-1');
+
+    engine.crossIntoNext();
+    await tester.pump();
+    // Repeat one holds the song instead of crossing into track 2.
+    expect(state.queueIndex, 0);
+    expect(engine.loads, <String>['url-1']);
+
+    state.dispose();
+  });
+
+  testWidgets('a follower withdrawn mid-boundary reloads the right track', (
+    tester,
+  ) async {
+    final engine = _QueueEngine();
+    final state = AppState(catalog: _Catalog(), audioEngine: engine);
+    state.playQueue(<Track>[_track('1'), _track('2'), _track('3')]);
+    await tester.pump();
+
+    // The platform crosses before the trim lands.
+    state.cycleRepeat();
+    engine.crossIntoNext();
+    await tester.pump();
+
+    expect(state.queueIndex, 1);
+    expect(state.current?.id, '2');
+    expect(engine.loads.last, 'url-2');
+
+    state.dispose();
+  });
+
+  testWidgets('shuffle picks random tracks and skips stay gapless', (
+    tester,
+  ) async {
+    final engine = _QueueEngine();
+    final state = AppState(catalog: _Catalog(), audioEngine: engine);
+    state.playQueue(<Track>[for (var i = 0; i < 12; i++) _track('$i')]);
+    await tester.pump();
+    state.toggleShuffle();
+    await tester.pump();
+
+    final visited = <int>[state.queueIndex];
+    for (var i = 0; i < 10; i++) {
+      state.next();
+      await tester.pump();
+      visited.add(state.queueIndex);
+    }
+
+    var sequential = true;
+    for (var i = 1; i < visited.length; i++) {
+      expect(visited[i], isNot(visited[i - 1]));
+      if (visited[i] != (visited[i - 1] + 1) % 12) sequential = false;
+    }
+    expect(sequential, isFalse, reason: 'shuffle walked the queue in order');
+    // Every skip used the follower already queued in the engine.
+    expect(engine.loads, <String>['url-0']);
+    expect(engine.jumps, 10);
 
     state.dispose();
   });

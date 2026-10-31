@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, ThemeMode;
@@ -1781,9 +1782,16 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   /// the queue (only playback running out honours [LoopMode.one]).
   int _manualNextIndex() {
     if (_shuffle) {
-      return _queue.length == 1
-          ? 0
-          : _randomIndex(_queue.length, avoid: _queueIndex);
+      if (_queue.length == 1) return 0;
+      // The random pick already handed to the engine keeps the skip gapless.
+      final int? queued = _queuedNextIndex;
+      if (queued != null &&
+          queued != _queueIndex &&
+          queued >= 0 &&
+          queued < _queue.length) {
+        return queued;
+      }
+      return _randomIndex(_queue.length, avoid: _queueIndex);
     }
     return (_queueIndex + 1) % _queue.length;
   }
@@ -1824,7 +1832,29 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
 
   void toggleShuffle() {
     _shuffle = !_shuffle;
+    _requeueNext();
     notifyListeners();
+  }
+
+  /// A play-mode change invalidates the follower already handed to the
+  /// engine (e.g. repeat-one must not cross into the next song). Drop it and
+  /// queue the one the new mode picks.
+  void _requeueNext() {
+    ++_prefetchToken;
+    _queuedNextIndex = null;
+    final QueueAudioEngine? engine = _queueEngine;
+    final int? queueId = _queueId;
+    if (engine == null || queueId == null || !_realActive) return;
+    unawaited(() async {
+      bool trimmed;
+      try {
+        trimmed = await engine.trimQueue(queueId);
+      } catch (_) {
+        trimmed = false;
+      }
+      if (!trimmed || queueId != _queueId || !_realActive) return;
+      await _prefetchNext();
+    }());
   }
 
   /// The legacy single play-mode button: Sequential → ListLoop → SingleLoop →
@@ -1841,6 +1871,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
       _repeat = LoopMode.off;
       _shuffle = true;
     }
+    _requeueNext();
     notifyListeners();
   }
 
@@ -1850,6 +1881,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
       LoopMode.all => LoopMode.one,
       LoopMode.one => LoopMode.off,
     };
+    _requeueNext();
     notifyListeners();
   }
 
@@ -1959,6 +1991,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     final QueueAudioEngine? engine = _queueEngine;
     final int? queueId = _queueId;
     if (engine == null || queueId == null || _queue.isEmpty) return;
+    final int token = ++_prefetchToken;
     final int? next = _autoAdvanceIndex();
     if (next == null) {
       _queuedNextIndex = null;
@@ -1972,7 +2005,8 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     }
     // A track change or a stop while the URL was in flight invalidates this
     // prefetch: the engine may already hold a different queue.
-    if (queueId != _queueId || !_realActive) return;
+    // A play-mode change also supersedes it ([_prefetchToken]).
+    if (token != _prefetchToken || queueId != _queueId || !_realActive) return;
     if (url == null || url.isEmpty) return;
     bool appended;
     try {
@@ -1980,9 +2014,11 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     } catch (_) {
       appended = false;
     }
-    if (!appended || queueId != _queueId) return;
+    if (!appended || token != _prefetchToken || queueId != _queueId) return;
     _queuedNextIndex = next;
   }
+
+  int _prefetchToken = 0;
 
   /// Crosses into the track the engine already holds next, without reloading.
   Future<void> _crossIntoQueuedTrack() async {
@@ -2005,7 +2041,24 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   void _onEngineAdvanced(int _) {
     _finishPlaySession();
     final int? target = _queuedNextIndex;
-    if (!_realActive || !_playing || target == null) return;
+    if (!_realActive || !_playing) return;
+    if (target == null) {
+      // The platform crossed into a follower a play-mode change had already
+      // withdrawn (the trim lost the race with the track boundary). Load the
+      // track the current mode wants instead of leaving the UI on the old one.
+      _realActive = false;
+      final int? next = _autoAdvanceIndex();
+      if (next != null) {
+        _moveTo(next, direction: 1);
+      } else {
+        _position = current?.duration ?? Duration.zero;
+        _playing = false;
+        _ticker?.cancel();
+        unawaited(audioEngine?.stop() ?? Future<void>.value());
+        notifyListeners();
+      }
+      return;
+    }
     _queuedNextIndex = null;
     trackChangeDirection = 1;
     playbackError = null;
@@ -2576,16 +2629,19 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     }
   }
 
-  final int _seedState = DateTime.now().millisecondsSinceEpoch;
+  final math.Random _shuffleRandom = math.Random();
 
   int _randomIndex(int n, {int? avoid}) {
-    // Select a different queue index when shuffle is active.
-    int r = (_seedState + n * 31 + (_avoidCounter++)) % n;
-    if (avoid != null && r == avoid && n > 1) r = (r + 1) % n;
-    return r;
+    // A uniformly random queue index other than [avoid]. The previous
+    // seed-plus-counter formula walked the queue in order from a random start,
+    // so shuffle played the list sequentially.
+    if (n <= 1) return 0;
+    if (avoid == null || avoid < 0 || avoid >= n) {
+      return _shuffleRandom.nextInt(n);
+    }
+    final int r = _shuffleRandom.nextInt(n - 1);
+    return r >= avoid ? r + 1 : r;
   }
-
-  int _avoidCounter = 0;
 
   static AuthOutcome _failure(Object error) =>
       AuthOutcome(false, error: _friendly(error));

@@ -39,6 +39,11 @@ abstract interface class QueueAudioEngine {
   /// Moves to the next item of the loaded queue without reloading it.
   Future<void> playQueuedNext();
 
+  /// Drops every item queued after the one that is playing, so a play-mode
+  /// change can queue a different follower. Returns false when [queueId] is
+  /// no longer the active queue.
+  Future<bool> trimQueue(int queueId);
+
   /// Fires when the platform crosses into the next item on its own — the
   /// gapless hand-off. Seeks, loads and appends are not reported.
   Stream<int> get indexStream;
@@ -225,6 +230,18 @@ class JustAudioEngine
       final ConcatenatingAudioSource? queue = _queue;
       if (queue == null || queueId != _queueId) return false;
       await queue.add(AudioSource.uri(Uri.parse(url)));
+      return queueId == _queueId;
+    });
+  }
+
+  @override
+  Future<bool> trimQueue(int queueId) {
+    return _serialize(() async {
+      final ConcatenatingAudioSource? queue = _queue;
+      final int? index = _player.currentIndex;
+      if (queue == null || index == null || queueId != _queueId) return false;
+      final int end = queue.children.length;
+      if (index + 1 < end) await queue.removeRange(index + 1, end);
       return queueId == _queueId;
     });
   }

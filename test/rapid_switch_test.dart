@@ -167,6 +167,9 @@ class _InterruptingEngine implements AudioEngine, QueueAudioEngine {
   Future<void> playQueuedNext() async {}
 
   @override
+  Future<bool> trimQueue(int queueId) async => queueId == _queueId;
+
+  @override
   Future<void> setUrl(String url) async {
     singleLoads.add(url);
     _active = true;
@@ -220,6 +223,8 @@ class _QueueRefusingEngine implements AudioEngine, QueueAudioEngine {
   Future<bool> appendToQueue(int queueId, String url) async => false;
   @override
   Future<void> playQueuedNext() async {}
+  @override
+  Future<bool> trimQueue(int queueId) async => false;
 
   @override
   Future<void> setUrl(String url) async {
