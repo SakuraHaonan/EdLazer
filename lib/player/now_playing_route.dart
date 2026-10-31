@@ -55,22 +55,28 @@ class NowPlayingRoute extends PageRoute<void> implements PlayerPullDown {
     final bool dismiss = velocity < -900
         ? false
         : (velocity > 900 && pulled > .02) || pulled >= .22;
-    if (dismiss) {
-      // Popping continues the route's own reverse transition from here.
-      navigator?.pop();
+    final AnimationController? host = controller;
+    final NavigatorState? nav = navigator;
+    if (host == null) {
+      if (dismiss) nav?.pop();
       return;
     }
-    final AnimationController? host = controller;
-    if (host == null) return;
+    // The settle stays linear (see [buildTransitions]) in both directions.
+    // A plain pop would sample the release point through [EdMotion.curve],
+    // which snaps the page most of the way back up before it slides away.
     _settling = true;
-    final NavigatorState? nav = navigator;
     final bool navReady = nav != null && nav.mounted;
     final double height = navReady ? MediaQuery.sizeOf(nav.context).height : 0;
     final double unitsPerSecond = height <= 0 ? 0 : -velocity / height;
     final bool reduced = navReady && EdMotion.reducedOf(nav.context);
+    if (dismiss) {
+      nav?.pop();
+      // Replace the pop's timed reverse with the spring from the finger.
+      host.stop(canceled: false);
+    }
     EdMotion.springTo(
       host,
-      1,
+      dismiss ? 0 : 1,
       velocity: unitsPerSecond,
       reduced: reduced,
     ).whenCompleteOrCancel(() => _settling = false);
