@@ -105,7 +105,9 @@ class _LegacyLoginDialogState extends State<_LegacyLoginDialog> {
         Navigator.of(context).maybePop();
         return;
       }
-      if (_mode != _Mode.qr) return;
+      // A poll for a code that was refreshed meanwhile must not mark the new
+      // code expired/scanned or cancel the new code's poll timer.
+      if (_mode != _Mode.qr || url != _url) return;
       setState(() {
         if (code == 800) {
           _phase = _Phase.expired;
