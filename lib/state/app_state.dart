@@ -282,7 +282,9 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
       'lazer_playback_quality',
       value.name,
     );
-    if (_realActive && current != null) {
+    // A track that is still opening resolved its URL with the old tier, so it
+    // has to be reloaded too, not only one that is already playing.
+    if (current != null && (_realActive || _playing)) {
       unawaited(_reloadForQuality(_position));
     }
   }
@@ -1300,6 +1302,10 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     _queue = <Track>[];
     _queueIndex = 0;
     _position = Duration.zero;
+    _realActive = false;
+    _queuedNextIndex = null;
+    _queueId = null;
+    playbackError = null;
     lyrics = const <LyricLine>[];
     ++_lyricGeneration;
     _lyricsTrackId = null;
@@ -1619,13 +1625,14 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
       if (_realActive) {
         unawaited(_resumeAudio());
       } else {
-        playbackError = null;
-        unawaited(_startAudio());
-        _ensureTicker();
+        _startFromRest();
       }
     } else {
       _ticker?.cancel();
       if (_realActive) unawaited(audioEngine!.pause());
+      // Same upload boundary as [pause]: the play button must not lose a
+      // qualified listen when the app is closed while paused.
+      _flushQualifiedSession();
     }
     notifyListeners();
   }
@@ -1636,11 +1643,24 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     if (_realActive) {
       unawaited(_resumeAudio());
     } else {
-      playbackError = null;
-      unawaited(_startAudio());
-      _ensureTicker();
+      _startFromRest();
     }
     notifyListeners();
+  }
+
+  /// Opens the current track when nothing is loaded (restored queue, failed
+  /// stream). A position the user seeked to before pressing play, or where a
+  /// failed stream stopped, is kept; a track that ran out starts over.
+  void _startFromRest() {
+    playbackError = null;
+    final Duration at = _position;
+    final Duration total = current?.duration ?? Duration.zero;
+    final bool resume =
+        at > Duration.zero &&
+        (total <= Duration.zero || at < total - const Duration(seconds: 1));
+    if (!resume) _position = Duration.zero;
+    unawaited(_startAudio(resumeAt: resume ? at : null));
+    _ensureTicker();
   }
 
   void pause() {

@@ -354,6 +354,45 @@ void main() {
     state.dispose();
   });
 
+  testWidgets('a seek made before play is where the stream opens', (
+    tester,
+  ) async {
+    final engine = _QueueEngine();
+    final state = AppState(catalog: _Catalog(), audioEngine: engine);
+    state.playQueue(<Track>[_track('1'), _track('2')]);
+    await tester.pump();
+    state.stop();
+    await tester.pump();
+
+    state.seek(.5);
+    state.play();
+    await tester.pump();
+
+    expect(engine.position, const Duration(seconds: 90));
+    expect(state.position, const Duration(seconds: 90));
+
+    state.dispose();
+  });
+
+  testWidgets('a track that ran out starts over on play', (tester) async {
+    final engine = _QueueEngine();
+    final state = AppState(catalog: _Catalog(), audioEngine: engine);
+    state.playQueue(<Track>[_track('1')]);
+    await tester.pump();
+    engine.finish();
+    await tester.pump();
+    expect(state.playing, false);
+
+    engine.position = Duration.zero;
+    state.togglePlay();
+    await tester.pump();
+
+    expect(engine.position, Duration.zero);
+    expect(state.position, Duration.zero);
+
+    state.dispose();
+  });
+
   testWidgets('the last track still stops when the queue runs out', (
     tester,
   ) async {
