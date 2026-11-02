@@ -11,6 +11,7 @@ import 'package:lazer_nextgen/legacy/legacy_pages.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:lazer_nextgen/widgets/liquid_glass.dart';
 
 const Track _track = Track(
   id: 'switch-a',
@@ -93,7 +94,7 @@ Future<void> _settleSwitch(WidgetTester tester) async {
 Future<void> _openSearch(WidgetTester tester) async {
   await tester.tap(
     find.descendant(
-      of: find.byType(NavigationBar),
+      of: find.byType(LiquidGlassNavBar),
       matching: find.byIcon(Icons.search_outlined),
     ),
   );

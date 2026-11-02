@@ -20,6 +20,7 @@ import '../updates/update_checker.dart';
 import '../updates/update_dialog.dart';
 import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
+import '../widgets/liquid_glass.dart';
 import '../widgets/artwork_image.dart';
 import '../widgets/interaction_feedback.dart';
 import '../widgets/song_comments_view.dart';
@@ -811,32 +812,45 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _desktopLayout(AppleSemanticColors apple, {required bool compactBar}) {
-    return Column(
+    // The transport floats over the content column as a liquid-glass capsule;
+    // the page runs to the window's bottom edge and scrolls under it.
+    final double dockInset = LegacyPlayerBar.floatingExtent(
+      context,
+      compact: compactBar,
+    );
+    return Row(
       children: <Widget>[
+        _sidebar(apple),
+        Container(width: .5, color: apple.separator),
         Expanded(
-          child: Row(
+          child: Stack(
+            fit: StackFit.expand,
             children: <Widget>[
-              _sidebar(apple),
-              Container(width: .5, color: apple.separator),
-              Expanded(
-                child: Column(
-                  children: <Widget>[
-                    _desktopToolbar(apple),
-                    Container(height: .5, color: apple.separator),
-                    Expanded(child: RepaintBoundary(child: _content())),
-                  ],
+              Column(
+                children: <Widget>[
+                  _desktopToolbar(apple),
+                  Container(height: .5, color: apple.separator),
+                  Expanded(
+                    child: FloatingDockInset(
+                      inset: dockInset,
+                      child: RepaintBoundary(child: _content()),
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: LegacyPlayerBar(
+                  state: state,
+                  compact: compactBar,
+                  comments: _comments,
+                  onComments: _toggleComments,
+                  onOpen: _openNowPlaying,
                 ),
               ),
             ],
-          ),
-        ),
-        RepaintBoundary(
-          child: LegacyPlayerBar(
-            state: state,
-            compact: compactBar,
-            comments: _comments,
-            onComments: _toggleComments,
-            onOpen: _openNowPlaying,
           ),
         ),
       ],
@@ -981,54 +995,85 @@ class _LegacyShellState extends State<LegacyShell>
   }
 
   Widget _compactLayout(AppleSemanticColors apple, {required bool compactBar}) {
+    final bool hasTrack = state.current != null;
+    // One floating liquid-glass dock holds the mini player and the tabs, so
+    // the whole bottom bar costs a single backdrop blur.
+    final double dockHeight =
+        LiquidGlassMetrics.navHeight +
+        (hasTrack ? LegacyPlayerBar.contentHeight(compact: true) + .5 : 0);
+    final double dockInset =
+        dockHeight +
+        LiquidGlassMetrics.bottomGap(context) +
+        LiquidGlassMetrics.contentGap;
     return Column(
       children: <Widget>[
         _mobileToolbar(apple),
-        Expanded(child: RepaintBoundary(child: _content())),
-        if (state.current != null)
-          RepaintBoundary(
-            child: LegacyPlayerBar(
-              state: state,
-              compact: true,
-              comments: _comments,
-              onComments: _toggleComments,
-              onOpen: _openNowPlaying,
-            ),
-          ),
-        AppleGlass(
-          borderRadius: BorderRadius.zero,
-          blurSigma: 16,
-          color: apple.glass,
-          border: Border(top: BorderSide(color: apple.separator, width: .5)),
-          child: NavigationBar(
-            selectedIndex: _section.index,
-            onDestinationSelected: (int index) =>
-                _select(_LegacySection.values[index]),
-            destinations: <NavigationDestination>[
-              NavigationDestination(
-                icon: const Icon(Icons.home_outlined),
-                selectedIcon: const Icon(Icons.home_rounded),
-                label: context.tr('主页'),
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              FloatingDockInset(
+                inset: dockInset,
+                child: RepaintBoundary(child: _content()),
               ),
-              NavigationDestination(
-                icon: const Icon(Icons.search_outlined),
-                selectedIcon: const Icon(Icons.search_rounded),
-                label: context.tr('搜索'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.library_music_outlined),
-                selectedIcon: const Icon(Icons.library_music_rounded),
-                label: context.tr('音乐库'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.favorite_border_rounded),
-                selectedIcon: const Icon(Icons.favorite_rounded),
-                label: context.tr('我喜欢'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.settings_outlined),
-                selectedIcon: const Icon(Icons.settings_rounded),
-                label: context.tr('设置'),
+              Positioned(
+                left: LiquidGlassMetrics.sideMargin,
+                right: LiquidGlassMetrics.sideMargin,
+                bottom: LiquidGlassMetrics.bottomGap(context),
+                child: LiquidGlassPanel(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (hasTrack) ...<Widget>[
+                        LegacyPlayerBar(
+                          state: state,
+                          compact: true,
+                          framed: false,
+                          comments: _comments,
+                          onComments: _toggleComments,
+                          onOpen: _openNowPlaying,
+                        ),
+                        Container(
+                          height: .5,
+                          margin: const EdgeInsets.symmetric(horizontal: 16),
+                          color: apple.separator.withValues(alpha: .5),
+                        ),
+                      ],
+                      LiquidGlassNavBar(
+                        selectedIndex: _section.index,
+                        onDestinationSelected: (int index) =>
+                            _select(_LegacySection.values[index]),
+                        destinations: <LiquidGlassDestination>[
+                          LiquidGlassDestination(
+                            icon: Icons.home_outlined,
+                            selectedIcon: Icons.home_rounded,
+                            label: context.tr('主页'),
+                          ),
+                          LiquidGlassDestination(
+                            icon: Icons.search_outlined,
+                            selectedIcon: Icons.search_rounded,
+                            label: context.tr('搜索'),
+                          ),
+                          LiquidGlassDestination(
+                            icon: Icons.library_music_outlined,
+                            selectedIcon: Icons.library_music_rounded,
+                            label: context.tr('音乐库'),
+                          ),
+                          LiquidGlassDestination(
+                            icon: Icons.favorite_border_rounded,
+                            selectedIcon: Icons.favorite_rounded,
+                            label: context.tr('我喜欢'),
+                          ),
+                          LiquidGlassDestination(
+                            icon: Icons.settings_outlined,
+                            selectedIcon: Icons.settings_rounded,
+                            label: context.tr('设置'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),

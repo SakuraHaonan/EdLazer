@@ -326,11 +326,10 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
 
-    // The bar sits on the window's bottom edge, not on the edge of an
-    // 80%-sized copy floating in the corner.
+    // The floating bar is anchored to the window's bottom-right edge, not to
+    // the edge of an 80%-sized copy floating in the corner.
     final Rect bar = tester.getRect(find.byType(LegacyPlayerBar));
-    expect(bar.left, closeTo(0, .5));
-    expect(bar.width, closeTo(1280, .5));
+    expect(bar.right, closeTo(1280, .5));
     expect(bar.bottom, closeTo(720, .5));
     expect(tester.takeException(), isNull);
   });

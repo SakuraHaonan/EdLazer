@@ -11,6 +11,7 @@ import '../state/app_state.dart';
 import '../theme/apple_design.dart';
 import '../utils/byte_format.dart';
 import '../widgets/apple_ui.dart';
+import '../widgets/liquid_glass.dart';
 import 'local_library.dart';
 import 'local_music_import.dart';
 import 'local_music_scan.dart';
@@ -507,9 +508,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                     subtitle: entry.path,
                                     leading: AppleIconTile(
                                       icon: Icons.error_outline_rounded,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .error,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
                                     ),
                                     trailing: IconButton(
                                       tooltip: context.tr('从资料库移除'),
@@ -530,6 +531,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                     ),
                   ),
                 const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                const FloatingDockSpacer(),
               ],
             ),
           ),

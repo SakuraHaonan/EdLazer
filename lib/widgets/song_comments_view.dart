@@ -15,6 +15,7 @@ import '../utils/artwork.dart';
 import 'accessible_controls.dart';
 import 'animated_notice.dart';
 import 'artwork_image.dart';
+import 'liquid_glass.dart';
 import 'interaction_feedback.dart';
 
 /// Lazy rows, pagination and reactions listen only to the comment controller.
@@ -292,6 +293,7 @@ class _SongCommentsViewState extends State<SongCommentsView> {
                               ),
                             ),
                           ),
+                          const FloatingDockSpacer(),
                         ],
                       ),
               ),
@@ -433,11 +435,12 @@ class _CommentRow extends StatelessWidget {
                               height: 96,
                             ),
                             fit: BoxFit.cover,
-                            errorBuilder: (
-                              BuildContext context,
-                              Object error,
-                              StackTrace? _,
-                            ) => fallback,
+                            errorBuilder:
+                                (
+                                  BuildContext context,
+                                  Object error,
+                                  StackTrace? _,
+                                ) => fallback,
                           ),
                   ),
                 ),
@@ -529,8 +532,9 @@ class _CommentRow extends StatelessWidget {
                           switchInCurve: EdMotion.curve,
                           switchOutCurve: EdMotion.curve,
                           child: Text(
-                            MaterialLocalizations.of(context)
-                                .formatDecimal(comment.likedCount),
+                            MaterialLocalizations.of(
+                              context,
+                            ).formatDecimal(comment.likedCount),
                             key: ValueKey<int>(comment.likedCount),
                             style: theme.textTheme.labelMedium?.copyWith(
                               color: accent,

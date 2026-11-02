@@ -7,11 +7,10 @@ import 'package:flutter/services.dart';
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
-import '../theme/apple_design.dart';
 import '../tv/tv_mode.dart';
-import '../widgets/apple_ui.dart';
 import '../widgets/copyable_song_title.dart';
 import '../widgets/interaction_feedback.dart';
+import '../widgets/liquid_glass.dart';
 import '../widgets/playback_queue_view.dart';
 import 'legacy_widgets.dart';
 
@@ -33,9 +32,37 @@ class LegacyPlayerBar extends StatelessWidget {
     this.comments = false,
     required this.onOpen,
     this.onComments,
+    this.framed = true,
   });
 
   final AppState state;
+
+  /// Whether the bar draws its own floating liquid-glass capsule. The phone
+  /// dock passes false: it hosts the bar and the tabs in one shared panel.
+  final bool framed;
+
+  /// Height of the bar's content row.
+  static double contentHeight({required bool compact}) => compact ? 60 : 84;
+
+  /// Vertical space a framed bar takes from the window's bottom edge, which
+  /// is how far pages behind it must extend their scroll content.
+  static double floatingExtent(BuildContext context, {required bool compact}) =>
+      contentHeight(compact: compact) +
+      LiquidGlassMetrics.bottomGap(context) +
+      LiquidGlassMetrics.contentGap;
+
+  Widget _frame(BuildContext context, Widget bar) {
+    if (!framed) return bar;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        LiquidGlassMetrics.sideMargin,
+        0,
+        LiquidGlassMetrics.sideMargin,
+        LiquidGlassMetrics.bottomGap(context),
+      ),
+      child: LiquidGlassPanel(child: bar),
+    );
+  }
 
   /// Phone presentation: cover, title and three buttons, 64 dp tall.
   final bool compact;
@@ -53,16 +80,12 @@ class LegacyPlayerBar extends StatelessWidget {
       builder: (BuildContext context, _) {
         final Track? track = state.current;
         if (compact) {
-          final AppleSemanticColors apple = AppleSemanticColors.of(context);
-          return AppleGlass(
-            borderRadius: BorderRadius.zero,
-            blurSigma: 16,
-            color: apple.glassStrong,
-            border: Border(top: BorderSide(color: apple.separator, width: .5)),
-            child: SizedBox(
-              height: 60,
+          return _frame(
+            context,
+            SizedBox(
+              height: contentHeight(compact: true),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   children: [
                     Expanded(
@@ -93,16 +116,12 @@ class LegacyPlayerBar extends StatelessWidget {
             ),
           );
         }
-        final AppleSemanticColors apple = AppleSemanticColors.of(context);
-        return AppleGlass(
-          borderRadius: BorderRadius.zero,
-          blurSigma: 16,
-          color: apple.glassStrong,
-          border: Border(top: BorderSide(color: apple.separator, width: .5)),
-          child: SizedBox(
-            height: 84,
+        return _frame(
+          context,
+          SizedBox(
+            height: contentHeight(compact: false),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
               child: Row(
                 children: [
                   SizedBox(

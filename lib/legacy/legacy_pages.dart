@@ -38,6 +38,7 @@ import '../tv/tv_mode.dart';
 import '../updates/update_dialog.dart';
 import '../utils/background_image.dart';
 import '../utils/byte_format.dart';
+import '../widgets/liquid_glass.dart';
 import '../widgets/ui_scaling.dart';
 import 'legacy_login.dart';
 import 'legacy_widgets.dart';
@@ -145,7 +146,12 @@ class _LegacyArtistPageState extends State<LegacyArtistPage> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1180),
         child: ListView(
-          padding: EdgeInsets.fromLTRB(inset, 20, inset, 42),
+          padding: EdgeInsets.fromLTRB(
+            inset,
+            20,
+            inset,
+            42 + FloatingDockInset.of(context),
+          ),
           children: <Widget>[
             _ArtistHero(
               artist: artist,
@@ -313,8 +319,9 @@ class _ArtistHero extends StatelessWidget {
               if (songCount > 0) context.tr('$songCount 首歌曲'),
               if (albumCount > 0) context.tr('$albumCount 张发行'),
             ].join(' · '),
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: apple.secondaryLabel),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
           ),
         ],
         const SizedBox(height: 17),
@@ -399,8 +406,9 @@ class _ArtistTrackCardState extends State<_ArtistTrackCard> {
                         ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: apple.secondaryLabel),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: apple.secondaryLabel,
+                        ),
                       ),
                     ],
                   ),
@@ -449,8 +457,9 @@ class _ArtistReleaseShelf extends StatelessWidget {
                     album.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w400),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                   Text(
                     <String>[
@@ -670,6 +679,7 @@ class _LegacyArtistReleasesPageState extends State<LegacyArtistReleasesPage> {
                 ),
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 36)),
+            const FloatingDockSpacer(),
           ],
         ),
       ),
@@ -797,6 +807,7 @@ class _LegacyArtistSongsPageState extends State<LegacyArtistSongsPage> {
                 ),
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 36)),
+            const FloatingDockSpacer(),
           ],
         ),
       ),
@@ -839,8 +850,9 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
       final tracks = await load();
       if (!mounted) return;
       if (tracks.isEmpty) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(context.tr('暂时没有可播放的歌曲'))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.tr('暂时没有可播放的歌曲'))));
       } else {
         widget.state.playStationQueue(tracks, loadMore: load);
       }
@@ -1029,6 +1041,7 @@ class _LegacyHomePageState extends State<LegacyHomePage> {
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 28)),
+            const FloatingDockSpacer(),
           ],
         ),
       ),
@@ -1283,8 +1296,9 @@ class _ShelfArrow extends StatelessWidget {
     opacity: visible ? 1 : 0,
     duration: const Duration(milliseconds: 140),
     child: Material(
-      color: AppleSemanticColors.of(context).tertiaryBackground
-          .withValues(alpha: .94),
+      color: AppleSemanticColors.of(
+        context,
+      ).tertiaryBackground.withValues(alpha: .94),
       elevation: 8,
       shadowColor: Colors.black26,
       shape: const CircleBorder(),
@@ -1495,8 +1509,9 @@ class _HomeReleaseShelf extends StatelessWidget {
                 album.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w400),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w400),
               ),
               Text(
                 album.artist,
@@ -1972,8 +1987,9 @@ class FilledCoverCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: <Widget>[
                   ColoredBox(
-                    color: AppleSemanticColors.of(context)
-                        .secondaryGroupedBackground,
+                    color: AppleSemanticColors.of(
+                      context,
+                    ).secondaryGroupedBackground,
                     child: Opacity(
                       opacity: tap == null ? .18 : .58,
                       child: _MovingCoverMosaic(
@@ -2062,8 +2078,9 @@ class ChartLoadCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextStyle? label = Theme.of(context).textTheme.bodyMedium
-        ?.copyWith(fontSize: large ? 18 : null);
+    final TextStyle? label = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(fontSize: large ? 18 : null);
     return Container(
       height: large ? 140 : 112,
       padding: EdgeInsets.symmetric(horizontal: large ? 24 : 18),
@@ -2282,6 +2299,7 @@ class _LegacyChartPageState extends State<LegacyChartPage> {
                 ),
               ),
             ),
+            const FloatingDockSpacer(),
           ],
         ),
       ),
@@ -2329,8 +2347,9 @@ class _ChartHero extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             context.tr('${chart.entries.length} 首'),
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: Colors.white70),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
           ),
         ],
       ),
@@ -2469,8 +2488,10 @@ class _ChartIssuePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = Theme.of(context).textTheme.bodyMedium
-        ?.copyWith(color: Colors.white, fontWeight: FontWeight.w400);
+    final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: Colors.white,
+      fontWeight: FontWeight.w400,
+    );
     if (chart.issues.length < 2) {
       return TrText(chart.issueLabel, style: textStyle);
     }
@@ -2574,8 +2595,9 @@ class _ChartTrackRow extends StatelessWidget {
                 softWrap: false,
                 overflow: TextOverflow.visible,
                 textAlign: TextAlign.right,
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w400),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w400),
               ),
             ),
             const SizedBox(width: 6),
@@ -3059,6 +3081,7 @@ class LegacyLibraryPage extends StatelessWidget {
                     ),
                   ),
                 const SliverToBoxAdapter(child: SizedBox(height: 28)),
+                const FloatingDockSpacer(),
               ],
             );
           },
@@ -3363,8 +3386,9 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
     if (tracks == null || tracks.isEmpty || !_scroll.hasClients) return;
     final int index = _currentIndex(tracks);
     if (index < 0) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(context.tr('当前歌曲不在这个歌单中'))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.tr('当前歌曲不在这个歌单中'))));
       return;
     }
     _ensureRowMetrics();
@@ -3485,11 +3509,12 @@ class _LegacyPlaylistPageState extends State<LegacyPlaylistPage> {
                 // Leave room for the floating locate button so the last row
                 // can scroll clear of it.
                 const SliverToBoxAdapter(child: SizedBox(height: 88)),
+                const FloatingDockSpacer(),
               ],
             ),
             Positioned(
               right: 18,
-              bottom: 18,
+              bottom: 18 + FloatingDockInset.of(context),
               child: ValueListenableBuilder<bool>(
                 valueListenable: _showLocate,
                 builder: (BuildContext context, bool show, Widget? _) {
@@ -3836,6 +3861,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
   }
 
   Widget _body(double inset) {
+    final double dock = FloatingDockInset.of(context);
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -3898,7 +3924,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
         Expanded(
           child: switch (_tab) {
             _SearchTab.songs => ListView(
-              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28 + dock),
               children: <Widget>[
                 for (int i = 0; i < results.tracks.length; i++)
                   LegacyTrackRow(
@@ -3918,7 +3944,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
               ],
             ),
             _SearchTab.albums => ListView(
-              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28 + dock),
               children: <Widget>[
                 for (final Album album in results.albums)
                   AppleListTile(
@@ -3938,7 +3964,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
               ],
             ),
             _SearchTab.artists => ListView(
-              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28 + dock),
               children: <Widget>[
                 for (final ArtistRef artist in results.artists)
                   AppleListTile(
@@ -3958,7 +3984,7 @@ class _LegacySearchPageState extends State<LegacySearchPage> {
               ],
             ),
             _SearchTab.playlists => ListView(
-              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28),
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, 28 + dock),
               children: <Widget>[
                 LegacyPlaylistGrid(
                   playlists: results.playlists,
@@ -4061,7 +4087,12 @@ class LegacySettingsPage extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
         child: ListView(
-          padding: EdgeInsets.fromLTRB(inset, 8, inset, 36),
+          padding: EdgeInsets.fromLTRB(
+            inset,
+            8,
+            inset,
+            36 + FloatingDockInset.of(context),
+          ),
           children: <Widget>[
             const ApplePageTitle(
               title: '设置',

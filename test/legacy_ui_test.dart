@@ -16,6 +16,7 @@ import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
 import 'package:lazer_nextgen/state/detail_requests.dart';
 import 'package:lazer_nextgen/widgets/apple_ui.dart';
+import 'package:lazer_nextgen/widgets/liquid_glass.dart';
 
 const Track _track = Track(
   id: '1939575649',
@@ -317,7 +318,7 @@ void main() {
     addTearDown(state.dispose);
     await tester.pumpWidget(_legacyApp(state));
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(LiquidGlassNavBar), findsOneWidget);
     expect(find.text('音乐库'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
