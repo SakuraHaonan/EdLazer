@@ -219,7 +219,6 @@ class AppleGroupedCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color ?? apple.secondaryGroupedBackground,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: apple.separator, width: .5),
       ),
       child: Padding(padding: padding, child: child),
     );

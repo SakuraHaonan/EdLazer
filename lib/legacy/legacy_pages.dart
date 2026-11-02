@@ -378,7 +378,6 @@ class _ArtistTrackCardState extends State<_ArtistTrackCard> {
                   ? apple.fill
                   : apple.secondaryGroupedBackground,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: apple.separator, width: .5),
             ),
             child: Row(
               children: <Widget>[
@@ -2780,10 +2779,6 @@ class _FeaturedPlaylistCardState extends State<_FeaturedPlaylistCard> {
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: apple.separator.withValues(alpha: .4),
-                  width: .5,
-                ),
                 boxShadow: <BoxShadow>[
                   BoxShadow(
                     color: Colors.black.withValues(alpha: .16),
