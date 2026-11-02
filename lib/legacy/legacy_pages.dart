@@ -376,7 +376,7 @@ class _ArtistTrackCardState extends State<_ArtistTrackCard> {
                   ? apple.accentSoft
                   : _hover
                   ? apple.fill
-                  : apple.secondaryGroupedBackground,
+                  : apple.secondaryGroupedBackground.withValues(alpha: .42),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
