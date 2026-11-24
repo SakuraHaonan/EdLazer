@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart'
     show LicenseRegistry, LicenseEntryWithLineBreaks;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'audio/audio_engine.dart';
@@ -53,6 +54,7 @@ Future<void> main() async {
   await runZoned<Future<void>>(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      await LiquidGlass.precache();
       LicenseRegistry.addLicense(() async* {
         yield LicenseEntryWithLineBreaks([
           'Lazer',
@@ -66,6 +68,10 @@ Future<void> main() async {
           'This application uses MiSans by Xiaomi.\n'
           'MiSans Fonts Intellectual Property License Agreement:\n'
           'https://hyperos.mi.com/font/en/download/',
+        );
+        yield LicenseEntryWithLineBreaks(
+          ['liquid_glass_renderer'],
+          await rootBundle.loadString('licenses/liquid_glass_renderer/LICENSE'),
         );
       });
       JustAudioMediaKit.ensureInitialized();

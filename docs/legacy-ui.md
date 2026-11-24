@@ -67,9 +67,11 @@ flow for the current song, and the browse backdrop setting never removes it.
 
 - 50 dp inline navigation bar, collapsible search, large page titles and the
   tab bar (`主页 / 搜索 / 音乐库 / 我喜欢 / 设置`).
-- The mini player and the tab bar are separate floating liquid-glass
-  capsules. The player sits above the tabs with a visible gap, and both clear
-  the bottom safe area. Tapping the player opens the immersive player.
+- The mini player and the tab bar are separate floating capsules from
+  `liquid_glass_renderer` (iOS 27 regular glass: the rim refracts the page).
+  The player sits above the tabs with a visible gap, and both clear the
+  bottom safe area. The selected tab is a clear loupe. Tapping the player
+  opens the immersive player. See [liquid-glass.md](liquid-glass.md).
 - Content is inset at 16 dp with edge-to-edge artwork where appropriate.
   Settings uses a single-column grouped list.
 - The now-playing overlay is portrait/landscape adaptive: a borderless lyric

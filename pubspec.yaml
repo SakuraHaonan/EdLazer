@@ -58,6 +58,7 @@ dependencies:
   gal: ^2.3.3
   file_selector: ^1.1.0
   image_picker: ^1.2.4
+  liquid_glass_renderer: 1.0.0-dev.2
 
 dev_dependencies:
   flutter_test:
@@ -80,14 +81,13 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
-  shaders:
-    - shaders/liquid_glass.frag
   assets:
     - LICENSE
     - assets/l10n/
     - assets/app_icon.png
     - assets/chart_logos/
     - licenses/lyric_animation/AGPL-3.0.txt
+    - licenses/liquid_glass_renderer/LICENSE
 
   fonts:
     - family: MiSans

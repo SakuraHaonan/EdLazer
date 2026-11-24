@@ -990,67 +990,69 @@ class _LegacyShellState extends State<LegacyShell>
                 left: LiquidGlassMetrics.sideMargin,
                 right: LiquidGlassMetrics.sideMargin,
                 bottom: LiquidGlassMetrics.bottomGap(context),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    if (hasTrack) ...<Widget>[
+                child: LiquidGlassChrome(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (hasTrack) ...<Widget>[
+                        Semantics(
+                          container: true,
+                          explicitChildNodes: true,
+                          child: LiquidGlassPanel(
+                            child: LegacyPlayerBar(
+                              state: state,
+                              compact: true,
+                              framed: false,
+                              comments: _comments,
+                              onComments: _toggleComments,
+                              onOpen: _openNowPlaying,
+                            ),
+                          ),
+                        ),
+                        const IgnorePointer(
+                          child: SizedBox(height: LiquidGlassMetrics.barGap),
+                        ),
+                      ],
                       Semantics(
                         container: true,
                         explicitChildNodes: true,
                         child: LiquidGlassPanel(
-                          child: LegacyPlayerBar(
-                            state: state,
-                            compact: true,
-                            framed: false,
-                            comments: _comments,
-                            onComments: _toggleComments,
-                            onOpen: _openNowPlaying,
+                          child: LiquidGlassNavBar(
+                            selectedIndex: _section.index,
+                            onDestinationSelected: (int index) =>
+                                _select(_LegacySection.values[index]),
+                            destinations: <LiquidGlassDestination>[
+                              LiquidGlassDestination(
+                                icon: Icons.home_outlined,
+                                selectedIcon: Icons.home_rounded,
+                                label: context.tr('主页'),
+                              ),
+                              LiquidGlassDestination(
+                                icon: Icons.search_outlined,
+                                selectedIcon: Icons.search_rounded,
+                                label: context.tr('搜索'),
+                              ),
+                              LiquidGlassDestination(
+                                icon: Icons.library_music_outlined,
+                                selectedIcon: Icons.library_music_rounded,
+                                label: context.tr('音乐库'),
+                              ),
+                              LiquidGlassDestination(
+                                icon: Icons.favorite_border_rounded,
+                                selectedIcon: Icons.favorite_rounded,
+                                label: context.tr('我喜欢'),
+                              ),
+                              LiquidGlassDestination(
+                                icon: Icons.settings_outlined,
+                                selectedIcon: Icons.settings_rounded,
+                                label: context.tr('设置'),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const IgnorePointer(
-                        child: SizedBox(height: LiquidGlassMetrics.barGap),
-                      ),
                     ],
-                    Semantics(
-                      container: true,
-                      explicitChildNodes: true,
-                      child: LiquidGlassPanel(
-                        child: LiquidGlassNavBar(
-                          selectedIndex: _section.index,
-                          onDestinationSelected: (int index) =>
-                              _select(_LegacySection.values[index]),
-                          destinations: <LiquidGlassDestination>[
-                            LiquidGlassDestination(
-                              icon: Icons.home_outlined,
-                              selectedIcon: Icons.home_rounded,
-                              label: context.tr('主页'),
-                            ),
-                            LiquidGlassDestination(
-                              icon: Icons.search_outlined,
-                              selectedIcon: Icons.search_rounded,
-                              label: context.tr('搜索'),
-                            ),
-                            LiquidGlassDestination(
-                              icon: Icons.library_music_outlined,
-                              selectedIcon: Icons.library_music_rounded,
-                              label: context.tr('音乐库'),
-                            ),
-                            LiquidGlassDestination(
-                              icon: Icons.favorite_border_rounded,
-                              selectedIcon: Icons.favorite_rounded,
-                              label: context.tr('我喜欢'),
-                            ),
-                            LiquidGlassDestination(
-                              icon: Icons.settings_outlined,
-                              selectedIcon: Icons.settings_rounded,
-                              label: context.tr('设置'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -1247,8 +1249,10 @@ class _LegacyShellState extends State<LegacyShell>
                 context.tr(_pageTitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(color: apple.label, fontWeight: FontWeight.w400),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: apple.label,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
           ],
@@ -1284,8 +1288,10 @@ class _LegacyShellState extends State<LegacyShell>
                 context.tr(_pageTitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(color: apple.label, fontWeight: FontWeight.w400),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: apple.label,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
             _ToolbarButton(
@@ -1345,8 +1351,9 @@ class _LegacyShellState extends State<LegacyShell>
           padding: const EdgeInsets.fromLTRB(9, 5, 9, 8),
           child: Text(
             context.tr(state.isGuest ? '登录后同步你的歌单' : '暂无歌单'),
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: apple.tertiaryLabel),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: apple.tertiaryLabel),
           ),
         ),
       );
@@ -1394,8 +1401,9 @@ class _LegacyShellState extends State<LegacyShell>
         state.isGuest
             ? context.tr('游客模式')
             : '${state.user.name} · ${context.tr(state.user.vipLabel ?? '普通用户')}',
-        style: Theme.of(context).textTheme.bodySmall
-            ?.copyWith(color: apple.secondaryLabel),
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
       ),
     ),
     if (state.isGuest)
@@ -1452,8 +1460,9 @@ class _LegacyShellState extends State<LegacyShell>
                     detail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: apple.secondaryLabel),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: apple.secondaryLabel,
+                    ),
                   ),
                 ],
               ),
@@ -1759,8 +1768,10 @@ class _Avatar extends StatelessWidget {
           ? Icon(Icons.person_rounded, size: radius * 1.15, color: Colors.white)
           : Text(
               context.tr(label),
-              style: Theme.of(context).textTheme.labelMedium
-                  ?.copyWith(color: Colors.white, fontWeight: FontWeight.w400),
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w400,
+              ),
             ),
     );
     return Container(
@@ -1787,17 +1798,21 @@ class _Avatar extends StatelessWidget {
               width: radius * 2,
               height: radius * 2,
               gaplessPlayback: true,
-              frameBuilder: (
-                BuildContext context,
-                Widget child,
-                int? frame,
-                bool wasSynchronouslyLoaded,
-              ) => wasSynchronouslyLoaded || frame != null ? child : fallback,
-              errorBuilder: (
-                BuildContext context,
-                Object error,
-                StackTrace? stackTrace,
-              ) => fallback,
+              frameBuilder:
+                  (
+                    BuildContext context,
+                    Widget child,
+                    int? frame,
+                    bool wasSynchronouslyLoaded,
+                  ) => wasSynchronouslyLoaded || frame != null
+                  ? child
+                  : fallback,
+              errorBuilder:
+                  (
+                    BuildContext context,
+                    Object error,
+                    StackTrace? stackTrace,
+                  ) => fallback,
             ),
     );
   }

@@ -11,6 +11,8 @@ import 'package:lazer_nextgen/data/audio_quality.dart';
 import 'package:lazer_nextgen/data/catalog.dart';
 import 'package:lazer_nextgen/data/models.dart';
 import 'package:lazer_nextgen/gateway/gateway.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+
 import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
 import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/player/now_playing_page.dart';
@@ -198,18 +200,11 @@ void main() {
       ),
     );
 
-    final Iterable<DecoratedBox> lenses = tester.widgetList<DecoratedBox>(
-      find.descendant(
-        of: find.byType(LiquidGlassNavBar),
-        matching: find.byType(DecoratedBox),
-      ),
+    expect(
+      find.byKey(LiquidGlassNavBar.selectionKey),
+      findsOneWidget,
+      reason: 'the selected tab is its own refracting lens',
     );
-    expect(lenses, isNotEmpty);
-    for (final DecoratedBox lens in lenses) {
-      final Decoration decoration = lens.decoration;
-      expect(decoration, isA<BoxDecoration>());
-      expect((decoration as BoxDecoration).border, isNull);
-    }
 
     expect(
       Theme.of(tester.element(find.byType(LegacyShell))).brightness,
@@ -307,4 +302,183 @@ void main() {
     expect(state.position, greaterThan(Duration.zero));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('clear glass bends a busy backdrop when Flutter GPU is on', (
+    tester,
+  ) async {
+    await tester.runAsync(LiquidGlass.precache);
+    for (final Brightness brightness in <Brightness>[
+      Brightness.dark,
+      Brightness.light,
+    ]) {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewPadding = const FakeViewPadding(top: 47, bottom: 34);
+      tester.view.padding = const FakeViewPadding(top: 47, bottom: 34);
+      final _Engine engine = _Engine();
+      addTearDown(engine.dispose);
+      final AppState state = AppState(catalog: _Catalog(), audioEngine: engine);
+      addTearDown(state.dispose);
+      state.playQueue(const <Track>[_first]);
+      await tester.pumpWidget(_refractionApp(state, brightness: brightness));
+      // The renderer paints its fallback until the GPU shaders are ready.
+      for (var frame = 0; frame < 40; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      if (find.byType(FakeGlass).evaluate().isNotEmpty) {
+        if (state.playing) state.togglePlay();
+        await tester.pump();
+        markTestSkipped(
+          'Flutter GPU is off, so liquid_glass_renderer paints FakeGlass',
+        );
+        return;
+      }
+      expect(find.byType(FakeGlass), findsNothing);
+      expect(find.byType(LiquidGlassPanel), findsNWidgets(2));
+      final Rect music = tester.getRect(find.byType(LegacyPlayerBar));
+      final Rect nav = tester.getRect(find.byType(LiquidGlassNavBar));
+      expect(music.bottom, lessThan(nav.top));
+      await _capture(
+        tester,
+        brightness == Brightness.dark ? 'refract-dark' : 'refract-light',
+      );
+      if (state.playing) state.togglePlay();
+      await tester.pump();
+    }
+    addTearDown(tester.view.reset);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+Widget _refractionApp(AppState state, {required Brightness brightness}) {
+  final ThemeData theme = buildLegacyTheme(brightness: brightness);
+  return MaterialApp(
+    theme: theme,
+    darkTheme: theme,
+    themeMode: brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+    home: Scaffold(
+      body: RepaintBoundary(
+        key: const ValueKey<String>('chrome-shot'),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            CustomPaint(
+              painter: _BusyBackdropPainter(
+                dark: brightness == Brightness.dark,
+              ),
+            ),
+            Positioned(
+              left: LiquidGlassMetrics.sideMargin,
+              right: LiquidGlassMetrics.sideMargin,
+              bottom: 34,
+              child: LiquidGlassChrome(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    LiquidGlassPanel(
+                      child: LegacyPlayerBar(
+                        state: state,
+                        compact: true,
+                        framed: false,
+                        onOpen: () {},
+                      ),
+                    ),
+                    const SizedBox(height: LiquidGlassMetrics.barGap),
+                    LiquidGlassPanel(
+                      child: LiquidGlassNavBar(
+                        selectedIndex: 0,
+                        onDestinationSelected: (_) {},
+                        destinations: const <LiquidGlassDestination>[
+                          LiquidGlassDestination(
+                            icon: Icons.home_outlined,
+                            selectedIcon: Icons.home_rounded,
+                            label: '主页',
+                          ),
+                          LiquidGlassDestination(
+                            icon: Icons.search_outlined,
+                            selectedIcon: Icons.search_rounded,
+                            label: '搜索',
+                          ),
+                          LiquidGlassDestination(
+                            icon: Icons.library_music_outlined,
+                            selectedIcon: Icons.library_music_rounded,
+                            label: '音乐库',
+                          ),
+                          LiquidGlassDestination(
+                            icon: Icons.favorite_border_rounded,
+                            selectedIcon: Icons.favorite_rounded,
+                            label: '我喜欢',
+                          ),
+                          LiquidGlassDestination(
+                            icon: Icons.settings_outlined,
+                            selectedIcon: Icons.settings_rounded,
+                            label: '设置',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _BusyBackdropPainter extends CustomPainter {
+  const _BusyBackdropPainter({required this.dark});
+
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect rect = Offset.zero & size;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            Color(0xFF1B1035),
+            Color(0xFF0E4D5C),
+            Color(0xFFB4334A),
+            Color(0xFFE6B15A),
+          ],
+        ).createShader(rect),
+    );
+    final List<Color> inks = <Color>[
+      const Color(0xFF7C5CFF),
+      const Color(0xFF2EE6A6),
+      const Color(0xFFFF5D8F),
+      const Color(0xFF3D7EFF),
+      const Color(0xFFFFC857),
+    ];
+    for (int i = 0; i < 18; i++) {
+      final double x = size.width * ((i * 37) % 100) / 100;
+      final double y = size.height * ((i * 53) % 100) / 100;
+      canvas.drawCircle(
+        Offset(x, y),
+        28 + (i % 5) * 16,
+        Paint()
+          ..color = inks[i % inks.length].withValues(alpha: dark ? .85 : .7),
+      );
+    }
+    for (int i = 0; i < 8; i++) {
+      canvas.drawLine(
+        Offset(0, size.height * i / 7),
+        Offset(size.width, size.height * (i + 2) / 9),
+        Paint()
+          ..color = const Color(0x66FFFFFF)
+          ..strokeWidth = 3,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BusyBackdropPainter oldDelegate) =>
+      oldDelegate.dark != dark;
 }
