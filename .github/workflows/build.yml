@@ -74,18 +74,19 @@ jobs:
     needs: check
     strategy:
       fail-fast: false
-      # This account is given one macOS arm64 runner at a time. A second
-      # macos-15 job is dropped instead of queued.
+      # macos-15 (Apple Silicon) is not acquiring runners for this
+      # repository. Build every Mac slice on the Intel runner, one job at
+      # a time, and cross-compile the arm64 slice with Xcode.
       max-parallel: 1
       matrix:
         include:
           - arch: universal
-            runner: macos-15
-            flutter_arch: arm64
+            runner: macos-15-intel
+            flutter_arch: x64
             xcode_archs: 'arm64 x86_64'
           - arch: aarch64
-            runner: macos-15
-            flutter_arch: arm64
+            runner: macos-15-intel
+            flutter_arch: x64
             xcode_archs: arm64
           - arch: x86_64
             runner: macos-15-intel
@@ -257,7 +258,7 @@ jobs:
   ios:
     name: iOS unsigned IPA (arm64)
     needs: [check, macos]
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -268,6 +269,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+          architecture: x64
       - run: xcodebuild -version
       - run: flutter pub get --enforce-lockfile
       - run: flutter build ios --release --no-codesign --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }} --dart-define=LAZER_VERSION=${{ env.LAZER_VERSION }}
