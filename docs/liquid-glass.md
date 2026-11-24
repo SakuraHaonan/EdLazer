@@ -28,8 +28,8 @@ Full refraction needs Impeller and the preview Flutter GPU API. The
 package's own requirements (1.0.0-dev.2) test that path on iOS, Android and
 macOS. The engine enables Flutter GPU from `FLTEnableFlutterGPU` (iOS and
 macOS Info.plist) or `io.flutter.embedding.android.EnableFlutterGPU`
-(AndroidManifest). Those three switches are set. This repository does not
-ship an iOS package.
+(AndroidManifest). Those three switches are set. The unsigned iOS IPA is
+built with the same Info.plist switch.
 
 Flutter 3.47 turns Impeller on by default for Linux and Windows, but the
 embedder APIs that ship with that SDK (`fl_dart_project_set_enable_impeller`,

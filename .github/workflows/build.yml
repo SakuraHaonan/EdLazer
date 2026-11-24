@@ -80,6 +80,10 @@ jobs:
             runner: macos-15
             flutter_arch: arm64
             xcode_archs: 'arm64 x86_64'
+          - arch: aarch64
+            runner: macos-15
+            flutter_arch: arm64
+            xcode_archs: arm64
           - arch: x86_64
             runner: macos-15-intel
             flutter_arch: x64
@@ -247,10 +251,47 @@ jobs:
           compression-level: 0
           retention-days: 30
 
+  ios:
+    name: iOS unsigned IPA (arm64)
+    needs: check
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: xcodebuild -version
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build ios --release --no-codesign --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }} --dart-define=LAZER_VERSION=${{ env.LAZER_VERSION }}
+      - name: Create unsigned IPA with the required Payload directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d build/ios/iphoneos/Runner.app
+          mkdir -p dist/ios/Payload
+          ditto build/ios/iphoneos/Runner.app dist/ios/Payload/Runner.app
+          (cd dist/ios && zip -qry ../Lazer-iOS-aarch64.ipa Payload)
+          unzip -l dist/Lazer-iOS-aarch64.ipa | grep 'Payload/Runner.app/Info.plist'
+          (cd dist && shasum -a 256 Lazer-iOS-aarch64.ipa > Lazer-iOS-aarch64.ipa.sha256)
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Lazer-iOS-aarch64
+          path: |
+            dist/*.ipa
+            dist/*.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
   release:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, windows, macos, linux, android]
+    needs: [check, windows, macos, linux, android, ios]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:

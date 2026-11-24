@@ -102,15 +102,17 @@ flutter run
 | --- | --- |
 | `Lazer-Windows-x86_64.zip` | EXE、依赖库、资源与 Visual C++ 运行库 |
 | `Lazer-macOS-universal.zip` | Intel / Apple Silicon 通用 App |
+| `Lazer-macOS-aarch64.zip` | Apple Silicon App，使用原生 ARM runner 构建 |
 | `Lazer-macOS-x86_64.zip` | Intel App，使用原生 Intel runner 构建 |
 | `Lazer-Linux-x86_64.AppImage` | Linux x86_64，包含 GTK 与 libmpv |
 | `Lazer-Linux-aarch64.AppImage` | Linux ARM64，使用原生 ARM runner 构建 |
 | `Lazer-Android-universal.apk` | 通用 APK，使用当前开发签名 |
 | `Lazer-Android-arm64-v8a.apk` | 仅 arm64-v8a 的 APK，使用当前开发签名 |
+| `Lazer-iOS-aarch64.ipa` | 未签名的 iOS 真机 IPA |
 
 构建完成后，在对应运行页面的 **Artifacts** 中下载，需登录 GitHub，保留 30 天。
 Windows 请完整解压后运行；AppImage 下载后先 `chmod +x`；
-macOS 包使用 ad-hoc 签名。发布不包含 iOS 安装包。
+macOS 包使用 ad-hoc 签名。IPA 未签名，安装前需要自行签名。
 
 更多说明书：[构建说明](docs/builds.md) · [系统媒体控件](docs/system-media.md) · [正在播放](docs/now-playing.md) · [车机形态](docs/car-head-unit.md) · [大屏幕模式（Android TV）](docs/android-tv.md) · [扫码登录](docs/login-qr.md) · [验证码登录](docs/login-sms.md) · [旧版界面](docs/legacy-ui.md)
 

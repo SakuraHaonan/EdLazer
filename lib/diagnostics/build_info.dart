@@ -7,9 +7,9 @@
 /// display-only: the app does not compare them with a release feed.
 abstract final class BuildInfo {
   static const String _stamped = String.fromEnvironment('LAZER_COMMIT');
-  static const String _fallback = '63e673e';
+  static const String _fallback = '8a2ce07';
   static const String _stampedVersion = String.fromEnvironment('LAZER_VERSION');
-  static const String _fallbackVersion = '2.0.0-beta.14';
+  static const String _fallbackVersion = '2.0.0-beta.15';
 
   /// The full commit SHA the binary was built from.
   static String get commit => _stamped.isEmpty ? _fallback : _stamped;

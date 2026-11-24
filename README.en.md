@@ -105,16 +105,18 @@ The app does not check for updates and does not send installs to another reposit
 | --- | --- |
 | `Lazer-Windows-x86_64.zip` | EXE, DLLs, resources and Visual C++ runtime |
 | `Lazer-macOS-universal.zip` | Universal Intel / Apple Silicon App |
+| `Lazer-macOS-aarch64.zip` | Apple Silicon App built on a native ARM runner |
 | `Lazer-macOS-x86_64.zip` | Intel App built on a native Intel runner |
 | `Lazer-Linux-x86_64.AppImage` | Linux x86_64, including GTK and libmpv |
 | `Lazer-Linux-aarch64.AppImage` | Linux ARM64 built on a native ARM runner |
 | `Lazer-Android-universal.apk` | Universal APK using the current development signing configuration |
 | `Lazer-Android-arm64-v8a.apk` | arm64-v8a APK using the current development signing configuration |
+| `Lazer-iOS-aarch64.ipa` | Unsigned iOS device IPA |
 
 Download from a completed run's **Artifacts** section while signed in to GitHub;
 artifacts are retained for 30 days. Extract the complete Windows ZIP before
 launching its EXE, run `chmod +x` on a downloaded AppImage, and note that macOS
-Apps are ad-hoc signed. Releases do not include an iOS package.
+Apps are ad-hoc signed. The IPA is unsigned and needs your own signing before installation.
 
 More documentation: [build details](docs/builds.md) · [system media](docs/system-media.md) · [now playing](docs/now-playing.md) · [car head unit](docs/car-head-unit.md) · [large screen mode (Android TV)](docs/android-tv.md) · [QR sign-in](docs/login-qr.md) · [SMS sign-in](docs/login-sms.md) · [legacy UI](docs/legacy-ui.md)
 
