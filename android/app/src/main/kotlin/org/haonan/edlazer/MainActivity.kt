@@ -3,10 +3,8 @@ package org.haonan.edlazer
 import android.Manifest
 import android.app.UiModeManager
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -55,36 +53,6 @@ class MainActivity : AudioServiceActivity() {
                     else -> result.notImplemented()
                 }
             }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, UPDATES_CHANNEL)
-            .setMethodCallHandler { call, result ->
-                if (call.method != "openUrl") {
-                    result.notImplemented()
-                    return@setMethodCallHandler
-                }
-                val url = call.argument<String>("url")?.trim()
-                if (url.isNullOrEmpty()) {
-                    result.success(false)
-                    return@setMethodCallHandler
-                }
-                result.success(openInBrowser(url))
-            }
-    }
-
-    /// Opens a release page without carrying `url_launcher` just for one link.
-    private fun openInBrowser(url: String): Boolean = try {
-        val uri = Uri.parse(url)
-        if (uri.scheme != "https" && uri.scheme != "http") {
-            false
-        } else {
-            startActivity(
-                Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-            true
-        }
-    } catch (_: Exception) {
-        // A device without a browser is unusual but not an error worth crashing
-        // for; the update dialog still shows the URL as selectable text.
-        false
     }
 
     /// Whether this device is a television, so Dart can switch to the ten-foot
@@ -179,7 +147,6 @@ class MainActivity : AudioServiceActivity() {
         const val HAPTICS_CHANNEL = "org.haonan.edlazer/haptics"
         const val LOCAL_MEDIA_CHANNEL = "org.haonan.edlazer/local_media"
         const val TV_CHANNEL = "org.haonan.edlazer/tv"
-        const val UPDATES_CHANNEL = "org.haonan.edlazer/updates"
         const val TELEVISION_FEATURE = "android.hardware.type.television"
         const val PERMISSION_REQUEST = 4101
     }

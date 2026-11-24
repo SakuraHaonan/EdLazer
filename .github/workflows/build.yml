@@ -18,9 +18,9 @@ concurrency:
 env:
   FLUTTER_VERSION: '3.47.0'
   FLUTTER_REVISION: '4cf24164269a5ebf0c16a028a00727d0e77bbb05'
-  # Tag builds stamp the release version the update checker compares against;
-  # branch builds stamp the branch name, which BuildInfo rejects in favour of
-  # its pubspec fallback.
+  # Tag builds stamp the release version About displays. Branch builds stamp
+  # the branch name, which BuildInfo rejects in favour of its pubspec fallback.
+  # The binary does not compare this value with a release feed.
   LAZER_VERSION: ${{ github.ref_name }}
 
 jobs:
@@ -199,7 +199,7 @@ jobs:
     name: Android APK
     needs: check
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -215,53 +215,34 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build apk --release --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }} --dart-define=LAZER_VERSION=${{ env.LAZER_VERSION }}
-      - name: Package universal APK
+      - name: Build arm64-v8a APK
+        run: flutter build apk --release --no-pub --target-platform android-arm64 --dart-define=LAZER_COMMIT=${{ github.sha }} --dart-define=LAZER_VERSION=${{ env.LAZER_VERSION }}
+      - name: Package arm64-v8a APK
         run: |
           mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/Lazer-Android-arm64-v8a.apk
+          (cd dist && sha256sum Lazer-Android-arm64-v8a.apk > Lazer-Android-arm64-v8a.apk.sha256)
+      - name: Build universal APK
+        run: flutter build apk --release --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }} --dart-define=LAZER_VERSION=${{ env.LAZER_VERSION }}
+      - name: Package universal APK
+        run: |
           cp build/app/outputs/flutter-apk/app-release.apk dist/Lazer-Android-universal.apk
           (cd dist && sha256sum Lazer-Android-universal.apk > Lazer-Android-universal.apk.sha256)
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: Lazer-Android-universal
-          path: dist/*
+          name: Lazer-Android-arm64-v8a
+          path: |
+            dist/Lazer-Android-arm64-v8a.apk
+            dist/Lazer-Android-arm64-v8a.apk.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
-
-  ios:
-    name: iOS unsigned IPA (arm64)
-    needs: check
-    runs-on: macos-15
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: xcodebuild -version
-      - run: flutter pub get --enforce-lockfile
-      - run: flutter build ios --release --no-codesign --no-pub --dart-define=LAZER_COMMIT=${{ github.sha }} --dart-define=LAZER_VERSION=${{ env.LAZER_VERSION }}
-      - name: Create unsigned IPA with the required Payload directory
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -d build/ios/iphoneos/Runner.app
-          mkdir -p dist/ios/Payload
-          ditto build/ios/iphoneos/Runner.app dist/ios/Payload/Runner.app
-          (cd dist/ios && zip -qry ../Lazer-iOS-aarch64.ipa Payload)
-          unzip -l dist/Lazer-iOS-aarch64.ipa | grep 'Payload/Runner.app/Info.plist'
-          (cd dist && shasum -a 256 Lazer-iOS-aarch64.ipa > Lazer-iOS-aarch64.ipa.sha256)
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: Lazer-iOS-aarch64
+          name: Lazer-Android-universal
           path: |
-            dist/*.ipa
-            dist/*.sha256
+            dist/Lazer-Android-universal.apk
+            dist/Lazer-Android-universal.apk.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
@@ -269,7 +250,7 @@ jobs:
   release:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, windows, macos, linux, android, ios]
+    needs: [check, windows, macos, linux, android]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:

@@ -9,7 +9,6 @@ import 'package:flutter/material.dart' show Color, ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../audio/audio_engine.dart';
-import '../diagnostics/build_info.dart';
 import '../downloads/download_manager.dart';
 import '../interaction/app_haptics.dart';
 import '../data/audio_quality.dart';
@@ -23,8 +22,6 @@ import '../gateway/gateway.dart';
 import '../gateway/transport.dart';
 import '../lyrics/imported_lyrics_store.dart';
 import '../lyrics/lyric_quality.dart';
-import '../updates/release_version.dart';
-import '../updates/update_checker.dart';
 import '../utils/background_image.dart';
 import 'build_safe_notifier.dart';
 import 'listen_together.dart';
@@ -127,14 +124,12 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     LocalLibrary? localLibrary,
     DownloadManager? downloadManager,
     ImportedLyricsStore? importedLyrics,
-    UpdateChecker? updateChecker,
     this.audioEngine,
     this._independentPlayback = false,
     this.enableExternalCharts = false,
     this.deviceIsTelevision = false,
   }) : catalog = catalog ?? Catalog(),
-       localLibrary = localLibrary ?? LocalLibrary(),
-       updateChecker = updateChecker ?? UpdateChecker() {
+       localLibrary = localLibrary ?? LocalLibrary() {
     this.importedLyrics = importedLyrics ?? ImportedLyricsStore();
     this.downloadManager =
         downloadManager ??
@@ -158,92 +153,6 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   /// TELEVISION` / no touch screen). It selects the television profile in
   /// automatic mode and turns every tap target into a D-pad focus stop.
   final bool deviceIsTelevision;
-
-  /// Finds newer GitHub releases for this build.
-  final UpdateChecker updateChecker;
-
-  /// How often a launch may ask GitHub for a new release. A daily cadence
-  /// keeps the unauthenticated API comfortably inside its rate limit and
-  /// avoids a network round trip on every start.
-  static const Duration updateCheckInterval = Duration(hours: 24);
-
-  /// Whether a release check is in flight.
-  bool updateChecking = false;
-
-  /// Why the last check failed, if it did. Cleared when a new check starts.
-  String? updateError;
-
-  /// The normalised version the user asked not to be reminded about again.
-  String? skippedUpdateVersion;
-
-  /// When the last successful check happened, in milliseconds since epoch.
-  int updateCheckedAt = 0;
-
-  /// Whether an automatic check is due for [now].
-  bool autoUpdateCheckDue({DateTime? now}) {
-    final DateTime moment = now ?? DateTime.now();
-    if (updateCheckedAt <= 0) return true;
-    return moment.millisecondsSinceEpoch - updateCheckedAt >=
-        updateCheckInterval.inMilliseconds;
-  }
-
-  /// Asks GitHub for a newer release.
-  ///
-  /// Returns null when the build is current, when an automatic check is not
-  /// due, when the newest release was skipped, or when the network failed
-  /// ([updateError] then says why). A [manual] check ignores both the daily
-  /// cadence and a previous skip, because the user explicitly asked.
-  Future<AppRelease?> checkForUpdates({bool manual = false}) async {
-    if (updateChecking) return null;
-    if (!manual && !autoUpdateCheckDue()) return null;
-    final ReleaseVersion? current = ReleaseVersion.parse(BuildInfo.version);
-    if (current == null) {
-      updateError = 'unsupported current version';
-      notifyListeners();
-      return null;
-    }
-    updateChecking = true;
-    updateError = null;
-    notifyListeners();
-    try {
-      final AppRelease? release = await updateChecker.findUpdate(
-        current,
-        includePrerelease: current.isPreRelease,
-      );
-      updateCheckedAt = DateTime.now().millisecondsSinceEpoch;
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('lazer_update_checked_at', updateCheckedAt);
-      if (release == null) return null;
-      final String? skipped = skippedUpdateVersion;
-      if (!manual && skipped != null && release.version.normalized == skipped) {
-        return null;
-      }
-      return release;
-    } catch (error) {
-      updateError = '$error';
-      return null;
-    } finally {
-      updateChecking = false;
-      notifyListeners();
-    }
-  }
-
-  /// Stops automatic reminders for [release]; a later release still prompts.
-  Future<void> skipUpdate(AppRelease release) async {
-    skippedUpdateVersion = release.version.normalized;
-    notifyListeners();
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('lazer_skipped_update', skippedUpdateVersion!);
-  }
-
-  /// Clears a previous skip, so the next automatic check prompts again.
-  Future<void> clearSkippedUpdate() async {
-    if (skippedUpdateVersion == null) return;
-    skippedUpdateVersion = null;
-    notifyListeners();
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('lazer_skipped_update');
-  }
 
   /// Downloaded and scanned files, shared by playback, downloads and the
   /// library page.
@@ -904,6 +813,11 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   Future<void> bootstrap() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // The in-app updater is gone. Drop its leftover keys so an older
+      // install does not keep a skipped-version record. Music preferences
+      // are not touched.
+      await prefs.remove('lazer_skipped_update');
+      await prefs.remove('lazer_update_checked_at');
       _independentPlayback =
           prefs.getBool('lazer_independent_playback') ?? _independentPlayback;
       hapticsEnabled = prefs.getBool('lazer_haptics') ?? true;
@@ -1002,8 +916,6 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
               );
       lyricResumeSeconds = (prefs.getDouble('lazer_lyric_resume_seconds') ?? 2)
           .clamp(1, 10);
-      skippedUpdateVersion = prefs.getString('lazer_skipped_update');
-      updateCheckedAt = prefs.getInt('lazer_update_checked_at') ?? 0;
       _restorePlayUploads(prefs);
     } catch (_) {}
     // Apply interaction preferences before session and catalogue requests.

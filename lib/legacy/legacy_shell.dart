@@ -16,8 +16,6 @@ import '../tv/large_screen_chrome.dart';
 import '../tv/large_screen_pages.dart';
 import '../tv/large_screen_widgets.dart';
 import '../tv/tv_mode.dart';
-import '../updates/update_checker.dart';
-import '../updates/update_dialog.dart';
 import '../utils/artwork.dart';
 import '../widgets/apple_ui.dart';
 import '../widgets/liquid_glass.dart';
@@ -37,24 +35,15 @@ import 'legacy_widgets.dart';
 /// The app shell, rebuilt around Apple's adaptive navigation model.
 ///
 /// Desktop gets a translucent source-list sidebar, a content toolbar and the
-/// full transport, while phones get an inline navigation bar, the iOS tab bar
-/// and a floating mini-player. Both compositions share one content tree, one
-/// search page and one set of playback controls, so switching layouts never
-/// loses context.
+/// full transport. Phones get an inline navigation bar plus two independent
+/// liquid-glass capsules: the mini player above the tab bar, with a gap of
+/// page between them. Both compositions share one content tree, one search
+/// page and one set of playback controls, so switching layouts never loses
+/// context.
 class LegacyShell extends StatefulWidget {
-  const LegacyShell({
-    super.key,
-    required this.state,
-    this.autoCheckUpdates = false,
-  });
+  const LegacyShell({super.key, required this.state});
 
   final AppState state;
-
-  /// Whether to look for a newer release shortly after startup.
-  ///
-  /// Only production enables this: widget tests pump the shell directly and
-  /// must not spawn network work or a pending timer.
-  final bool autoCheckUpdates;
 
   @override
   State<LegacyShell> createState() => _LegacyShellState();
@@ -160,26 +149,6 @@ class _LegacyShellState extends State<LegacyShell>
     albumDetailRequest.addListener(_onAlbumRequest);
     artistDetailRequest.addListener(_onArtistRequest);
     TvOverlayStack.instance.addListener(_onTvOverlayChanged);
-    if (widget.autoCheckUpdates) {
-      _updateTimer = Timer(
-        const Duration(seconds: 4),
-        () => unawaited(_checkForUpdates()),
-      );
-    }
-  }
-
-  Timer? _updateTimer;
-
-  /// Gives the catalogue time to land before talking to GitHub. A failure is
-  /// already silent inside [AppState]; a found release opens the same prompt
-  /// the settings button uses.
-  Future<void> _checkForUpdates() async {
-    final AppRelease? release = await state.checkForUpdates();
-    if (!mounted || release == null) return;
-    // A dialog the user already opened (login, update, …) keeps the stage.
-    final ModalRoute<dynamic>? route = ModalRoute.of(context);
-    if (route != null && !route.isCurrent) return;
-    await showUpdateDialog(context, state, release);
   }
 
   bool _overlayRefreshScheduled = false;
@@ -354,7 +323,6 @@ class _LegacyShellState extends State<LegacyShell>
 
   @override
   void dispose() {
-    _updateTimer?.cancel();
     state.removeListener(_onAppStateChanged);
     _playerSettled.dispose();
     _repaint.dispose();
@@ -996,11 +964,13 @@ class _LegacyShellState extends State<LegacyShell>
 
   Widget _compactLayout(AppleSemanticColors apple, {required bool compactBar}) {
     final bool hasTrack = state.current != null;
-    // One floating liquid-glass dock holds the mini player and the tabs, so
-    // the whole bottom bar costs a single backdrop blur.
-    final double dockHeight =
-        LiquidGlassMetrics.navHeight +
-        (hasTrack ? LegacyPlayerBar.contentHeight(compact: true) + .5 : 0);
+    // Two capsules, each with its own backdrop. The music bar floats above
+    // the tabs; the gap between them is empty so the page shows through.
+    final double musicHeight = hasTrack
+        ? LegacyPlayerBar.contentHeight(compact: true)
+        : 0;
+    final double gap = hasTrack ? LiquidGlassMetrics.barGap : 0;
+    final double dockHeight = musicHeight + gap + LiquidGlassMetrics.navHeight;
     final double dockInset =
         dockHeight +
         LiquidGlassMetrics.bottomGap(context) +
@@ -1020,59 +990,67 @@ class _LegacyShellState extends State<LegacyShell>
                 left: LiquidGlassMetrics.sideMargin,
                 right: LiquidGlassMetrics.sideMargin,
                 bottom: LiquidGlassMetrics.bottomGap(context),
-                child: LiquidGlassPanel(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      if (hasTrack) ...<Widget>[
-                        LegacyPlayerBar(
-                          state: state,
-                          compact: true,
-                          framed: false,
-                          comments: _comments,
-                          onComments: _toggleComments,
-                          onOpen: _openNowPlaying,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (hasTrack) ...<Widget>[
+                      Semantics(
+                        container: true,
+                        explicitChildNodes: true,
+                        child: LiquidGlassPanel(
+                          child: LegacyPlayerBar(
+                            state: state,
+                            compact: true,
+                            framed: false,
+                            comments: _comments,
+                            onComments: _toggleComments,
+                            onOpen: _openNowPlaying,
+                          ),
                         ),
-                        Container(
-                          height: .5,
-                          margin: const EdgeInsets.symmetric(horizontal: 16),
-                          color: apple.separator.withValues(alpha: .5),
-                        ),
-                      ],
-                      LiquidGlassNavBar(
-                        selectedIndex: _section.index,
-                        onDestinationSelected: (int index) =>
-                            _select(_LegacySection.values[index]),
-                        destinations: <LiquidGlassDestination>[
-                          LiquidGlassDestination(
-                            icon: Icons.home_outlined,
-                            selectedIcon: Icons.home_rounded,
-                            label: context.tr('主页'),
-                          ),
-                          LiquidGlassDestination(
-                            icon: Icons.search_outlined,
-                            selectedIcon: Icons.search_rounded,
-                            label: context.tr('搜索'),
-                          ),
-                          LiquidGlassDestination(
-                            icon: Icons.library_music_outlined,
-                            selectedIcon: Icons.library_music_rounded,
-                            label: context.tr('音乐库'),
-                          ),
-                          LiquidGlassDestination(
-                            icon: Icons.favorite_border_rounded,
-                            selectedIcon: Icons.favorite_rounded,
-                            label: context.tr('我喜欢'),
-                          ),
-                          LiquidGlassDestination(
-                            icon: Icons.settings_outlined,
-                            selectedIcon: Icons.settings_rounded,
-                            label: context.tr('设置'),
-                          ),
-                        ],
+                      ),
+                      const IgnorePointer(
+                        child: SizedBox(height: LiquidGlassMetrics.barGap),
                       ),
                     ],
-                  ),
+                    Semantics(
+                      container: true,
+                      explicitChildNodes: true,
+                      child: LiquidGlassPanel(
+                        child: LiquidGlassNavBar(
+                          selectedIndex: _section.index,
+                          onDestinationSelected: (int index) =>
+                              _select(_LegacySection.values[index]),
+                          destinations: <LiquidGlassDestination>[
+                            LiquidGlassDestination(
+                              icon: Icons.home_outlined,
+                              selectedIcon: Icons.home_rounded,
+                              label: context.tr('主页'),
+                            ),
+                            LiquidGlassDestination(
+                              icon: Icons.search_outlined,
+                              selectedIcon: Icons.search_rounded,
+                              label: context.tr('搜索'),
+                            ),
+                            LiquidGlassDestination(
+                              icon: Icons.library_music_outlined,
+                              selectedIcon: Icons.library_music_rounded,
+                              label: context.tr('音乐库'),
+                            ),
+                            LiquidGlassDestination(
+                              icon: Icons.favorite_border_rounded,
+                              selectedIcon: Icons.favorite_rounded,
+                              label: context.tr('我喜欢'),
+                            ),
+                            LiquidGlassDestination(
+                              icon: Icons.settings_outlined,
+                              selectedIcon: Icons.settings_rounded,
+                              label: context.tr('设置'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1269,10 +1247,8 @@ class _LegacyShellState extends State<LegacyShell>
                 context.tr(_pageTitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: apple.label,
-                  fontWeight: FontWeight.w400,
-                ),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(color: apple.label, fontWeight: FontWeight.w400),
               ),
             ),
           ],
@@ -1308,10 +1284,8 @@ class _LegacyShellState extends State<LegacyShell>
                 context.tr(_pageTitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: apple.label,
-                  fontWeight: FontWeight.w400,
-                ),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(color: apple.label, fontWeight: FontWeight.w400),
               ),
             ),
             _ToolbarButton(
@@ -1371,9 +1345,8 @@ class _LegacyShellState extends State<LegacyShell>
           padding: const EdgeInsets.fromLTRB(9, 5, 9, 8),
           child: Text(
             context.tr(state.isGuest ? '登录后同步你的歌单' : '暂无歌单'),
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: apple.tertiaryLabel),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: apple.tertiaryLabel),
           ),
         ),
       );
@@ -1421,9 +1394,8 @@ class _LegacyShellState extends State<LegacyShell>
         state.isGuest
             ? context.tr('游客模式')
             : '${state.user.name} · ${context.tr(state.user.vipLabel ?? '普通用户')}',
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: apple.secondaryLabel),
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: apple.secondaryLabel),
       ),
     ),
     if (state.isGuest)
@@ -1480,9 +1452,8 @@ class _LegacyShellState extends State<LegacyShell>
                     detail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: apple.secondaryLabel,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: apple.secondaryLabel),
                   ),
                 ],
               ),
@@ -1788,10 +1759,8 @@ class _Avatar extends StatelessWidget {
           ? Icon(Icons.person_rounded, size: radius * 1.15, color: Colors.white)
           : Text(
               context.tr(label),
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w400,
-              ),
+              style: Theme.of(context).textTheme.labelMedium
+                  ?.copyWith(color: Colors.white, fontWeight: FontWeight.w400),
             ),
     );
     return Container(
@@ -1818,21 +1787,17 @@ class _Avatar extends StatelessWidget {
               width: radius * 2,
               height: radius * 2,
               gaplessPlayback: true,
-              frameBuilder:
-                  (
-                    BuildContext context,
-                    Widget child,
-                    int? frame,
-                    bool wasSynchronouslyLoaded,
-                  ) => wasSynchronouslyLoaded || frame != null
-                  ? child
-                  : fallback,
-              errorBuilder:
-                  (
-                    BuildContext context,
-                    Object error,
-                    StackTrace? stackTrace,
-                  ) => fallback,
+              frameBuilder: (
+                BuildContext context,
+                Widget child,
+                int? frame,
+                bool wasSynchronouslyLoaded,
+              ) => wasSynchronouslyLoaded || frame != null ? child : fallback,
+              errorBuilder: (
+                BuildContext context,
+                Object error,
+                StackTrace? stackTrace,
+              ) => fallback,
             ),
     );
   }

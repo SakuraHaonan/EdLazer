@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+
 import 'l10n/app_localizations.dart';
+
 import 'package:flutter/foundation.dart'
     show LicenseRegistry, LicenseEntryWithLineBreaks;
 import 'package:flutter/services.dart' show rootBundle;
@@ -227,11 +229,7 @@ class _LazerAppState extends State<LazerApp> {
         // no gate, no home swap to churn the accessibility tree.
         home: MediaShortcutListener(
           state: _state,
-          child: LegacyShell(
-            key: const ValueKey('legacy'),
-            state: _state,
-            autoCheckUpdates: true,
-          ),
+          child: LegacyShell(key: const ValueKey('legacy'), state: _state),
         ),
       ),
     );
