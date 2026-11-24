@@ -24,14 +24,32 @@ is a second, smaller layer using the example tab bar's loupe settings
 slides on EdLazer's critically damped curve. The example's bouncy spring
 is not used.
 
-Full refraction needs Impeller and Flutter GPU:
+Full refraction needs Impeller and the preview Flutter GPU API. The
+package's own requirements (1.0.0-dev.2) test that path on iOS, Android and
+macOS. The engine enables Flutter GPU from `FLTEnableFlutterGPU` (iOS and
+macOS Info.plist) or `io.flutter.embedding.android.EnableFlutterGPU`
+(AndroidManifest). Those three switches are set. This repository does not
+ship an iOS package.
 
-- Android: `EnableImpeller` and `EnableFlutterGPU` in the manifest.
-- macOS: `FLTEnableImpeller` and `FLTEnableFlutterGPU`.
-- iOS source: `FLTEnableFlutterGPU` (the app does not ship an iOS package).
+Flutter 3.47 turns Impeller on by default for Linux and Windows, but the
+embedder APIs that ship with that SDK (`fl_dart_project_set_enable_impeller`,
+`DartProject::set_impeller_switch`) have no Flutter GPU switch. A release
+AppImage or Windows zip therefore cannot turn the 1.0 renderer on.
+`flutter test` and `flutter run` can pass `--enable-flutter-gpu`; that flag
+is not baked into those two binaries. Where Flutter GPU is off, this package
+paints `FakeGlass`. That path keeps frost, tint and the rim, and it does
+not refract. It is not the same effect.
 
-Linux and Windows builds do not have that manifest switch. On those
-desktops, and in `flutter test` without `--enable-impeller
---enable-flutter-gpu`, the package paints `FakeGlass`: the same silhouette
-without the bend. High contrast uses the regular preset at full tint so
-the labels stay readable.
+Checked alternatives, none of which add genuine backdrop refraction to the
+Windows and Linux binaries:
+
+- `liquid_glass_renderer` 0.2.x was replaced by this 1.0 rewrite. The
+  current maintained line is the Flutter GPU one.
+- `liquid_glass_widgets` (MIT) documents Windows and Linux as the
+  lightweight `GlassQuality.standard` shader. Its own docs say that shader
+  does not refract arbitrary content behind the glass the way
+  `GlassQuality.premium` does, and the adaptive default caps those two
+  desktops to standard.
+
+High contrast uses the regular preset at full tint so the labels stay
+readable.

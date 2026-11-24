@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lazer_nextgen/audio/audio_engine.dart';
 import 'package:lazer_nextgen/data/audio_quality.dart';
@@ -18,6 +19,7 @@ import 'package:lazer_nextgen/legacy/legacy_shell.dart';
 import 'package:lazer_nextgen/player/now_playing_page.dart';
 import 'package:lazer_nextgen/legacy/legacy_theme.dart';
 import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:lazer_nextgen/state/ui_preferences.dart';
 import 'package:lazer_nextgen/widgets/liquid_glass.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -151,7 +153,35 @@ Future<void> _capture(WidgetTester tester, String name) async {
   });
 }
 
+Future<void> _loadScreenshotFonts() async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  final FontLoader miSans = FontLoader('MiSans');
+  for (final String name in <String>[
+    'MiSans-Light.ttf',
+    'MiSans-Normal.ttf',
+    'MiSans-Regular.ttf',
+    'MiSans-Medium.ttf',
+    'MiSans-Semibold.ttf',
+    'MiSans-Bold.ttf',
+  ]) {
+    miSans.addFont(rootBundle.load('assets/fonts/$name'));
+  }
+  await miSans.load();
+  final String? root = Platform.environment['FLUTTER_ROOT'];
+  final File icons = File(
+    '${root ?? ''}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+  );
+  if (!icons.existsSync()) {
+    throw StateError('MaterialIcons font not found at ${icons.path}');
+  }
+  final Uint8List bytes = await icons.readAsBytes();
+  final FontLoader material = FontLoader('MaterialIcons')
+    ..addFont(Future<ByteData>.value(ByteData.sublistView(bytes)));
+  await material.load();
+}
+
 void main() {
+  setUpAll(_loadScreenshotFonts);
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
   testWidgets('phone music and navigation bars float separately', (
@@ -165,7 +195,8 @@ void main() {
 
     final _Engine engine = _Engine();
     addTearDown(engine.dispose);
-    final AppState state = AppState(catalog: _Catalog(), audioEngine: engine);
+    final AppState state = AppState(catalog: _Catalog(), audioEngine: engine)
+      ..legacyBackground = LegacyBackgroundMode.nowPlayingStatic;
     addTearDown(state.dispose);
     await tester.pumpWidget(_app(state, brightness: Brightness.dark));
     await tester.pump();
@@ -210,7 +241,10 @@ void main() {
       Theme.of(tester.element(find.byType(LegacyShell))).brightness,
       Brightness.dark,
     );
-    await _capture(tester, 'phone-dark');
+    for (var frame = 0; frame < 24; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await _capture(tester, 'app-phone-dark');
 
     await tester.tap(find.text('搜索'));
     await tester.pump();
@@ -258,10 +292,13 @@ void main() {
     addTearDown(engine.dispose);
     final AppState state = AppState(catalog: _Catalog(), audioEngine: engine);
     addTearDown(state.dispose);
-    state.playQueue(const <Track>[_first, _second]);
+    state
+      ..legacyBackground = LegacyBackgroundMode.nowPlayingStatic
+      ..playQueue(const <Track>[_first, _second]);
     await tester.pumpWidget(_app(state, brightness: Brightness.light));
-    await tester.pump();
-    await tester.pump();
+    for (var frame = 0; frame < 24; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     expect(
       Theme.of(tester.element(find.byType(LegacyShell))).brightness,
       Brightness.light,
@@ -273,7 +310,7 @@ void main() {
       music.bottom,
       lessThanOrEqualTo(nav.top - LiquidGlassMetrics.barGap + 0.5),
     );
-    await _capture(tester, 'phone-light');
+    await _capture(tester, 'app-phone-light');
     if (state.playing) state.togglePlay();
     await tester.pump();
     expect(tester.takeException(), isNull);
@@ -340,7 +377,9 @@ void main() {
       expect(music.bottom, lessThan(nav.top));
       await _capture(
         tester,
-        brightness == Brightness.dark ? 'refract-dark' : 'refract-light',
+        brightness == Brightness.dark
+            ? 'diagnostic-circles-dark'
+            : 'diagnostic-circles-light',
       );
       if (state.playing) state.togglePlay();
       await tester.pump();
