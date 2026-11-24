@@ -55,6 +55,8 @@ themselves. See [updates.md](updates.md).
 - Windows uses `windows-2022`.
 - macOS universal and Apple Silicon use `macos-15`; Intel uses `macos-15-intel`.
   The Apple Silicon job builds `arm64` only and checks that slice with `lipo`.
+  Those macOS arm64 jobs run one at a time, and the iOS job waits until they
+  finish, because a second `macos-15` job is dropped instead of queued.
 - Linux uses native `ubuntu-22.04` / `ubuntu-22.04-arm` runners. Both AppImages have
   a glibc 2.35 baseline. The ARM runner bootstraps the SDK from the official Flutter
   3.47.0 tag and verifies its commit, since the official archive only provides an

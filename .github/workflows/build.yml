@@ -74,6 +74,9 @@ jobs:
     needs: check
     strategy:
       fail-fast: false
+      # This account is given one macOS arm64 runner at a time. A second
+      # macos-15 job is dropped instead of queued.
+      max-parallel: 1
       matrix:
         include:
           - arch: universal
@@ -253,7 +256,7 @@ jobs:
 
   ios:
     name: iOS unsigned IPA (arm64)
-    needs: check
+    needs: [check, macos]
     runs-on: macos-15
     timeout-minutes: 45
     steps:
