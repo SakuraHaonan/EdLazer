@@ -16,7 +16,7 @@ Future<bool> saveCover(String url, String title) async {
 /// Native export after the artwork request has completed successfully.
 Future<bool> saveCoverBytes(Uint8List bytes, String title) async {
   final safeTitle = title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
-  final name = safeTitle.isEmpty ? 'Lazer cover' : safeTitle;
+  final name = safeTitle.isEmpty ? 'EdLazer cover' : safeTitle;
   if (Platform.isAndroid || Platform.isIOS) {
     if (!await Gal.hasAccess() && !await Gal.requestAccess()) {
       throw const FileSystemException('相册权限未开启');

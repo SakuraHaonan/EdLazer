@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/data/lyrics.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/gateway/transport.dart';
+import 'package:edlazer_nextgen/data/lyrics.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/gateway/transport.dart';
 
 class _FailedLyricsTransport extends NeteaseTransport {
   @override

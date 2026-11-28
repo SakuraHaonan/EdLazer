@@ -205,7 +205,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
     try {
       await Directory(directory).create(recursive: true);
       final File probe = File(
-        '$directory${Platform.pathSeparator}.lazer_write_test',
+        '$directory${Platform.pathSeparator}.edlazer_write_test',
       );
       await probe.writeAsString('ok');
       await probe.delete();
@@ -383,7 +383,7 @@ Future<String?> defaultDownloadDirectory() async {
       if (downloads != null) return downloads.path;
     }
     final Directory documents = await getApplicationDocumentsDirectory();
-    return '${documents.path}${Platform.pathSeparator}Lazer Downloads';
+    return '${documents.path}${Platform.pathSeparator}EdLazer Downloads';
   } catch (_) {
     return null;
   }

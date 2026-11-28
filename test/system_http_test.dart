@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/utils/system_http.dart';
+import 'package:edlazer_nextgen/utils/system_http.dart';
 
 void main() {
   group('system proxy parsing', () {

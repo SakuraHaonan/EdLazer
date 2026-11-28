@@ -33,7 +33,7 @@ slider is in charge, a head unit never drops back to desktop density.
 ## How it is selected
 
 `设置 → 界面 → 设备形态` offers `自动选择 / 标准 / 车机 / 大屏幕模式`, persisted as
-`lazer_surface`. An explicit choice always wins; `自动选择` asks the platform:
+`edlazer_surface`. An explicit choice always wins; `自动选择` asks the platform:
 
 ```dart
 looksLikeCarDisplay(

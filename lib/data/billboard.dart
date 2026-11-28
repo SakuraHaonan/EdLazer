@@ -90,7 +90,7 @@ class BillboardClient {
           Uri.parse('$_historyArchive${_isoDate(date)}.json'),
           headers: const <String, String>{
             'accept': 'application/json',
-            'user-agent': 'Mozilla/5.0 Lazer/1.0',
+            'user-agent': 'Mozilla/5.0 EdLazer/1.0',
           },
         )
         .timeout(const Duration(seconds: 12));
@@ -139,7 +139,7 @@ class BillboardClient {
           uri,
           headers: const <String, String>{
             'accept': 'text/html,application/xhtml+xml',
-            'user-agent': 'Mozilla/5.0 Lazer/1.0',
+            'user-agent': 'Mozilla/5.0 EdLazer/1.0',
           },
         )
         .timeout(const Duration(seconds: 30));

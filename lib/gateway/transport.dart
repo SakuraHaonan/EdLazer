@@ -128,7 +128,7 @@ const Set<String> _transportOverrides = <String>{
 /// and the response envelopes the Kotlin wrapper synthesizes in-process.
 class NeteaseTransport {
   NeteaseTransport({
-    this.userAgent = 'Lazer',
+    this.userAgent = 'EdLazer',
     this.requestTimeout = const Duration(seconds: 30),
     io.HttpClient? client,
     DateTime Function()? clock,

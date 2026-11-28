@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:lazer_nextgen/widgets/apple_ui.dart';
+import 'package:edlazer_nextgen/widgets/apple_ui.dart';
 
 void main() {
   testWidgets('every glass panel clips its own backdrop filter', (

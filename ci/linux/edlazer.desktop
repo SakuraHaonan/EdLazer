@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Lazer
+Name=EdLazer
 Comment=Music player
-Exec=lazer_nextgen
+Exec=edlazer_nextgen
 Icon=app_icon_256
 Categories=AudioVideo;Audio;Music;
 Terminal=false

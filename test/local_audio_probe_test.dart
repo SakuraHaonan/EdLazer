@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/local/local_audio_probe.dart';
+import 'package:edlazer_nextgen/local/local_audio_probe.dart';
 
 List<int> _be32(int value) => <int>[
   (value >> 24) & 0xFF,
@@ -80,7 +80,7 @@ void main() {
   const LocalAudioProbe probe = LocalAudioProbe();
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('lazer-probe-test-');
+    root = await Directory.systemTemp.createTemp('edlazer-probe-test-');
   });
   tearDown(() async => root.delete(recursive: true));
 
@@ -141,7 +141,7 @@ void main() {
     streamInfo[16] = (totalSamples >> 8) & 0xFF;
     streamInfo[17] = totalSamples & 0xFF;
 
-    final List<int> vendor = utf8.encode('lazer');
+    final List<int> vendor = utf8.encode('edlazer');
     final List<int> comments = <int>[
       ..._le32(vendor.length),
       ...vendor,

@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+
 import 'l10n/app_localizations.dart';
+
 import 'package:flutter/foundation.dart'
     show LicenseRegistry, LicenseEntryWithLineBreaks;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'audio/audio_engine.dart';
@@ -51,9 +54,10 @@ Future<void> main() async {
   await runZoned<Future<void>>(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      await LiquidGlass.precache();
       LicenseRegistry.addLicense(() async* {
         yield LicenseEntryWithLineBreaks([
-          'Lazer',
+          'EdLazer',
         ], await rootBundle.loadString('LICENSE'));
         yield LicenseEntryWithLineBreaks(
           ['Lyric animation'],
@@ -64,6 +68,10 @@ Future<void> main() async {
           'This application uses MiSans by Xiaomi.\n'
           'MiSans Fonts Intellectual Property License Agreement:\n'
           'https://hyperos.mi.com/font/en/download/',
+        );
+        yield LicenseEntryWithLineBreaks(
+          ['liquid_glass_renderer'],
+          await rootBundle.loadString('licenses/liquid_glass_renderer/LICENSE'),
         );
       });
       JustAudioMediaKit.ensureInitialized();
@@ -88,12 +96,12 @@ Future<void> main() async {
         enableExternalCharts: true,
         deviceIsTelevision: television,
         independentPlayback:
-            prefs.getBool('lazer_independent_playback') ?? false,
+            prefs.getBool('edlazer_independent_playback') ?? false,
       );
       final session = PlaybackSession(state, audio);
       final media = SystemMediaController(state);
       runApp(
-        LazerApp(state: state, audio: audio, media: media, session: session),
+        EdLazerApp(state: state, audio: audio, media: media, session: session),
       );
     },
     zoneSpecification: ZoneSpecification(
@@ -106,8 +114,8 @@ Future<void> main() async {
 }
 
 /// Music player backed by the ported NetEase gateway.
-class LazerApp extends StatefulWidget {
-  const LazerApp({
+class EdLazerApp extends StatefulWidget {
+  const EdLazerApp({
     super.key,
     required this.state,
     required this.audio,
@@ -120,10 +128,10 @@ class LazerApp extends StatefulWidget {
   final PlaybackSession? session;
 
   @override
-  State<LazerApp> createState() => _LazerAppState();
+  State<EdLazerApp> createState() => _EdLazerAppState();
 }
 
-class _LazerAppState extends State<LazerApp> {
+class _EdLazerAppState extends State<EdLazerApp> {
   AppState get _state => widget.state;
   bool _rootRebuildScheduled = false;
 
@@ -227,11 +235,7 @@ class _LazerAppState extends State<LazerApp> {
         // no gate, no home swap to churn the accessibility tree.
         home: MediaShortcutListener(
           state: _state,
-          child: LegacyShell(
-            key: const ValueKey('legacy'),
-            state: _state,
-            autoCheckUpdates: true,
-          ),
+          child: LegacyShell(key: const ValueKey('legacy'), state: _state),
         ),
       ),
     );

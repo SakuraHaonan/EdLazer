@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/mascot.png" width="220" alt="The Lazer mascot">
+  <img src="docs/images/mascot.png" width="220" alt="The EdLazer mascot">
 </p>
 
-<h1 align="center">Lazer · nextgen</h1>
+<h1 align="center">EdLazer · nextgen</h1>
 
 <h3 align="center">
   Community: <a href="https://qm.qq.com/q/JJJfE0QV00">神秘交流群 (QQ group) · 1063238023</a>
@@ -13,10 +13,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/chuxuehaocai/Lazer/actions/workflows/build.yml"><img alt="build" src="https://img.shields.io/badge/build-GitHub%20Actions-6C8EBF"></a>
+  <a href="https://github.com/SakuraHaonan/EdLazer/actions/workflows/build.yml"><img alt="build" src="https://img.shields.io/badge/build-GitHub%20Actions-6C8EBF"></a>
   <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.0-54C5F8?logo=flutter&logoColor=white">
   <img alt="version" src="https://img.shields.io/badge/nextgen-v2.0.0-8E7CC3">
-  <img alt="platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20Android%20%C2%B7%20iOS-7FB6A4">
+  <img alt="platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20Android-7FB6A4">
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-4C9A7A"></a>
 </p>
 
@@ -46,7 +46,7 @@
 **The interface part**
 
 - Apple's design language throughout: semantic system colours and type, translucent navigation, grouped lists, the Apple Music red, and tints pulled from the cover art.
-- Desktop gets a sidebar and the full transport; phones get a tab bar and a mini-player — one page tree and one state, just a different posture.
+- Desktop gets a sidebar and the full transport. On a phone the mini player and the tab bar are two separate floating liquid-glass capsules with a visible gap. One page tree and one state.
 - Layout override (desktop / mobile), DPI 80–175%, and a car head-unit profile that starts at 135%.
 - Large screen mode: TVs and projectors start in it, and the D-pad moves by position across shelves, the library grid and the transport.
 - Simplified Chinese, Traditional Chinese, Japanese and English.
@@ -95,25 +95,28 @@ flutter run
 
 ## Automated builds
 
-Pushes to `nextgen` trigger [GitHub Actions](https://github.com/chuxuehaocai/Lazer/actions/workflows/build.yml).
+Pushes to `nextgen` trigger [GitHub Actions](https://github.com/SakuraHaonan/EdLazer/actions/workflows/build.yml).
 Checks run before platform builds. Pushing a `v*` version tag creates a GitHub
 Release after every build succeeds; tags with a suffix such as `-beta.1` are
-marked as pre-releases. Output filenames follow `Lazer-<OS>-<Arch>`.
+marked as pre-releases. Output filenames follow `EdLazer-<OS>-<Arch>`.
+The app does not check for updates and does not send installs to another repository.
 
 | Output | Contents |
 | --- | --- |
-| `Lazer-Windows-x86_64.zip` | EXE, DLLs, resources and Visual C++ runtime |
-| `Lazer-macOS-universal.zip` | Universal Intel / Apple Silicon App |
-| `Lazer-macOS-x86_64.zip` | Intel App built on a native Intel runner |
-| `Lazer-Linux-x86_64.AppImage` | Linux x86_64, including GTK and libmpv |
-| `Lazer-Linux-aarch64.AppImage` | Linux ARM64 built on a native ARM runner |
-| `Lazer-Android-universal.apk` | Universal APK using the current development signing configuration |
-| `Lazer-iOS-aarch64.ipa` | Unsigned device IPA |
+| `EdLazer-Windows-x86_64.zip` | EXE, DLLs, resources and Visual C++ runtime |
+| `EdLazer-macOS-universal.zip` | Universal Intel / Apple Silicon App |
+| `EdLazer-macOS-aarch64.zip` | Apple Silicon App built on a native ARM runner |
+| `EdLazer-macOS-x86_64.zip` | Intel App built on a native Intel runner |
+| `EdLazer-Linux-x86_64.AppImage` | Linux x86_64, including GTK and libmpv |
+| `EdLazer-Linux-aarch64.AppImage` | Linux ARM64 built on a native ARM runner |
+| `EdLazer-Android-universal.apk` | Universal APK using the current development signing configuration |
+| `EdLazer-Android-arm64-v8a.apk` | arm64-v8a APK using the current development signing configuration |
+| `EdLazer-iOS-aarch64.ipa` | Unsigned iOS device IPA |
 
 Download from a completed run's **Artifacts** section while signed in to GitHub;
 artifacts are retained for 30 days. Extract the complete Windows ZIP before
 launching its EXE, run `chmod +x` on a downloaded AppImage, and note that macOS
-Apps are ad-hoc signed while the IPA needs your own signing.
+Apps are ad-hoc signed. The IPA is unsigned and needs your own signing before installation.
 
 More documentation: [build details](docs/builds.md) · [system media](docs/system-media.md) · [now playing](docs/now-playing.md) · [car head unit](docs/car-head-unit.md) · [large screen mode (Android TV)](docs/android-tv.md) · [QR sign-in](docs/login-qr.md) · [SMS sign-in](docs/login-sms.md) · [legacy UI](docs/legacy-ui.md)
 
@@ -126,7 +129,7 @@ More documentation: [build details](docs/builds.md) · [system media](docs/syste
 - And you, reading this: downloading it and finishing one song is already plenty.
 
 <p align="center">
-  <img src="docs/images/mark.png" width="44" alt="Lazer">
+  <img src="docs/images/mark.png" width="44" alt="EdLazer">
   <br>
   <sub>MIT License · made with Flutter and a little patience</sub>
 </p>

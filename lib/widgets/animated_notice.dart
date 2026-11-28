@@ -1,4 +1,4 @@
-import 'package:lazer_nextgen/theme/app_palette.dart';
+import 'package:edlazer_nextgen/theme/app_palette.dart';
 
 import '../l10n/app_localizations.dart';
 import '../motion/ed_motion.dart';

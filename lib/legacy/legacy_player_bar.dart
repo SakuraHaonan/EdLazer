@@ -38,7 +38,8 @@ class LegacyPlayerBar extends StatelessWidget {
   final AppState state;
 
   /// Whether the bar draws its own floating liquid-glass capsule. The phone
-  /// dock passes false: it hosts the bar and the tabs in one shared panel.
+  /// dock passes false and wraps this bar in a capsule of its own, separate
+  /// from the navigation capsule.
   final bool framed;
 
   /// Height of the bar's content row.
@@ -331,7 +332,7 @@ class _NowPlayingTileState extends State<_NowPlayingTile> {
                               ),
                             ),
                           Text(
-                            track?.artist ?? 'Lazer',
+                            track?.artist ?? 'EdLazer',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(

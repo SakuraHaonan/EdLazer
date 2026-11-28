@@ -2,14 +2,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/utils/background_image.dart';
+import 'package:edlazer_nextgen/utils/background_image.dart';
 
 void main() {
   late Directory root;
   late Directory support;
 
   setUp(() {
-    root = Directory.systemTemp.createTempSync('lazer-background-store');
+    root = Directory.systemTemp.createTempSync('edlazer-background-store');
     support = Directory('${root.path}${Platform.pathSeparator}support')
       ..createSync();
   });

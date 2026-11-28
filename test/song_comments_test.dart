@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:lazer_nextgen/data/song_comments.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/gateway/transport.dart';
-import 'package:lazer_nextgen/state/song_comments_controller.dart';
+import 'package:edlazer_nextgen/data/song_comments.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/gateway/transport.dart';
+import 'package:edlazer_nextgen/state/song_comments_controller.dart';
 
 Map<String, dynamic> _comment(int id, {bool liked = false, int count = 10}) => {
   'commentId': id,

@@ -8,7 +8,7 @@ import '../theme/tokens.dart';
 
 export '../theme/tokens.dart';
 
-/// The fixed Lazer Material 3 scheme.
+/// The fixed EdLazer Material 3 scheme.
 ColorScheme legacyColorScheme(Brightness brightness) =>
     brightness == Brightness.dark ? _legacyDark : _legacyLight;
 
@@ -222,7 +222,7 @@ const TextTheme legacyTextTheme = TextTheme(
 /// The app's single Material 3 theme.
 ///
 /// Pass [seed] to derive the whole scheme from the current cover — the legacy
-/// `LazerPalette.NowPlaying`. Without a seed the fixed Lazer palette is used.
+/// `LazerPalette.NowPlaying`. Without a seed the fixed EdLazer palette is used.
 ThemeData buildLegacyTheme({
   Brightness brightness = Brightness.light,
   Color? seed,

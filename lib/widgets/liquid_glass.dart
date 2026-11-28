@@ -1,48 +1,50 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 import '../motion/ed_motion.dart';
 import '../theme/apple_design.dart';
 import '../theme/tokens.dart';
 
-/// Shape and spacing of the floating "liquid glass" chrome at the bottom of
-/// the main window: the phone dock (mini player + tabs) and the desktop
-/// transport capsule.
+/// Shape and spacing of the floating liquid-glass chrome.
+///
+/// On a phone the mini player and the tab bar are two separate capsules with
+/// a visible gap. Desktop uses the same material for the transport capsule.
+///
+/// The material itself is `liquid_glass_renderer` 1.0.0-dev.2 (Apache-2.0,
+/// whynotmake.it): an iOS 27 bevel that refracts the backdrop. See
+/// `docs/liquid-glass.md`.
 abstract final class LiquidGlassMetrics {
-  /// Corner radius of the floating panels.
+  /// Corner radius of the floating panels. On the short phone capsules this
+  /// is nearly a stadium, which is the shape of the system tab bar.
   static const double radius = AppShape.xxl;
 
-  /// Gap between the panel and the window's side edges.
+  /// Gap between a panel and the window's side edges.
   static const double sideMargin = 12;
 
-  /// Gap under the panel when the platform reports no bottom inset.
+  /// Visible gap between the phone's music capsule and the navigation capsule.
+  ///
+  /// The page shows through this strip. The capsules are not one blended card.
+  static const double barGap = 10;
+
+  /// Gap under the lowest panel when the platform reports no bottom inset.
   static const double bottomMargin = 10;
 
-  /// Height of the tab row inside the phone dock.
+  /// Height of the tab row.
   static const double navHeight = 56;
 
-  /// Backdrop blur strength. One Gaussian per panel; never nested.
-  static const double blurSigma = 24;
-
-  /// Saturation boost applied to the blurred backdrop (1 = unchanged).
-  static const double saturation = 1.5;
-
-  /// Breathing room between the last scrolled row and the panel's top edge.
+  /// Breathing room between the last scrolled row and the top capsule.
   static const double contentGap = 12;
 
-  /// Distance from the window's bottom edge to the bottom of a floating
-  /// panel: the system inset when there is one, a small margin otherwise.
+  /// Distance from the window's bottom edge to the bottom of the lowest
+  /// floating panel: the system inset when there is one, a small margin
+  /// otherwise.
   static double bottomGap(BuildContext context) {
     final double safe = MediaQuery.paddingOf(context).bottom;
     return safe > 0 ? safe : bottomMargin;
   }
 }
 
-/// How much of a page's bottom edge sits under a floating panel.
-///
-/// The shell lets pages run to the window's bottom edge so they scroll under
-/// the glass; scrolling pages read this to end their content above it.
+/// How much of a page's bottom edge sits under the floating capsules.
 class FloatingDockInset extends InheritedWidget {
   const FloatingDockInset({
     super.key,
@@ -52,7 +54,6 @@ class FloatingDockInset extends InheritedWidget {
 
   final double inset;
 
-  /// The inset at [context], or zero outside a floating-dock shell.
   static double of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<FloatingDockInset>()?.inset ??
       0;
@@ -73,13 +74,75 @@ class FloatingDockSpacer extends StatelessWidget {
   }
 }
 
-/// A floating, translucent Apple-style "liquid glass" panel.
+/// iOS 27 regular glass, the preset the renderer fits to toolbars and tab bars.
 ///
-/// One clipped [BackdropFilter] (blur + a cheap saturation matrix) under a
-/// theme-aware tint, a top-lit sheen, and a gradient rim that is brightest
-/// along the top edge. The soft shadow is painted outside the clip. The whole
-/// panel is its own repaint boundary so the controls inside it never force
-/// the page under it to repaint, and vice versa.
+/// Slider position 0 keeps the backdrop visible and the bevel refractive.
+/// High contrast uses the tinted end of the same preset so labels stay readable.
+LiquidGlassSettings liquidGlassSettings(
+  BuildContext context, {
+  bool lens = false,
+}) {
+  if (lens) return _lensSettings;
+  final bool contrast = MediaQuery.highContrastOf(context);
+  final Brightness brightness = Theme.of(context).brightness;
+  return LiquidGlassSettings.ios27Regular(
+    brightness: brightness,
+    tintAmount: contrast ? 1 : 0,
+  );
+}
+
+LiquidGlassAppearance liquidGlassAppearance(BuildContext context) {
+  return LiquidGlassAppearance.ios27Regular(
+    brightness: Theme.of(context).brightness,
+  );
+}
+
+/// The tab-bar loupe from the renderer's example: a clear lens that shows
+/// the surface slightly smaller and bends color along the rim.
+///
+/// Adapted from `LoupeTabBar.defaultLoupeSettings` in
+/// `liquid_glass_renderer` 1.0.0-dev.2. The selection slides on EdLazer's
+/// critically damped curve; the example's bouncy loupe spring is not used.
+const LiquidGlassSettings _lensSettings = LiquidGlassSettings(
+  refractionHeight: 15,
+  refractionAmount: 10,
+  refractionFitsShape: false,
+  dispersion: -0.3,
+  frost: 0,
+  contourStrength: 0.3,
+  backdropShrink: 0.14,
+);
+
+const List<BoxShadow> _glassShadows = <BoxShadow>[
+  BoxShadow(color: Color(0x24000000), blurRadius: 24, offset: Offset(0, 8)),
+];
+
+/// Shared backdrop for sibling [LiquidGlassPanel]s.
+///
+/// The phone dock puts the music capsule and the tab capsule in one layer so
+/// they sample the page once. They are not a blend group, so the gap between
+/// them stays open.
+class LiquidGlassChrome extends StatelessWidget {
+  const LiquidGlassChrome({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LiquidGlassLayer(
+      settings: liquidGlassSettings(context),
+      defaultAppearance: liquidGlassAppearance(context),
+      child: child,
+    );
+  }
+}
+
+/// One floating liquid-glass capsule.
+///
+/// Delegates the optics to [LiquidGlass.withOwnLayer]. Where Impeller and
+/// Flutter GPU are on, the rim refracts the backdrop. Otherwise the package
+/// paints its own [FakeGlass] fallback, which keeps the silhouette and drops
+/// the bend.
 class LiquidGlassPanel extends StatelessWidget {
   const LiquidGlassPanel({
     super.key,
@@ -92,175 +155,20 @@ class LiquidGlassPanel extends StatelessWidget {
   final Widget child;
   final BorderRadius borderRadius;
 
-  static final ui.ImageFilter _filter = ui.ImageFilter.compose(
-    outer: ui.ColorFilter.matrix(
-      _saturationMatrix(LiquidGlassMetrics.saturation),
-    ),
-    inner: ui.ImageFilter.blur(
-      sigmaX: LiquidGlassMetrics.blurSigma,
-      sigmaY: LiquidGlassMetrics.blurSigma,
-      tileMode: TileMode.clamp,
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
-    final bool dark = Theme.of(context).brightness == Brightness.dark;
-    final _GlassStyle style = dark ? _GlassStyle.dark : _GlassStyle.light;
-    return RepaintBoundary(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: borderRadius,
-          boxShadow: style.shadows,
-        ),
-        child: ClipRRect(
-          borderRadius: borderRadius,
-          child: BackdropFilter(
-            filter: _filter,
-            child: CustomPaint(
-              painter: _GlassBodyPainter(style: style, radius: borderRadius),
-              foregroundPainter: _GlassRimPainter(
-                style: style,
-                radius: borderRadius,
-              ),
-              child: Material(type: MaterialType.transparency, child: child),
-            ),
-          ),
-        ),
-      ),
+    final double radius = borderRadius
+        .resolve(Directionality.of(context))
+        .topLeft
+        .x;
+    return LiquidGlass.auto(
+      settings: liquidGlassSettings(context),
+      appearance: liquidGlassAppearance(context),
+      shape: LiquidRoundedSuperellipse(borderRadius: radius),
+      shadows: _glassShadows,
+      child: child,
     );
   }
-}
-
-/// Standard luminance-preserving saturation matrix.
-List<double> _saturationMatrix(double s) {
-  const double r = 0.2126, g = 0.7152, b = 0.0722;
-  final double i = 1 - s;
-  return <double>[
-    r * i + s, g * i, b * i, 0, 0, //
-    r * i, g * i + s, b * i, 0, 0, //
-    r * i, g * i, b * i + s, 0, 0, //
-    0, 0, 0, 1, 0, //
-  ];
-}
-
-@immutable
-class _GlassStyle {
-  const _GlassStyle({
-    required this.tintTop,
-    required this.tintBottom,
-    required this.sheen,
-    required this.rimTop,
-    required this.rimBottom,
-    required this.shadows,
-  });
-
-  final Color tintTop;
-  final Color tintBottom;
-  final Color sheen;
-  final Color rimTop;
-  final Color rimBottom;
-  final List<BoxShadow> shadows;
-
-  static const _GlassStyle light = _GlassStyle(
-    tintTop: Color(0xA3FFFFFF),
-    tintBottom: Color(0x85F4F5F8),
-    sheen: Color(0x73FFFFFF),
-    rimTop: Color(0xF2FFFFFF),
-    rimBottom: Color(0x40FFFFFF),
-    shadows: <BoxShadow>[
-      BoxShadow(
-        color: Color(0x1A000000),
-        blurRadius: 24,
-        offset: Offset(0, 6),
-      ),
-      BoxShadow(color: Color(0x0F000000), blurRadius: 3, offset: Offset(0, 1)),
-    ],
-  );
-
-  static const _GlassStyle dark = _GlassStyle(
-    tintTop: Color(0x8C2C2C30),
-    tintBottom: Color(0xA61A1A1D),
-    sheen: Color(0x1AFFFFFF),
-    rimTop: Color(0x52FFFFFF),
-    rimBottom: Color(0x0FFFFFFF),
-    shadows: <BoxShadow>[
-      BoxShadow(
-        color: Color(0x59000000),
-        blurRadius: 26,
-        offset: Offset(0, 8),
-      ),
-      BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 1)),
-    ],
-  );
-}
-
-class _GlassBodyPainter extends CustomPainter {
-  const _GlassBodyPainter({required this.style, required this.radius});
-
-  final _GlassStyle style;
-  final BorderRadius radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Rect rect = Offset.zero & size;
-    final RRect shape = radius.toRRect(rect);
-    canvas.drawRRect(
-      shape,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[style.tintTop, style.tintBottom],
-        ).createShader(rect),
-    );
-    // Top-lit sheen: a soft band of light that fades out before the middle,
-    // the "liquid" highlight that sits on the upper lip of the glass.
-    final double sheenHeight = size.height.clamp(0, 64) * .6;
-    final Rect sheenRect = Rect.fromLTWH(0, 0, size.width, sheenHeight);
-    canvas.drawRRect(
-      shape,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[style.sheen, style.sheen.withValues(alpha: 0)],
-        ).createShader(sheenRect),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_GlassBodyPainter oldDelegate) =>
-      oldDelegate.style != style || oldDelegate.radius != radius;
-}
-
-class _GlassRimPainter extends CustomPainter {
-  const _GlassRimPainter({required this.style, required this.radius});
-
-  final _GlassStyle style;
-  final BorderRadius radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Rect rect = Offset.zero & size;
-    final RRect rim = radius.toRRect(rect).deflate(.5);
-    canvas.drawRRect(
-      rim,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[style.rimTop, style.rimBottom, style.rimBottom],
-          stops: const <double>[0, .55, 1],
-        ).createShader(rect),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_GlassRimPainter oldDelegate) =>
-      oldDelegate.style != style || oldDelegate.radius != radius;
 }
 
 /// One destination of a [LiquidGlassNavBar].
@@ -277,10 +185,11 @@ class LiquidGlassDestination {
   final String label;
 }
 
-/// The tab row of the phone dock. It paints no glass of its own — it sits
-/// inside a [LiquidGlassPanel] — only the selected-tab pill, a lighter lens
-/// of glass that glides between tabs on the chrome's critically damped curve
-/// (no overshoot).
+/// The phone tab row inside a [LiquidGlassPanel].
+///
+/// The selected tab is a clear loupe ([_lensSettings]) on its own glass
+/// layer, so it refracts the capsule under it. It glides on the critically
+/// damped chrome curve. Icons cross-fade. Nothing overshoots.
 class LiquidGlassNavBar extends StatelessWidget {
   const LiquidGlassNavBar({
     super.key,
@@ -289,16 +198,17 @@ class LiquidGlassNavBar extends StatelessWidget {
     required this.onDestinationSelected,
   });
 
+  static const Key selectionKey = ValueKey<String>('liquid-glass-selection');
+
   final int selectedIndex;
   final List<LiquidGlassDestination> destinations;
   final ValueChanged<int> onDestinationSelected;
 
-  static const Duration _slide = Duration(milliseconds: 240);
+  static const Duration _slide = Duration(milliseconds: 200);
 
   @override
   Widget build(BuildContext context) {
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    final bool dark = Theme.of(context).brightness == Brightness.dark;
     final Duration duration = EdMotion.durationOf(context, _slide);
     final TextStyle base =
         (Theme.of(context).textTheme.labelSmall ?? const TextStyle()).copyWith(
@@ -321,11 +231,19 @@ class LiquidGlassNavBar extends StatelessWidget {
                 AnimatedPositioned(
                   duration: duration,
                   curve: EdMotion.curve,
-                  left: itemWidth * index + 2,
+                  left: itemWidth * index,
                   top: 0,
                   bottom: 0,
-                  width: itemWidth - 4,
-                  child: IgnorePointer(child: _SelectionPill(dark: dark)),
+                  width: itemWidth,
+                  child: IgnorePointer(
+                    child: LiquidGlass.withOwnLayer(
+                      key: selectionKey,
+                      settings: liquidGlassSettings(context, lens: true),
+                      appearance: const LiquidGlassAppearance.ios27Clear(),
+                      shape: const LiquidRoundedSuperellipse(borderRadius: 22),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
                 ),
                 Row(
                   children: <Widget>[
@@ -336,7 +254,7 @@ class LiquidGlassNavBar extends StatelessWidget {
                           selected: i == index,
                           duration: duration,
                           selectedColor: apple.accent,
-                          color: apple.label.withValues(alpha: .78),
+                          color: apple.label.withValues(alpha: .86),
                           style: base,
                           onTap: () => onDestinationSelected(i),
                         ),
@@ -347,41 +265,6 @@ class LiquidGlassNavBar extends StatelessWidget {
             );
           },
         ),
-      ),
-    );
-  }
-}
-
-class _SelectionPill extends StatelessWidget {
-  const _SelectionPill({required this.dark});
-
-  final bool dark;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: AppShape.full,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: dark
-              ? const <Color>[Color(0x2EFFFFFF), Color(0x14FFFFFF)]
-              : const <Color>[Color(0xD9FFFFFF), Color(0x8CFFFFFF)],
-        ),
-        border: Border.all(
-          color: dark ? const Color(0x2EFFFFFF) : const Color(0xFFFFFFFF),
-          width: .8,
-        ),
-        boxShadow: dark
-            ? null
-            : const <BoxShadow>[
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
       ),
     );
   }

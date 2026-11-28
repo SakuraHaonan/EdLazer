@@ -12,9 +12,9 @@ import 'switchable_media_platform.dart';
 
 typedef MediaArtworkResolver = Future<Uri?> Function(String? url);
 
-Future<LazerMediaHandler> initializeSystemMedia(AppState state) async {
-  return AudioService.init<LazerMediaHandler>(
-    builder: () => LazerMediaHandler(state, enabled: false),
+Future<EdLazerMediaHandler> initializeSystemMedia(AppState state) async {
+  return AudioService.init<EdLazerMediaHandler>(
+    builder: () => EdLazerMediaHandler(state, enabled: false),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'org.haonan.edlazer.audio',
       androidNotificationChannelName: 'EdLazer',
@@ -30,7 +30,7 @@ Future<LazerMediaHandler> initializeSystemMedia(AppState state) async {
 class SystemMediaController {
   SystemMediaController(
     this.state, {
-    Future<LazerMediaHandler> Function()? initialize,
+    Future<EdLazerMediaHandler> Function()? initialize,
     Future<void> Function(bool)? togglePlatform,
   }) {
     if (initialize != null) {
@@ -63,10 +63,10 @@ class SystemMediaController {
   }
 
   final AppState state;
-  late final Future<LazerMediaHandler> Function() _initialize;
+  late final Future<EdLazerMediaHandler> Function() _initialize;
   late final Future<void> Function(bool) _togglePlatform;
-  Future<LazerMediaHandler>? _initialization;
-  LazerMediaHandler? _handler;
+  Future<EdLazerMediaHandler>? _initialization;
+  EdLazerMediaHandler? _handler;
   bool? _enabled;
   bool _closed = false;
   int _generation = 0;
@@ -126,8 +126,8 @@ class SystemMediaController {
 
 /// The OS controls command the existing AppState, so UI and remote commands
 /// share queue, repeat/shuffle, lyric loading and playback error behavior.
-class LazerMediaHandler extends BaseAudioHandler {
-  LazerMediaHandler(
+class EdLazerMediaHandler extends BaseAudioHandler {
+  EdLazerMediaHandler(
     this.state, {
     MediaArtworkResolver? artwork,
     this._enabled = true,

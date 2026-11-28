@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/utils/cover_save.dart';
+import 'package:edlazer_nextgen/utils/cover_save.dart';
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -11,7 +11,7 @@ void main() {
     'cover export writes the downloaded image and honors dialog cancellation',
     () async {
       final directory = await Directory.systemTemp.createTemp(
-        'lazer_cover_save_test_',
+        'edlazer_cover_save_test_',
       );
       addTearDown(() async {
         await directory.delete(recursive: true);

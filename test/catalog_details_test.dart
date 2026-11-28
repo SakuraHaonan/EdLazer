@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/cache/disk_cache.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/cache/disk_cache.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
 
 Map<String, dynamic> _album(int id) => {
   'id': id,
@@ -104,7 +104,7 @@ void main() {
   late Directory directory;
   late DiskCache disk;
   setUp(() async {
-    directory = await Directory.systemTemp.createTemp('lazer-details-');
+    directory = await Directory.systemTemp.createTemp('edlazer-details-');
     disk = DiskCache(directory: () async => directory);
   });
   tearDown(() async => directory.delete(recursive: true));

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/lyrics/lyric_quality.dart';
+import 'package:edlazer_nextgen/lyrics/lyric_quality.dart';
 
 void main() {
   final LyricFxGovernor governor = LyricFxGovernor.instance;

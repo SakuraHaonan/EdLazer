@@ -4,15 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_background.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/ui_preferences.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_background.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/ui_preferences.dart';
 
 const Track _track = Track(
   id: '1939575649',
@@ -256,8 +256,8 @@ void main() {
     await state.setLegacyUiAlpha(0.1);
     expect(state.legacyUiAlpha, 0.4);
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('lazer_legacy_background'), 'nowPlayingStatic');
-    expect(prefs.getDouble('lazer_legacy_ui_alpha'), 0.4);
+    expect(prefs.getString('edlazer_legacy_background'), 'nowPlayingStatic');
+    expect(prefs.getDouble('edlazer_legacy_ui_alpha'), 0.4);
 
     final AppState restarted = AppState(catalog: _Catalog());
     addTearDown(restarted.dispose);

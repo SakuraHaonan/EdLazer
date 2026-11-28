@@ -38,7 +38,7 @@ does the same: the transport forwards the `/captcha/sent/v1` cookie set and
 - `获取验证码` calls `AppState.sendSmsCode` and starts a 60-second resend
   cooldown; the success line and errors render inside the card.
 - `登录` calls `AppState.signInWithPhoneCaptcha`, and a confirmed session is
-  persisted under `lazer_gateway_cookie` with `AuthMethod.sms`.
+  persisted under `edlazer_gateway_cookie` with `AuthMethod.sms`.
 - Risk control (`secureCaptcha` / Yidun `sca`) is passed through by
   `NeteaseGateway.loginWithPhoneCaptcha`, but the card has no Yidun solver — a
   rejected attempt simply reports the service message.

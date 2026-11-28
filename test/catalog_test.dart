@@ -1,12 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/cache/disk_cache.dart';
-import 'package:lazer_nextgen/data/biliboard.dart';
-import 'package:lazer_nextgen/data/billboard.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/cache/disk_cache.dart';
+import 'package:edlazer_nextgen/data/biliboard.dart';
+import 'package:edlazer_nextgen/data/billboard.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
 
 class _Gateway extends NeteaseGateway {
   @override
@@ -343,7 +343,7 @@ void main() {
     late Directory directory;
     late DiskCache disk;
     setUp(() async {
-      directory = await Directory.systemTemp.createTemp('lazer-catalog-test-');
+      directory = await Directory.systemTemp.createTemp('edlazer-catalog-test-');
       disk = DiskCache(directory: () async => directory);
     });
     tearDown(() async => directory.delete(recursive: true));
@@ -633,7 +633,7 @@ void main() {
     'chart matching resolves every entry instead of only the first page',
     () async {
       final directory = await Directory.systemTemp.createTemp(
-        'lazer-chart-match-test-',
+        'edlazer-chart-match-test-',
       );
       addTearDown(() => directory.delete(recursive: true));
       final gateway = _ChartGateway();
@@ -664,7 +664,7 @@ void main() {
 
   test('a temporary Biliboard failure is retried instead of cached', () async {
     final directory = await Directory.systemTemp.createTemp(
-      'lazer-chart-source-cache-test-',
+      'edlazer-chart-source-cache-test-',
     );
     addTearDown(() => directory.delete(recursive: true));
     final biliboard = _RecoveringBiliboard();
@@ -690,7 +690,7 @@ void main() {
 
   test('chart matching retries by title and folds artist diacritics', () async {
     final directory = await Directory.systemTemp.createTemp(
-      'lazer-chart-fallback-test-',
+      'edlazer-chart-fallback-test-',
     );
     addTearDown(() => directory.delete(recursive: true));
     final gateway = _FallbackChartGateway();
@@ -720,7 +720,7 @@ void main() {
     'the same song reuses a positive match across Biliboard boards',
     () async {
       final directory = await Directory.systemTemp.createTemp(
-        'lazer-chart-shared-match-test-',
+        'edlazer-chart-shared-match-test-',
       );
       addTearDown(() => directory.delete(recursive: true));
       final gateway = _SharedSongGateway();
@@ -752,7 +752,7 @@ void main() {
     'Biliboard accepts an exact title when producer aliases differ',
     () async {
       final directory = await Directory.systemTemp.createTemp(
-        'lazer-chart-alias-match-test-',
+        'edlazer-chart-alias-match-test-',
       );
       addTearDown(() => directory.delete(recursive: true));
       final catalog = Catalog(
@@ -778,7 +778,7 @@ void main() {
 
   test('chart matching falls back when NetEase cloud search fails', () async {
     final directory = await Directory.systemTemp.createTemp(
-      'lazer-chart-search-fallback-test-',
+      'edlazer-chart-search-fallback-test-',
     );
     addTearDown(() => directory.delete(recursive: true));
     final gateway = _CloudSearchFailureGateway();
@@ -808,7 +808,7 @@ void main() {
     'a row that matched nothing is remembered briefly, not for weeks',
     () async {
       final directory = await Directory.systemTemp.createTemp(
-        'lazer-chart-retry-test-',
+        'edlazer-chart-retry-test-',
       );
       addTearDown(() => directory.delete(recursive: true));
       final gateway = _LateChartGateway();
@@ -855,7 +855,7 @@ void main() {
 
   test('a search outage leaves every row retryable', () async {
     final directory = await Directory.systemTemp.createTemp(
-      'lazer-chart-outage-test-',
+      'edlazer-chart-outage-test-',
     );
     addTearDown(() => directory.delete(recursive: true));
     final gateway = _LateChartGateway()..failing = true;

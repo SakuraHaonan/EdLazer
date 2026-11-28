@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:lazer_nextgen/data/billboard.dart';
-import 'package:lazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/data/billboard.dart';
+import 'package:edlazer_nextgen/data/models.dart';
 
 void main() {
   test('keeps all 100 Hot 100 rows and movement metadata', () async {

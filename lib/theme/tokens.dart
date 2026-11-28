@@ -80,7 +80,7 @@ abstract final class AppMotion {
 
 /// The design tokens the shell is built from.
 ///
-/// The palette is the Lazer blue-grey: lake blue by day, pale ice blue at
+/// The palette is the EdLazer blue-grey: lake blue by day, pale ice blue at
 /// night, warm paper neutrals and a clay tertiary. It is a complete Material 3
 /// role set — every surface role has an explicit tone, so no widget can fall
 /// back to Flutter's purple baseline scheme.

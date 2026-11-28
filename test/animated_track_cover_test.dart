@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/widgets/animated_track_cover.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/widgets/animated_track_cover.dart';
 
 const Track _first = Track(
   id: 'cover-first',

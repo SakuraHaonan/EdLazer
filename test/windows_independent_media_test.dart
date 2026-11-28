@@ -2,7 +2,7 @@ import 'package:audio_service_platform_interface/audio_service_platform_interfac
     as platform;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/audio/windows_media_platform.dart';
+import 'package:edlazer_nextgen/audio/windows_media_platform.dart';
 
 class _Callbacks extends platform.AudioHandlerCallbacks {
   final calls = <Invocation>[];

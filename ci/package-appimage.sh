@@ -17,7 +17,7 @@ case "$arch" in
 esac
 test "$(uname -m)" = "$arch"
 bundle="build/linux/$bundle_arch/release/bundle"
-test -x "$bundle/lazer_nextgen"
+test -x "$bundle/edlazer_nextgen"
 test -d "$bundle/data"
 test -d "$bundle/lib"
 
@@ -34,22 +34,22 @@ chmod +x "$tools/"*.AppImage "$tools/"*.sh
 
 # Retain Flutter's executable-relative data/ and lib/ directories. libmpv is
 # loaded via FFI, so linuxdeploy cannot discover it through DT_NEEDED alone.
-appdir="$repo/build/appimage/$arch/Lazer.AppDir"
+appdir="$repo/build/appimage/$arch/EdLazer.AppDir"
 mkdir -p "$appdir/usr/bin" "$repo/dist"
 cp -a "$bundle/." "$appdir/usr/bin/"
 mpv=$(ldconfig -p | awk '/libmpv\.so\.[12] / && !found { print $NF; found=1 }')
 test -n "$mpv"
 export APPIMAGE_EXTRACT_AND_RUN=1
 export DEPLOY_GTK_VERSION=3
-filename="Lazer-Linux-$arch.AppImage"
+filename="EdLazer-Linux-$arch.AppImage"
 export OUTPUT="$repo/dist/$filename"
 export ARCH="$arch"
 export PATH="$tools:$PATH"
 "$tools/linuxdeploy-$arch.AppImage" \
   --appdir "$appdir" \
-  --executable "$appdir/usr/bin/lazer_nextgen" \
+  --executable "$appdir/usr/bin/edlazer_nextgen" \
   --library "$mpv" \
-  --desktop-file "$repo/ci/linux/lazer.desktop" \
+  --desktop-file "$repo/ci/linux/edlazer.desktop" \
   --icon-file "$repo/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png" \
   --custom-apprun "$repo/ci/linux/AppRun" \
   --plugin gtk --output appimage

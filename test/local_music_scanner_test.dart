@@ -1,14 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/local/local_library.dart';
-import 'package:lazer_nextgen/local/local_music_scanner.dart';
+import 'package:edlazer_nextgen/local/local_library.dart';
+import 'package:edlazer_nextgen/local/local_music_scanner.dart';
 
 void main() {
   late Directory root;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('lazer-scan-test-');
+    root = await Directory.systemTemp.createTemp('edlazer-scan-test-');
   });
 
   tearDown(() async {

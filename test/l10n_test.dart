@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/l10n/app_localizations.dart';
+import 'package:edlazer_nextgen/l10n/app_localizations.dart';
 
 const List<String> _tags = <String>['zh_Hans', 'zh_Hant', 'ja', 'en'];
 final RegExp _placeholder = RegExp(r'\{(\w+)\}');

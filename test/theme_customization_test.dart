@@ -4,19 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_background.dart';
-import 'package:lazer_nextgen/legacy/legacy_pages.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/player/now_playing_page.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/ui_preferences.dart';
-import 'package:lazer_nextgen/theme/apple_design.dart';
-import 'package:lazer_nextgen/tv/large_screen_pages.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_background.dart';
+import 'package:edlazer_nextgen/legacy/legacy_pages.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/player/now_playing_page.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/ui_preferences.dart';
+import 'package:edlazer_nextgen/theme/apple_design.dart';
+import 'package:edlazer_nextgen/tv/large_screen_pages.dart';
 
 const Track _track = Track(
   id: 'custom-theme-fixture',
@@ -85,8 +85,8 @@ void main() {
     await state.setLegacyAccent(const Color(0xFF3366CC));
     expect(state.legacyAccentSeed, const Color(0xFF3366CC));
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    expect(prefs.getInt('lazer_legacy_accent'), 0xFF3366CC);
-    expect(prefs.getString('lazer_legacy_palette'), 'custom');
+    expect(prefs.getInt('edlazer_legacy_accent'), 0xFF3366CC);
+    expect(prefs.getString('edlazer_legacy_palette'), 'custom');
 
     final AppState restarted = AppState(catalog: _Catalog());
     addTearDown(restarted.dispose);
@@ -105,10 +105,10 @@ void main() {
     expect(state.legacyBackgroundImagePath, '/tmp/backdrop.png');
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     expect(
-      prefs.getString('lazer_legacy_background_image'),
+      prefs.getString('edlazer_legacy_background_image'),
       '/tmp/backdrop.png',
     );
-    expect(prefs.getString('lazer_legacy_background'), 'customImage');
+    expect(prefs.getString('edlazer_legacy_background'), 'customImage');
 
     final AppState restarted = AppState(catalog: _Catalog());
     addTearDown(restarted.dispose);
@@ -117,13 +117,13 @@ void main() {
     expect(restarted.legacyBackground, LegacyBackgroundMode.customImage);
 
     await restarted.setLegacyBackgroundImage(null);
-    expect(prefs.getString('lazer_legacy_background_image'), isNull);
+    expect(prefs.getString('edlazer_legacy_background_image'), isNull);
     expect(restarted.legacyBackgroundImagePath, isNull);
   });
 
   test('an app-owned backdrop persists its file name, not its container path', () async {
     final Directory directory = Directory.systemTemp.createTempSync(
-      'lazer-owned-backdrop',
+      'edlazer-owned-backdrop',
     );
     addTearDown(() => directory.deleteSync(recursive: true));
     final File image = File(
@@ -136,7 +136,7 @@ void main() {
     await state.setLegacyBackground(LegacyBackgroundMode.customImage);
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     expect(
-      prefs.getString('lazer_legacy_background_image'),
+      prefs.getString('edlazer_legacy_background_image'),
       'background_42.png',
       reason: 'iOS may move the container between launches',
     );
@@ -188,7 +188,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final Directory directory = Directory.systemTemp.createTempSync(
-      'lazer-backdrop',
+      'edlazer-backdrop',
     );
     addTearDown(() => directory.deleteSync(recursive: true));
     final File image = File('${directory.path}${Platform.pathSeparator}bg.png')
@@ -281,7 +281,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final Directory directory = Directory.systemTemp.createTempSync(
-      'lazer-pick-backdrop',
+      'edlazer-pick-backdrop',
     );
     addTearDown(() => directory.deleteSync(recursive: true));
     final File image = File(
@@ -314,7 +314,7 @@ void main() {
     expect(picks, 1);
     expect(state.legacyBackgroundImagePath, image.path);
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('lazer_legacy_background_image'), 'background_77.png');
+    expect(prefs.getString('edlazer_legacy_background_image'), 'background_77.png');
   });
 
   testWidgets('large-screen settings can replace the backdrop too', (

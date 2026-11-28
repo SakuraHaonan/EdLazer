@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_pages.dart';
-import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/ui_preferences.dart';
-import 'package:lazer_nextgen/widgets/ui_scaling.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_pages.dart';
+import 'package:edlazer_nextgen/legacy/legacy_player_bar.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/ui_preferences.dart';
+import 'package:edlazer_nextgen/widgets/ui_scaling.dart';
 
 class _Gateway extends NeteaseGateway {
   @override
@@ -190,8 +190,8 @@ void main() {
       expect(restarted.dpiScale, kDpiScaleDefault);
       expect(restarted.autoDpiScale, isTrue);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getDouble('lazer_dpi_scale'), kDpiScaleDefault);
-      expect(prefs.getBool('lazer_auto_dpi_scale'), isTrue);
+      expect(prefs.getDouble('edlazer_dpi_scale'), kDpiScaleDefault);
+      expect(prefs.getBool('edlazer_auto_dpi_scale'), isTrue);
     });
   });
 
@@ -397,7 +397,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(state.uiMode, AppUiMode.mobile);
     expect(
-      (await SharedPreferences.getInstance()).getString('lazer_ui_mode'),
+      (await SharedPreferences.getInstance()).getString('edlazer_ui_mode'),
       'mobile',
     );
 
@@ -439,7 +439,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(state.surface, AppSurface.car);
     expect(
-      (await SharedPreferences.getInstance()).getString('lazer_surface'),
+      (await SharedPreferences.getInstance()).getString('edlazer_surface'),
       'car',
     );
     expect(UiMetrics.carOf(tester.element(surfaceDropdown)), isTrue);

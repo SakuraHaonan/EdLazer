@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/motion/ed_motion.dart';
+import 'package:edlazer_nextgen/motion/ed_motion.dart';
 
 void main() {
   test('the settle spring accelerates before it coasts', () {

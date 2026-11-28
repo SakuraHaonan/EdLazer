@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:audio_service_platform_interface/audio_service_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/audio/switchable_media_platform.dart';
+import 'package:edlazer_nextgen/audio/switchable_media_platform.dart';
 
 class _Platform extends AudioServicePlatform {
   final calls = <String>[];

@@ -4,19 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/catalog_details.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/diagnostics/build_info.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_pages.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/detail_requests.dart';
-import 'package:lazer_nextgen/widgets/apple_ui.dart';
-import 'package:lazer_nextgen/widgets/liquid_glass.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/catalog_details.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/diagnostics/build_info.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_pages.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/detail_requests.dart';
+import 'package:edlazer_nextgen/widgets/apple_ui.dart';
+import 'package:edlazer_nextgen/widgets/liquid_glass.dart';
 
 const Track _track = Track(
   id: '1939575649',
@@ -174,7 +174,7 @@ Widget _legacyApp(AppState state) => MaterialApp(
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test('the legacy theme keeps the Lazer palette and type ramp', () {
+  test('the legacy theme keeps the EdLazer palette and type ramp', () {
     final ThemeData dark = buildLegacyTheme(brightness: Brightness.dark);
     expect(dark.colorScheme.primary, LegacyTokens.nightBlue);
     expect(dark.colorScheme.surface, LegacyTokens.nightPaper);
@@ -211,9 +211,9 @@ void main() {
     await tester.pumpWidget(_legacyApp(state));
     await tester.pumpAndSettle();
 
-    // Rail chrome and the discovery page. 'Lazer' is both the rail wordmark
+    // Rail chrome and the discovery page. 'EdLazer' is both the rail wordmark
     // and the empty transport's artist line.
-    expect(find.text('Lazer'), findsWidgets);
+    expect(find.text('EdLazer'), findsWidgets);
     expect(find.text('主页'), findsOneWidget);
     expect(find.text('音乐库'), findsOneWidget);
     expect(find.text('我喜欢'), findsOneWidget);
@@ -294,7 +294,7 @@ void main() {
     expect(find.text('\u5168\u90e8\u5355\u66f2 / EP'), findsWidgets);
     expect(find.text('\u6d4b\u8bd5 EP'), findsOneWidget);
     expect(
-      find.text('Lazer'),
+      find.text('EdLazer'),
       findsWidgets,
       reason: '\u4fa7\u680f\u5e94\u7ee7\u7eed\u4fdd\u7559',
     );

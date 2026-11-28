@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/local/local_library.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/local/local_library.dart';
 
 Track _track(String id, String title) => Track(
   id: id,
@@ -22,7 +22,7 @@ void main() {
   late Directory documents;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('lazer-local-library-test-');
+    root = await Directory.systemTemp.createTemp('edlazer-local-library-test-');
     support = Directory('${root.path}/support');
     documents = Directory('${root.path}/documents');
     await support.create(recursive: true);

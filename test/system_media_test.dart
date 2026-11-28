@@ -5,14 +5,14 @@ import 'package:audio_service_platform_interface/audio_service_platform_interfac
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:lazer_nextgen/audio/audio_engine.dart';
-import 'package:lazer_nextgen/audio/system_media_handler.dart';
-import 'package:lazer_nextgen/audio/windows_media_platform.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/audio/audio_engine.dart';
+import 'package:edlazer_nextgen/audio/system_media_handler.dart';
+import 'package:edlazer_nextgen/audio/windows_media_platform.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
 
 const _tracks = [
   Track(
@@ -128,7 +128,7 @@ void main() {
       state.playQueue(_tracks);
       await tester.pump();
       final artwork = Completer<Uri?>();
-      final handler = LazerMediaHandler(state, artwork: (_) => artwork.future);
+      final handler = EdLazerMediaHandler(state, artwork: (_) => artwork.future);
       engine.position = const Duration(seconds: 2);
       state.seek(0.5);
       state.toggleShuffle();
@@ -188,7 +188,7 @@ void main() {
         state,
         initialize: () async {
           initializations++;
-          return LazerMediaHandler(
+          return EdLazerMediaHandler(
             state,
             enabled: false,
             artwork: (_) async => null,
@@ -211,7 +211,7 @@ void main() {
       expect(toggles, [true, false, true]);
       expect(
         (await SharedPreferences.getInstance()).getBool(
-          'lazer_independent_playback',
+          'edlazer_independent_playback',
         ),
         false,
       );
@@ -226,7 +226,7 @@ void main() {
     'pending initialization cannot publish after switching to independent playback',
     (tester) async {
       final state = AppState(catalog: _Catalog());
-      final pending = Completer<LazerMediaHandler>();
+      final pending = Completer<EdLazerMediaHandler>();
       final toggles = <bool>[];
       final controller = SystemMediaController(
         state,
@@ -235,7 +235,7 @@ void main() {
       );
       await tester.pump();
       await state.setIndependentPlayback(true);
-      final handler = LazerMediaHandler(
+      final handler = EdLazerMediaHandler(
         state,
         enabled: false,
         artwork: (_) async => null,
@@ -312,7 +312,7 @@ void main() {
       final state = AppState(catalog: _Catalog(), audioEngine: engine);
       state.playQueue(_tracks);
       await Future<void>.delayed(Duration.zero);
-      final handler = LazerMediaHandler(state, artwork: (_) async => null);
+      final handler = EdLazerMediaHandler(state, artwork: (_) async => null);
       final updates = <PlaybackState>[];
       final subscription = handler.playbackState.listen(updates.add);
       await Future<void>.delayed(Duration.zero);
@@ -379,7 +379,7 @@ void main() {
     state.playQueue(_tracks);
     await Future<void>.delayed(Duration.zero);
     final artwork = <Completer<Uri?>>[];
-    final handler = LazerMediaHandler(
+    final handler = EdLazerMediaHandler(
       state,
       artwork: (_) {
         final result = Completer<Uri?>();

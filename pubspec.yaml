@@ -1,4 +1,4 @@
-name: lazer_nextgen
+name: edlazer_nextgen
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.0.0-beta.13+13
+version: 2.0.0-beta.17+17
 
 environment:
   sdk: ^3.12.0
@@ -38,7 +38,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   window_manager: ^0.5.2
 
-  # Gateway (ported from the Lazer KMP shared module): NetEase weapi/eapi
+  # Gateway (ported from the upstream KMP shared module): NetEase weapi/eapi
   # protocol, session cookies, and the real catalogue behind the UI.
   crypto: ^3.0.6
   encrypt: ^5.0.3
@@ -58,6 +58,7 @@ dependencies:
   gal: ^2.3.3
   file_selector: ^1.1.0
   image_picker: ^1.2.4
+  liquid_glass_renderer: 1.0.0-dev.2
 
 dev_dependencies:
   flutter_test:
@@ -86,6 +87,7 @@ flutter:
     - assets/app_icon.png
     - assets/chart_logos/
     - licenses/lyric_animation/AGPL-3.0.txt
+    - licenses/liquid_glass_renderer/LICENSE
 
   fonts:
     - family: MiSans

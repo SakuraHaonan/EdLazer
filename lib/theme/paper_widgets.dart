@@ -1,4 +1,4 @@
-import 'package:lazer_nextgen/theme/app_palette.dart';
+import 'package:edlazer_nextgen/theme/app_palette.dart';
 import '../l10n/app_localizations.dart';
 import '../tv/tv_mode.dart';
 import 'package:flutter/material.dart';

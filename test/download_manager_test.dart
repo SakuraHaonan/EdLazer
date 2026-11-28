@@ -2,11 +2,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/downloads/download_manager.dart';
-import 'package:lazer_nextgen/local/local_library.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/downloads/download_manager.dart';
+import 'package:edlazer_nextgen/local/local_library.dart';
 
 Track _track(String id, [String title = '曲目']) => Track(
   id: id,
@@ -54,7 +54,7 @@ void main() {
   );
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('lazer-download-test-');
+    root = await Directory.systemTemp.createTemp('edlazer-download-test-');
     support = Directory('${root.path}/support');
     documents = Directory('${root.path}/documents');
     downloads = Directory('${root.path}/downloads');

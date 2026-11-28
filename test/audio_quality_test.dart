@@ -1,12 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/cache/disk_cache.dart';
-import 'package:lazer_nextgen/cache/media_cache.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/cache/disk_cache.dart';
+import 'package:edlazer_nextgen/cache/media_cache.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
 
 const Track _track = Track(
   id: '42',
@@ -123,7 +123,7 @@ void main() {
 
     setUp(() async {
       directory = await Directory.systemTemp.createTemp(
-        'lazer-quality-cache-test-',
+        'edlazer-quality-cache-test-',
       );
       disk = DiskCache(directory: () async => directory);
     });
@@ -227,7 +227,7 @@ void main() {
       'a lower-tier cache entry still plays after a transport failure',
       () async {
         final Directory directory = await Directory.systemTemp.createTemp(
-          'lazer-quality-fallback-test-',
+          'edlazer-quality-fallback-test-',
         );
         addTearDown(() => directory.delete(recursive: true));
         final DiskCache disk = DiskCache(directory: () async => directory);
