@@ -6,7 +6,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $release = (Resolve-Path -LiteralPath $ReleaseDirectory).Path
-foreach ($required in @('lazer_nextgen.exe', 'flutter_windows.dll', 'data')) {
+foreach ($required in @('edlazer_nextgen.exe', 'flutter_windows.dll', 'data')) {
     if (-not (Test-Path -LiteralPath (Join-Path $release $required))) {
         throw "Missing Windows bundle component: $required"
     }
@@ -27,7 +27,7 @@ Get-ChildItem -LiteralPath $crt.FullName -Filter '*.dll' | ForEach-Object {
 }
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
-$archive = Join-Path $OutputDirectory 'Lazer-Windows-x86_64.zip'
+$archive = Join-Path $OutputDirectory 'EdLazer-Windows-x86_64.zip'
 Compress-Archive -Path (Join-Path $release '*') -DestinationPath $archive -CompressionLevel Optimal -Force
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  Lazer-Windows-x86_64.zip" | Set-Content -LiteralPath "$archive.sha256" -Encoding ascii
+"$hash  EdLazer-Windows-x86_64.zip" | Set-Content -LiteralPath "$archive.sha256" -Encoding ascii

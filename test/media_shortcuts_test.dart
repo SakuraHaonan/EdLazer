@@ -3,16 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_pages.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/media_shortcuts.dart';
-import 'package:lazer_nextgen/widgets/media_shortcut_listener.dart';
-import 'package:lazer_nextgen/widgets/shortcut_recorder_dialog.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_pages.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/media_shortcuts.dart';
+import 'package:edlazer_nextgen/widgets/media_shortcut_listener.dart';
+import 'package:edlazer_nextgen/widgets/shortcut_recorder_dialog.dart';
 
 class _Gateway extends NeteaseGateway {
   @override
@@ -140,7 +140,7 @@ void main() {
     await state.setMediaShortcut(MediaShortcutAction.playPause, custom);
     await state.setMediaShortcut(MediaShortcutAction.nextTrack, null);
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final String? stored = prefs.getString('lazer_media_shortcuts');
+    final String? stored = prefs.getString('edlazer_media_shortcuts');
     expect(stored, isNotNull);
     expect(stored, contains('"playPause"'));
     expect(stored, contains('"nextTrack":""'));
@@ -158,7 +158,7 @@ void main() {
         kDefaultMediaShortcuts[action],
       );
     }
-    expect(prefs.getString('lazer_media_shortcuts'), isNull);
+    expect(prefs.getString('edlazer_media_shortcuts'), isNull);
   });
 
   testWidgets('the global listener controls volume and skips typing', (
@@ -253,7 +253,7 @@ void main() {
     expect(find.text('Ctrl + K'), findsOneWidget);
 
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('lazer_media_shortcuts'), contains('"playPause"'));
+    expect(prefs.getString('edlazer_media_shortcuts'), contains('"playPause"'));
   });
 
   testWidgets('the recorder rejects a combination owned by another action', (

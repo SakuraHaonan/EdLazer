@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/mascot.png" width="220" alt="The Lazer mascot">
+  <img src="docs/images/mascot.png" width="220" alt="The EdLazer mascot">
 </p>
 
-<h1 align="center">Lazer · nextgen</h1>
+<h1 align="center">EdLazer · nextgen</h1>
 
 <h3 align="center">
   Community: <a href="https://qm.qq.com/q/JJJfE0QV00">神秘交流群 (QQ group) · 1063238023</a>
@@ -98,20 +98,20 @@ flutter run
 Pushes to `nextgen` trigger [GitHub Actions](https://github.com/SakuraHaonan/EdLazer/actions/workflows/build.yml).
 Checks run before platform builds. Pushing a `v*` version tag creates a GitHub
 Release after every build succeeds; tags with a suffix such as `-beta.1` are
-marked as pre-releases. Output filenames follow `Lazer-<OS>-<Arch>`.
+marked as pre-releases. Output filenames follow `EdLazer-<OS>-<Arch>`.
 The app does not check for updates and does not send installs to another repository.
 
 | Output | Contents |
 | --- | --- |
-| `Lazer-Windows-x86_64.zip` | EXE, DLLs, resources and Visual C++ runtime |
-| `Lazer-macOS-universal.zip` | Universal Intel / Apple Silicon App |
-| `Lazer-macOS-aarch64.zip` | Apple Silicon App built on a native ARM runner |
-| `Lazer-macOS-x86_64.zip` | Intel App built on a native Intel runner |
-| `Lazer-Linux-x86_64.AppImage` | Linux x86_64, including GTK and libmpv |
-| `Lazer-Linux-aarch64.AppImage` | Linux ARM64 built on a native ARM runner |
-| `Lazer-Android-universal.apk` | Universal APK using the current development signing configuration |
-| `Lazer-Android-arm64-v8a.apk` | arm64-v8a APK using the current development signing configuration |
-| `Lazer-iOS-aarch64.ipa` | Unsigned iOS device IPA |
+| `EdLazer-Windows-x86_64.zip` | EXE, DLLs, resources and Visual C++ runtime |
+| `EdLazer-macOS-universal.zip` | Universal Intel / Apple Silicon App |
+| `EdLazer-macOS-aarch64.zip` | Apple Silicon App built on a native ARM runner |
+| `EdLazer-macOS-x86_64.zip` | Intel App built on a native Intel runner |
+| `EdLazer-Linux-x86_64.AppImage` | Linux x86_64, including GTK and libmpv |
+| `EdLazer-Linux-aarch64.AppImage` | Linux ARM64 built on a native ARM runner |
+| `EdLazer-Android-universal.apk` | Universal APK using the current development signing configuration |
+| `EdLazer-Android-arm64-v8a.apk` | arm64-v8a APK using the current development signing configuration |
+| `EdLazer-iOS-aarch64.ipa` | Unsigned iOS device IPA |
 
 Download from a completed run's **Artifacts** section while signed in to GitHub;
 artifacts are retained for 30 days. Extract the complete Windows ZIP before
@@ -129,7 +129,7 @@ More documentation: [build details](docs/builds.md) · [system media](docs/syste
 - And you, reading this: downloading it and finishing one song is already plenty.
 
 <p align="center">
-  <img src="docs/images/mark.png" width="44" alt="Lazer">
+  <img src="docs/images/mark.png" width="44" alt="EdLazer">
   <br>
   <sub>MIT License · made with Flutter and a little patience</sub>
 </p>

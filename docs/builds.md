@@ -14,25 +14,25 @@ Analysis and tests run first. The platform jobs then upload the following
 
 | Artifact / filename stem | Format and contents |
 | --- | --- |
-| `Lazer-Windows-x86_64` | ZIP with EXE, DLLs, resources and the MSVC runtime |
-| `Lazer-macOS-universal` | ZIP with an Intel / Apple Silicon App |
-| `Lazer-macOS-aarch64` | ZIP with a native Apple Silicon App |
-| `Lazer-macOS-x86_64` | ZIP with a native Intel App |
-| `Lazer-Linux-x86_64` | x86_64 AppImage with GTK and libmpv |
-| `Lazer-Linux-aarch64` | ARM64 AppImage with GTK and libmpv |
-| `Lazer-Android-universal` | Universal release APK using the development signing configuration |
-| `Lazer-Android-arm64-v8a` | arm64-v8a release APK using the development signing configuration |
-| `Lazer-iOS-aarch64` | Unsigned device IPA containing `Payload/Runner.app` |
+| `EdLazer-Windows-x86_64` | ZIP with EXE, DLLs, resources and the MSVC runtime |
+| `EdLazer-macOS-universal` | ZIP with an Intel / Apple Silicon App |
+| `EdLazer-macOS-aarch64` | ZIP with a native Apple Silicon App |
+| `EdLazer-macOS-x86_64` | ZIP with a native Intel App |
+| `EdLazer-Linux-x86_64` | x86_64 AppImage with GTK and libmpv |
+| `EdLazer-Linux-aarch64` | ARM64 AppImage with GTK and libmpv |
+| `EdLazer-Android-universal` | Universal release APK using the development signing configuration |
+| `EdLazer-Android-arm64-v8a` | arm64-v8a release APK using the development signing configuration |
+| `EdLazer-iOS-aarch64` | Unsigned device IPA containing `Payload/Runner.app` |
 
-All artifact names follow `Lazer-<OS>-<Arch>`. `universal` denotes a multi-architecture
+All artifact names follow `EdLazer-<OS>-<Arch>`. `universal` denotes a multi-architecture
 package. The macOS archives preserve executable permissions and framework symlinks.
 Architecture checks run before packaging.
 
 ## Build stamp
 
 Every platform build receives the commit it was cut from through
-`--dart-define=LAZER_COMMIT=<sha>`, and **Settings → About** shows its short
-form. Tag builds also receive `--dart-define=LAZER_VERSION=<tag>`, which
+`--dart-define=EDLAZER_COMMIT=<sha>`, and **Settings → About** shows its short
+form. Tag builds also receive `--dart-define=EDLAZER_VERSION=<tag>`, which
 About displays as-is. The tag and `pubspec.yaml` must agree so the binary
 reports the version it was cut from. A local `flutter run` that omits the
 defines falls back to the checked-in values in `lib/diagnostics/build_info.dart`.

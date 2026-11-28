@@ -9,4 +9,4 @@ for hook in "$APPDIR"/apprun-hooks/*.sh; do
     . "$hook"
   fi
 done
-exec "$APPDIR/usr/bin/lazer_nextgen" "$@"
+exec "$APPDIR/usr/bin/edlazer_nextgen" "$@"

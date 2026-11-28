@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/cache/disk_cache.dart';
-import 'package:lazer_nextgen/cache/media_cache.dart';
+import 'package:edlazer_nextgen/cache/disk_cache.dart';
+import 'package:edlazer_nextgen/cache/media_cache.dart';
 
 void main() {
   late Directory directory;
   late DiskCache cache;
   setUp(() async {
-    directory = await Directory.systemTemp.createTemp('lazer-cache-test-');
+    directory = await Directory.systemTemp.createTemp('edlazer-cache-test-');
     cache = DiskCache(directory: () async => directory);
   });
   tearDown(() async => directory.delete(recursive: true));
@@ -189,7 +189,7 @@ void main() {
       ]);
       expect(result.first, [137, 80, 78, 71]);
       expect(requests, 1);
-      expect(agent, 'LazerDesktop/1.0');
+      expect(agent, 'EdLazerDesktop/1.0');
       expect(referer, 'https://music.163.com/');
       await server.close(force: true);
       final restarted = ArtworkCache(

@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/audio/audio_engine.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/audio/audio_engine.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
 
 const GatewayUserProfile _profile = GatewayUserProfile(
   userId: 7,
@@ -175,7 +175,7 @@ void main() {
 
     expect(harness.gateway.uploads, <(int, int)>[(42, 4)]);
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('lazer_play_uploads'), '[]');
+    expect(prefs.getString('edlazer_play_uploads'), '[]');
   });
 
   testWidgets('an offline play stays queued on disk and uploads on retry', (
@@ -192,7 +192,7 @@ void main() {
     expect(harness.gateway.uploads, isEmpty);
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     expect(
-      prefs.getString('lazer_play_uploads'),
+      prefs.getString('edlazer_play_uploads'),
       '[{"songId":42,"seconds":4}]',
     );
 
@@ -202,7 +202,7 @@ void main() {
     await tester.pump();
 
     expect(harness.gateway.uploads, <(int, int)>[(42, 4)]);
-    expect(prefs.getString('lazer_play_uploads'), '[]');
+    expect(prefs.getString('edlazer_play_uploads'), '[]');
   });
 
   testWidgets('an upload retires the loaded play record for the next visit', (

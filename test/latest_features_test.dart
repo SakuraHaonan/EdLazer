@@ -8,21 +8,21 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:lazer_nextgen/animation/lyric_word_motion.dart';
-import 'package:lazer_nextgen/audio/audio_engine.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/lyrics.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/l10n/app_language.dart';
-import 'package:lazer_nextgen/l10n/app_localizations.dart';
-import 'package:lazer_nextgen/legacy/legacy_pages.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/widgets/timed_lyric_text.dart';
-import 'package:lazer_nextgen/widgets/lyric_selection_toolbar.dart';
-import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
+import 'package:edlazer_nextgen/animation/lyric_word_motion.dart';
+import 'package:edlazer_nextgen/audio/audio_engine.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/lyrics.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/l10n/app_language.dart';
+import 'package:edlazer_nextgen/l10n/app_localizations.dart';
+import 'package:edlazer_nextgen/legacy/legacy_pages.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/widgets/timed_lyric_text.dart';
+import 'package:edlazer_nextgen/widgets/lyric_selection_toolbar.dart';
+import 'package:edlazer_nextgen/widgets/lyric_viewport.dart';
 
 const _track = Track(
   id: '1',
@@ -250,7 +250,7 @@ void main() {
     expect(find.text('表示言語'), findsNothing);
     expect(find.text('言語'), findsOneWidget);
     expect(
-      (await SharedPreferences.getInstance()).getString('lazer_language'),
+      (await SharedPreferences.getInstance()).getString('edlazer_language'),
       'ja',
     );
     final restored = AppState(catalog: _Catalog());

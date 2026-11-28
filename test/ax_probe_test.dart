@@ -5,17 +5,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/lyrics/selection_bar.dart';
-import 'package:lazer_nextgen/lyrics/viewport.dart';
-import 'package:lazer_nextgen/player/desktop_now_playing.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_player_bar.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/lyrics/selection_bar.dart';
+import 'package:edlazer_nextgen/lyrics/viewport.dart';
+import 'package:edlazer_nextgen/player/desktop_now_playing.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
 
 import 'support/serialized_semantics.dart';
 

@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:lazer_nextgen/gateway/crypto.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/gateway/routes.dart';
-import 'package:lazer_nextgen/gateway/transport.dart';
+import 'package:edlazer_nextgen/gateway/crypto.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/gateway/routes.dart';
+import 'package:edlazer_nextgen/gateway/transport.dart';
 
 void main() {
   test('recommended playlist route matches api-enhanced weapi payload', () {

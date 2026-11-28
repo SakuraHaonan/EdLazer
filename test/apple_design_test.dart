@@ -1,7 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:lazer_nextgen/theme/apple_design.dart';
+import 'package:edlazer_nextgen/theme/apple_design.dart';
 
 void main() {
   test('Apple theme exposes semantic system colours and the HIG type ramp', () {

@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/audio/audio_engine.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/audio/audio_engine.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Engine with both transport and the queue capability.
@@ -233,7 +233,7 @@ void main() {
 
     expect(state.recentTracks.map((track) => track.id), <String>['1']);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('lazer_recent_tracks_v1'), contains('Track 1'));
+    expect(prefs.getString('edlazer_recent_tracks_v1'), contains('Track 1'));
     state.dispose();
   });
 

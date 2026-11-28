@@ -8,15 +8,15 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/interaction/app_haptics.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/widgets/interaction_feedback.dart';
-import 'package:lazer_nextgen/widgets/window_title_area.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/interaction/app_haptics.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/widgets/interaction_feedback.dart';
+import 'package:edlazer_nextgen/widgets/window_title_area.dart';
 
 const _track = Track(
   id: '1939575649',
@@ -229,7 +229,7 @@ void main() {
     'restored queue loads current lyrics without starting playback',
     () async {
       SharedPreferences.setMockInitialValues({
-        'lazer_playback_queue_v1': jsonEncode({
+        'edlazer_playback_queue_v1': jsonEncode({
           'index': 0,
           'tracks': [
             {
@@ -298,13 +298,13 @@ void main() {
     await tester.pump();
     expect(pulses, 1);
     expect(
-      (await SharedPreferences.getInstance()).getBool('lazer_haptics'),
+      (await SharedPreferences.getInstance()).getBool('edlazer_haptics'),
       false,
     );
     await state.setLyricControlsSeconds(4);
     expect(
       (await SharedPreferences.getInstance()).getDouble(
-        'lazer_lyric_controls_seconds',
+        'edlazer_lyric_controls_seconds',
       ),
       4,
     );
@@ -312,9 +312,9 @@ void main() {
     await state.setScrollRetention(.98);
     await state.setLyricResumeSeconds(3);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('lazer_lyric_blur'), false);
-    expect(prefs.getDouble('lazer_scroll_retention'), .98);
-    expect(prefs.getDouble('lazer_lyric_resume_seconds'), 3);
+    expect(prefs.getBool('edlazer_lyric_blur'), false);
+    expect(prefs.getDouble('edlazer_scroll_retention'), .98);
+    expect(prefs.getDouble('edlazer_lyric_resume_seconds'), 3);
   });
 
   testWidgets('an iOS control pulses the native impact channel', (tester) async {

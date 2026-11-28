@@ -1,4 +1,4 @@
-import 'package:lazer_nextgen/theme/app_palette.dart';
+import 'package:edlazer_nextgen/theme/app_palette.dart';
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Adapted lyric animation; reference: README.md. License: licenses/lyric_animation/AGPL-3.0.txt.
 import '../l10n/app_localizations.dart';

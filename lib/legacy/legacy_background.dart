@@ -15,7 +15,7 @@ import 'legacy_theme.dart';
 
 export '../player/player_backdrop.dart' show AlbumBlurFlow;
 
-/// Ported from the Lazer project:
+/// Ported from the upstream project:
 /// `shared/src/commonMain/.../AlbumFlowBackground.kt` (the flowing palette) and
 /// `.../LazerBackgrounds.kt` (the artwork-seed extractor).
 ///

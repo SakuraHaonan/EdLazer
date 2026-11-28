@@ -45,7 +45,7 @@ extension LegacyPaletteModeLabels on LegacyPaletteMode {
 
 /// How the legacy shell paints its page backdrop.
 ///
-/// The flowing album-colour canvas is ported from the Lazer project's
+/// The flowing album-colour canvas is ported from the upstream project's
 /// `AlbumFlowBackground`; [nowPlayingDynamic] animates it, [nowPlayingStatic]
 /// freezes the palette to one flat base, [customImage] paints a picture the
 /// listener chose, and [off] leaves the theme surface.

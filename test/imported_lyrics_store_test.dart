@@ -3,8 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/lyrics/imported_lyrics_store.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/lyrics/imported_lyrics_store.dart';
 
 const Track _track = Track(
   id: '12345',
@@ -20,7 +20,7 @@ void main() {
   late ImportedLyricsStore store;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('lazer-lyrics-test-');
+    root = await Directory.systemTemp.createTemp('edlazer-lyrics-test-');
     store = ImportedLyricsStore(supportDirectory: () async => root);
   });
 

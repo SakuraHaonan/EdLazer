@@ -26,9 +26,19 @@ class DiskCache {
   final _maintenance = <CacheBucket, Future<void>>{};
   int _serial = 0;
 
-  static Future<Directory> _defaultDirectory() async => Directory(
-    '${(await getApplicationCacheDirectory()).path}/lazer_cache_v1',
-  );
+  static Future<Directory> _defaultDirectory() async {
+    final Directory base = await getApplicationCacheDirectory();
+    final Directory current = Directory('${base.path}/edlazer_cache_v1');
+    final Directory previous = Directory('${base.path}/lazer_cache_v1');
+    if (!current.existsSync() && previous.existsSync()) {
+      try {
+        previous.renameSync(current.path);
+      } on FileSystemException {
+        // A failed rename just starts a fresh cache. The old files stay put.
+      }
+    }
+    return current;
+  }
 
   Future<Directory?> _open() => _root ??= () async {
     try {

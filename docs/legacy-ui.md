@@ -137,7 +137,7 @@ content opacity and dynamic-background render precision, theme, language,
 independent playback, haptics, lyric timing, size, weight, blur, follow
 delay, scroll inertia/acceleration, frame overlay, account and catalogue
 refresh. Persistence keys are unchanged; the new one is
-`lazer_dynamic_background_quality`.
+`edlazer_dynamic_background_quality`.
 
 ## Performance
 

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/player/now_playing_route.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/player/now_playing_route.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The route's own vertical travel: the largest translation on screen (the

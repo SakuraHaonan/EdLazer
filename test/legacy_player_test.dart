@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_now_playing.dart';
-import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/ui_preferences.dart';
-import 'package:lazer_nextgen/widgets/playback_queue_view.dart';
-import 'package:lazer_nextgen/widgets/song_comments_view.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_now_playing.dart';
+import 'package:edlazer_nextgen/legacy/legacy_player_bar.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/ui_preferences.dart';
+import 'package:edlazer_nextgen/widgets/playback_queue_view.dart';
+import 'package:edlazer_nextgen/widgets/song_comments_view.dart';
 
 const Track _track = Track(
   id: '1939575649',
@@ -93,7 +93,7 @@ void main() {
     state.setLegacySeed(const Color(0xFFB23A48));
     expect(state.legacySeed, const Color(0xFFB23A48));
     expect(
-      (await SharedPreferences.getInstance()).getString('lazer_legacy_palette'),
+      (await SharedPreferences.getInstance()).getString('edlazer_legacy_palette'),
       'nowPlaying',
     );
 

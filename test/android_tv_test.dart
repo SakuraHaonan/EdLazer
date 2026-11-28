@@ -6,15 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/audio/audio_engine.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/tv/tv_mode.dart';
-import 'package:lazer_nextgen/widgets/haptic_seek_slider.dart';
+import 'package:edlazer_nextgen/audio/audio_engine.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_player_bar.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/tv/tv_mode.dart';
+import 'package:edlazer_nextgen/widgets/haptic_seek_slider.dart';
 
 const Track _seekTrack = Track(
   id: 'tv-seek',

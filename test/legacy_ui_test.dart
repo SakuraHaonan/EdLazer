@@ -4,19 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/catalog_details.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/diagnostics/build_info.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_pages.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/detail_requests.dart';
-import 'package:lazer_nextgen/widgets/apple_ui.dart';
-import 'package:lazer_nextgen/widgets/liquid_glass.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/catalog_details.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/diagnostics/build_info.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_pages.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/detail_requests.dart';
+import 'package:edlazer_nextgen/widgets/apple_ui.dart';
+import 'package:edlazer_nextgen/widgets/liquid_glass.dart';
 
 const Track _track = Track(
   id: '1939575649',
@@ -174,7 +174,7 @@ Widget _legacyApp(AppState state) => MaterialApp(
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test('the legacy theme keeps the Lazer palette and type ramp', () {
+  test('the legacy theme keeps the EdLazer palette and type ramp', () {
     final ThemeData dark = buildLegacyTheme(brightness: Brightness.dark);
     expect(dark.colorScheme.primary, LegacyTokens.nightBlue);
     expect(dark.colorScheme.surface, LegacyTokens.nightPaper);

@@ -339,7 +339,7 @@ class _ChartTransport {
 
   static const Map<String, String> _headers = <String, String>{
     'accept': 'application/json',
-    'user-agent': 'Mozilla/5.0 Lazer/1.0',
+    'user-agent': 'Mozilla/5.0 EdLazer/1.0',
   };
 
   final http.Client? _viaProxy;

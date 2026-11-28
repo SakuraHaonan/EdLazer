@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:lazer_nextgen/animation/lyric_spring.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
-import 'package:lazer_nextgen/widgets/timed_lyric_text.dart';
-import 'package:lazer_nextgen/widgets/app_scroll_behavior.dart';
+import 'package:edlazer_nextgen/animation/lyric_spring.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/widgets/lyric_viewport.dart';
+import 'package:edlazer_nextgen/widgets/timed_lyric_text.dart';
+import 'package:edlazer_nextgen/widgets/app_scroll_behavior.dart';
 
 const _track = Track(
   id: '90001',

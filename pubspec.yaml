@@ -1,4 +1,4 @@
-name: lazer_nextgen
+name: edlazer_nextgen
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -38,7 +38,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   window_manager: ^0.5.2
 
-  # Gateway (ported from the Lazer KMP shared module): NetEase weapi/eapi
+  # Gateway (ported from the upstream KMP shared module): NetEase weapi/eapi
   # protocol, session cookies, and the real catalogue behind the UI.
   crypto: ^3.0.6
   encrypt: ^5.0.3

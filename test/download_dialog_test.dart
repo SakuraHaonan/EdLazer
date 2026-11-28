@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/downloads/download_dialog.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/downloads/download_dialog.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const Track _track = Track(
@@ -23,7 +23,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    directory = await Directory.systemTemp.createTemp('lazer-download-dialog-');
+    directory = await Directory.systemTemp.createTemp('edlazer-download-dialog-');
   });
 
   tearDown(() async {

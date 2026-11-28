@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/audio/audio_engine.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_background.dart';
-import 'package:lazer_nextgen/legacy/legacy_pages.dart';
-import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/ui_preferences.dart';
-import 'package:lazer_nextgen/widgets/lyric_viewport.dart';
+import 'package:edlazer_nextgen/audio/audio_engine.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_background.dart';
+import 'package:edlazer_nextgen/legacy/legacy_pages.dart';
+import 'package:edlazer_nextgen/legacy/legacy_player_bar.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/ui_preferences.dart';
+import 'package:edlazer_nextgen/widgets/lyric_viewport.dart';
 
 const Track _track = Track(
   id: 'precision-fixture',
@@ -153,7 +153,7 @@ void main() {
     expect(state.dynamicBackgroundQuality, kDynamicBackgroundQualityMin);
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     expect(
-      prefs.getDouble('lazer_dynamic_background_quality'),
+      prefs.getDouble('edlazer_dynamic_background_quality'),
       kDynamicBackgroundQualityMin,
     );
 
@@ -168,7 +168,7 @@ void main() {
       kDynamicBackgroundQualityDefault,
     );
     expect(
-      prefs.getDouble('lazer_dynamic_background_quality'),
+      prefs.getDouble('edlazer_dynamic_background_quality'),
       kDynamicBackgroundQualityDefault,
     );
   });

@@ -13,7 +13,7 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "LazerHaptics") else { return }
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "EdLazerHaptics") else { return }
     let channel = FlutterMethodChannel(name: "org.haonan.edlazer/haptics", binaryMessenger: registrar.messenger())
     hapticsChannel = channel
     channel.setMethodCallHandler { call, result in

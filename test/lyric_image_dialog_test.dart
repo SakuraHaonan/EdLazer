@@ -6,10 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/data/lyrics.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/widgets/lyric_image_dialog.dart';
+import 'package:edlazer_nextgen/data/lyrics.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/widgets/lyric_image_dialog.dart';
 
 const _lines = [
   LyricLine(Duration.zero, '窓の向こうに 朝が来る', translation: '窗外，清晨正悄悄到来'),
@@ -65,7 +65,7 @@ void main() {
     await (FontLoader(
       'MaterialIcons',
     )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
-    fixtureDirectory = await Directory.systemTemp.createTemp('lazer_dialog_');
+    fixtureDirectory = await Directory.systemTemp.createTemp('edlazer_dialog_');
     artwork = File('${fixtureDirectory.path}/artwork.png');
     // Deterministic cover fixture; preview and export must use the same image.
     final recorder = ui.PictureRecorder();
@@ -99,7 +99,7 @@ void main() {
     track = Track(
       id: 'preview',
       title: '夜明けの手紙',
-      artist: 'Lazer Sessions',
+      artist: 'EdLazer Sessions',
       album: '朝の余白',
       duration: const Duration(minutes: 3),
       coverSeed: 1,

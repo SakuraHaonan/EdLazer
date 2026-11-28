@@ -45,7 +45,7 @@ The channel has an 800 ms timeout and every failure means "not a TV", so
 desktop, iOS and tests are unaffected.
 
 A detected television **boots into 大屏幕模式**. `AppState.bootstrap` writes
-`surface = AppSurface.tv` when no `lazer_surface` preference exists yet; an
+`surface = AppSurface.tv` when no `edlazer_surface` preference exists yet; an
 explicit choice (including `自动选择`) is never overwritten. `TvScope` then
 publishes the remote input model, `UiMetrics` publishes the density profile,
 and the shell draws the large-screen composition.

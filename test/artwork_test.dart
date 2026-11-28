@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/utils/artwork.dart';
-import 'package:lazer_nextgen/widgets/plate_art.dart';
-import 'package:lazer_nextgen/widgets/artwork_image.dart';
+import 'package:edlazer_nextgen/utils/artwork.dart';
+import 'package:edlazer_nextgen/widgets/plate_art.dart';
+import 'package:edlazer_nextgen/widgets/artwork_image.dart';
 
 const cover =
     'https://p1.music.126.net/Xgxfl8qPlwjRIoBDI-cPrg==/109951173819308049.jpg?param=1024y1024';

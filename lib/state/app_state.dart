@@ -170,7 +170,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     _independentPlayback = value;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('lazer_independent_playback', _independentPlayback);
+    await prefs.setBool('edlazer_independent_playback', _independentPlayback);
   }
 
   /// Tier requested for streaming. Changing it while a track is loaded reloads
@@ -188,7 +188,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     playbackQuality = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_playback_quality',
+      'edlazer_playback_quality',
       value.name,
     );
     // A track that is still opening resolved its URL with the old tier, so it
@@ -203,7 +203,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     downloadQuality = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_download_quality',
+      'edlazer_download_quality',
       value.name,
     );
   }
@@ -217,9 +217,9 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     if (normalized == null) {
-      await prefs.remove('lazer_download_directory');
+      await prefs.remove('edlazer_download_directory');
     } else {
-      await prefs.setString('lazer_download_directory', normalized);
+      await prefs.setString('edlazer_download_directory', normalized);
     }
   }
 
@@ -227,9 +227,9 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     await _startAudio(resumeAt: position);
   }
 
-  static const String _sessionKey = 'lazer_gateway_cookie';
-  static const String _queueKey = 'lazer_playback_queue_v1';
-  static const String _recentTracksKey = 'lazer_recent_tracks_v1';
+  static const String _sessionKey = 'edlazer_gateway_cookie';
+  static const String _queueKey = 'edlazer_playback_queue_v1';
+  static const String _recentTracksKey = 'edlazer_recent_tracks_v1';
   static const int _recentTracksLimit = 60;
 
   final Catalog catalog;
@@ -262,8 +262,8 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     await audioEngine?.setVolume(_volume);
     // Persist the latest value even when several drag updates are in flight.
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('lazer_volume', _volume);
-    await prefs.setDouble('lazer_unmuted_volume', _unmutedVolume);
+    await prefs.setDouble('edlazer_volume', _volume);
+    await prefs.setDouble('edlazer_unmuted_volume', _unmutedVolume);
   }
 
   /// Live volume change for a drag in progress: updates the engine and the
@@ -285,7 +285,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     hapticIntensity = value.clamp(0, 1);
     notifyListeners();
     await (await SharedPreferences.getInstance()).setDouble(
-      'lazer_haptic_intensity',
+      'edlazer_haptic_intensity',
       hapticIntensity,
     );
   }
@@ -294,7 +294,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     themeMode = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_theme_mode',
+      'edlazer_theme_mode',
       value.name,
     );
   }
@@ -304,7 +304,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     language = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_language',
+      'edlazer_language',
       value.code,
     );
   }
@@ -330,7 +330,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     uiMode = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_ui_mode',
+      'edlazer_ui_mode',
       value.name,
     );
   }
@@ -353,7 +353,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     legacyBackground = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_legacy_background',
+      'edlazer_legacy_background',
       value.name,
     );
   }
@@ -364,12 +364,12 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     if (path == null) {
-      await prefs.remove('lazer_legacy_background_image');
+      await prefs.remove('edlazer_legacy_background_image');
     } else {
       // Persist the name, not the sandbox path: iOS may move the container
       // between launches. See [BackgroundImageStore].
       await prefs.setString(
-        'lazer_legacy_background_image',
+        'edlazer_legacy_background_image',
         backgroundImageStore.preferenceValue(path),
       );
     }
@@ -380,7 +380,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     legacyUiAlpha = value.clamp(0.4, 1.0);
     notifyListeners();
     await (await SharedPreferences.getInstance()).setDouble(
-      'lazer_legacy_ui_alpha',
+      'edlazer_legacy_ui_alpha',
       legacyUiAlpha,
     );
   }
@@ -404,7 +404,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     };
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_media_shortcuts',
+      'edlazer_media_shortcuts',
       MediaShortcutSettings.encode(mediaShortcuts),
     );
   }
@@ -413,7 +413,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     mediaShortcuts = MediaShortcutSettings.defaults();
     notifyListeners();
     await (await SharedPreferences.getInstance()).remove(
-      'lazer_media_shortcuts',
+      'edlazer_media_shortcuts',
     );
   }
 
@@ -430,7 +430,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     dynamicBackgroundQuality = next;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setDouble(
-      'lazer_dynamic_background_quality',
+      'edlazer_dynamic_background_quality',
       next,
     );
   }
@@ -444,7 +444,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     surface = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_surface',
+      'edlazer_surface',
       value.name,
     );
   }
@@ -458,8 +458,8 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     autoDpiScale = false;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('lazer_dpi_scale', next);
-    await prefs.setBool('lazer_auto_dpi_scale', false);
+    await prefs.setDouble('edlazer_dpi_scale', next);
+    await prefs.setBool('edlazer_auto_dpi_scale', false);
   }
 
   Future<void> setAutoDpiScale(bool value) async {
@@ -467,7 +467,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     autoDpiScale = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setBool(
-      'lazer_auto_dpi_scale',
+      'edlazer_auto_dpi_scale',
       value,
     );
   }
@@ -478,8 +478,8 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     dpiScale = kDpiScaleDefault;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('lazer_auto_dpi_scale', true);
-    await prefs.setDouble('lazer_dpi_scale', kDpiScaleDefault);
+    await prefs.setBool('edlazer_auto_dpi_scale', true);
+    await prefs.setDouble('edlazer_dpi_scale', kDpiScaleDefault);
   }
 
   double lyricControlsSeconds = 1.5;
@@ -487,7 +487,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
 
   /// 歌词特效质量: 高 / 自动 / 低.
   LyricFxQuality lyricFxQuality = LyricFxQuality.auto;
-  bool showFrameStats = const bool.fromEnvironment('LAZER_FRAME_STATS');
+  bool showFrameStats = const bool.fromEnvironment('EDLAZER_FRAME_STATS');
   double lyricFontSize = 22;
   int lyricFontWeight = 600;
   static int normalizeLyricWeight(int value) =>
@@ -498,12 +498,12 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     showFrameStats = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setBool(
-      'lazer_show_frame_stats',
+      'edlazer_show_frame_stats',
       value,
     );
   }
 
-  /// The legacy shell's accent palette: the fixed Lazer scheme, one seeded
+  /// The legacy shell's accent palette: the fixed EdLazer scheme, one seeded
   /// from the current cover like the app's "follow the song" palette, or the
   /// listener's own colour.
   LegacyPaletteMode legacyPalette = LegacyPaletteMode.fixed;
@@ -529,7 +529,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     legacyPalette = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(
-      'lazer_legacy_palette',
+      'edlazer_legacy_palette',
       value.name,
     );
   }
@@ -539,7 +539,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     legacyAccentColor = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setInt(
-      'lazer_legacy_accent',
+      'edlazer_legacy_accent',
       value.toARGB32(),
     );
   }
@@ -557,7 +557,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     lyricFontSize = value.clamp(14, 40);
     notifyListeners();
     await (await SharedPreferences.getInstance()).setDouble(
-      'lazer_lyric_font_size',
+      'edlazer_lyric_font_size',
       lyricFontSize,
     );
   }
@@ -566,7 +566,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     lyricFontWeight = normalizeLyricWeight(value);
     notifyListeners();
     await (await SharedPreferences.getInstance()).setInt(
-      'lazer_lyric_font_weight',
+      'edlazer_lyric_font_weight',
       lyricFontWeight,
     );
   }
@@ -582,7 +582,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     );
     notifyListeners();
     await (await SharedPreferences.getInstance()).setDouble(
-      'lazer_scroll_acceleration',
+      'edlazer_scroll_acceleration',
       scrollAcceleration,
     );
   }
@@ -593,7 +593,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     lyricBlurEnabled = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setBool(
-      'lazer_lyric_blur',
+      'edlazer_lyric_blur',
       value,
     );
   }
@@ -602,7 +602,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     lyricFxQuality = value;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setInt(
-      'lazer_lyric_fx_quality',
+      'edlazer_lyric_fx_quality',
       value.index,
     );
   }
@@ -614,7 +614,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     );
     notifyListeners();
     await (await SharedPreferences.getInstance()).setDouble(
-      'lazer_scroll_retention',
+      'edlazer_scroll_retention',
       scrollRetention,
     );
   }
@@ -623,7 +623,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     lyricResumeSeconds = value.clamp(1, 10);
     notifyListeners();
     await (await SharedPreferences.getInstance()).setDouble(
-      'lazer_lyric_resume_seconds',
+      'edlazer_lyric_resume_seconds',
       lyricResumeSeconds,
     );
   }
@@ -632,14 +632,14 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     hapticsEnabled = value;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('lazer_haptics', value);
+    await prefs.setBool('edlazer_haptics', value);
   }
 
   Future<void> setLyricControlsSeconds(double value) async {
     lyricControlsSeconds = value.clamp(1, 10);
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('lazer_lyric_controls_seconds', lyricControlsSeconds);
+    await prefs.setDouble('edlazer_lyric_controls_seconds', lyricControlsSeconds);
   }
 
   /// Real playback engine (just_audio in the app).
@@ -809,56 +809,89 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   bool get isGuest => _user.isGuest;
   bool get signedIn => !_user.isGuest;
 
+  /// Copies settings saved under the old `lazer_` prefix and drops the
+  /// updater keys from both names. Playback and library values are kept.
+  static Future<void> _migrateLegacyPreferenceNames(
+    SharedPreferences prefs,
+  ) async {
+    await prefs.remove('lazer_skipped_update');
+    await prefs.remove('lazer_update_checked_at');
+    await prefs.remove('edlazer_skipped_update');
+    await prefs.remove('edlazer_update_checked_at');
+    const String oldPrefix = 'lazer_';
+    const String newPrefix = 'edlazer_';
+    for (final String key in prefs.getKeys().toList()) {
+      if (!key.startsWith(oldPrefix)) continue;
+      final String next = '$newPrefix${key.substring(oldPrefix.length)}';
+      if (!prefs.containsKey(next)) {
+        final Object? value = prefs.get(key);
+        switch (value) {
+          case String text:
+            await prefs.setString(next, text);
+          case bool flag:
+            await prefs.setBool(next, flag);
+          case int number:
+            await prefs.setInt(next, number);
+          case double number:
+            await prefs.setDouble(next, number);
+          case List<Object?> items:
+            await prefs.setStringList(next, <String>[
+              for (final Object? item in items) '$item',
+            ]);
+          default:
+            break;
+        }
+      }
+      await prefs.remove(key);
+    }
+  }
+
   /// Restores any persisted gateway session, then loads the home feed.
   Future<void> bootstrap() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // The in-app updater is gone. Drop its leftover keys so an older
-      // install does not keep a skipped-version record. Music preferences
-      // are not touched.
-      await prefs.remove('lazer_skipped_update');
-      await prefs.remove('lazer_update_checked_at');
+      await _migrateLegacyPreferenceNames(prefs);
       _independentPlayback =
-          prefs.getBool('lazer_independent_playback') ?? _independentPlayback;
-      hapticsEnabled = prefs.getBool('lazer_haptics') ?? true;
-      hapticIntensity = (prefs.getDouble('lazer_haptic_intensity') ?? 0.5)
+          prefs.getBool('edlazer_independent_playback') ?? _independentPlayback;
+      hapticsEnabled = prefs.getBool('edlazer_haptics') ?? true;
+      hapticIntensity = (prefs.getDouble('edlazer_haptic_intensity') ?? 0.5)
           .clamp(0, 1);
       themeMode = ThemeMode.values.firstWhere(
-        (mode) => mode.name == prefs.getString('lazer_theme_mode'),
+        (mode) => mode.name == prefs.getString('edlazer_theme_mode'),
         orElse: () => ThemeMode.system,
       );
-      language = AppLanguage.parse(prefs.getString('lazer_language'));
+      language = AppLanguage.parse(prefs.getString('edlazer_language'));
       legacyBackground = LegacyBackgroundModeLabels.parse(
-        prefs.getString('lazer_legacy_background'),
+        prefs.getString('edlazer_legacy_background'),
       );
       final String? storedBackgroundImage = prefs.getString(
-        'lazer_legacy_background_image',
+        'edlazer_legacy_background_image',
       );
       final String? restoredBackgroundImage = await backgroundImageStore
           .restore(storedBackgroundImage);
       legacyBackgroundImagePath = restoredBackgroundImage;
       mediaShortcuts = MediaShortcutSettings.decode(
-        prefs.getString('lazer_media_shortcuts'),
+        prefs.getString('edlazer_media_shortcuts'),
       );
       if (storedBackgroundImage != null &&
           restoredBackgroundImage != null &&
           storedBackgroundImage != restoredBackgroundImage) {
         // Migrate an absolute path from an older build to the portable name.
         await prefs.setString(
-          'lazer_legacy_background_image',
+          'edlazer_legacy_background_image',
           backgroundImageStore.preferenceValue(restoredBackgroundImage),
         );
       }
-      legacyUiAlpha = (prefs.getDouble('lazer_legacy_ui_alpha') ?? 0.7).clamp(
+      legacyUiAlpha = (prefs.getDouble('edlazer_legacy_ui_alpha') ?? 0.7).clamp(
         0.4,
         1.0,
       );
       dynamicBackgroundQuality = normalizeDynamicBackgroundQuality(
-        prefs.getDouble('lazer_dynamic_background_quality') ??
+        prefs.getDouble('edlazer_dynamic_background_quality') ??
             kDynamicBackgroundQualityDefault,
       );
-      uiMode = AppUiModeLabels.parse(prefs.getString('lazer_ui_mode'));
-      final String? storedSurface = prefs.getString('lazer_surface');
+      uiMode = AppUiModeLabels.parse(prefs.getString('edlazer_ui_mode'));
+      final String? storedSurface = prefs.getString('edlazer_surface');
       surface = AppSurfaceLabels.parse(storedSurface);
       if (deviceIsTelevision && storedSurface == null) {
         // A television boots straight into 大屏幕模式: its panel, its remote and
@@ -867,54 +900,54 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
         surface = AppSurface.tv;
       }
       dpiScale = normalizeDpiScale(
-        prefs.getDouble('lazer_dpi_scale') ?? kDpiScaleDefault,
+        prefs.getDouble('edlazer_dpi_scale') ?? kDpiScaleDefault,
       );
-      autoDpiScale = prefs.getBool('lazer_auto_dpi_scale') ?? true;
-      _volume = (prefs.getDouble('lazer_volume') ?? 1).clamp(0, 1);
+      autoDpiScale = prefs.getBool('edlazer_auto_dpi_scale') ?? true;
+      _volume = (prefs.getDouble('edlazer_volume') ?? 1).clamp(0, 1);
       _unmutedVolume =
-          (prefs.getDouble('lazer_unmuted_volume') ??
+          (prefs.getDouble('edlazer_unmuted_volume') ??
                   (_volume > 0 ? _volume : 1))
               .clamp(0.01, 1);
       playbackQuality = AudioQualityInfo.parse(
-        prefs.getString('lazer_playback_quality'),
+        prefs.getString('edlazer_playback_quality'),
       );
       downloadQuality = AudioQualityInfo.parse(
-        prefs.getString('lazer_download_quality'),
+        prefs.getString('edlazer_download_quality'),
       );
-      downloadDirectory = prefs.getString('lazer_download_directory');
+      downloadDirectory = prefs.getString('edlazer_download_directory');
       lyricControlsSeconds =
-          (prefs.getDouble('lazer_lyric_controls_seconds') ?? 1.5).clamp(1, 10);
-      lyricBlurEnabled = prefs.getBool('lazer_lyric_blur') ?? true;
+          (prefs.getDouble('edlazer_lyric_controls_seconds') ?? 1.5).clamp(1, 10);
+      lyricBlurEnabled = prefs.getBool('edlazer_lyric_blur') ?? true;
       final int fxQuality =
-          prefs.getInt('lazer_lyric_fx_quality') ?? LyricFxQuality.auto.index;
+          prefs.getInt('edlazer_lyric_fx_quality') ?? LyricFxQuality.auto.index;
       lyricFxQuality = LyricFxQuality
           .values[fxQuality.clamp(0, LyricFxQuality.values.length - 1)];
       showFrameStats =
-          prefs.getBool('lazer_show_frame_stats') ?? showFrameStats;
-      lyricFontSize = (prefs.getDouble('lazer_lyric_font_size') ?? 22).clamp(
+          prefs.getBool('edlazer_show_frame_stats') ?? showFrameStats;
+      lyricFontSize = (prefs.getDouble('edlazer_lyric_font_size') ?? 22).clamp(
         14,
         40,
       );
       lyricFontWeight = normalizeLyricWeight(
-        prefs.getInt('lazer_lyric_font_weight') ?? 600,
+        prefs.getInt('edlazer_lyric_font_weight') ?? 600,
       );
       legacyPalette = LegacyPaletteModeLabels.parse(
-        prefs.getString('lazer_legacy_palette'),
+        prefs.getString('edlazer_legacy_palette'),
       );
-      final int? accent = prefs.getInt('lazer_legacy_accent');
+      final int? accent = prefs.getInt('edlazer_legacy_accent');
       legacyAccentColor = accent == null ? null : Color(accent);
       scrollRetention =
-          (prefs.getDouble('lazer_scroll_retention') ??
+          (prefs.getDouble('edlazer_scroll_retention') ??
                   ScrollMotion.defaultRetention)
               .clamp(ScrollMotion.minRetention, ScrollMotion.maxRetention);
       scrollAcceleration =
-          (prefs.getDouble('lazer_scroll_acceleration') ??
+          (prefs.getDouble('edlazer_scroll_acceleration') ??
                   ScrollMotion.defaultAcceleration)
               .clamp(
                 ScrollMotion.minAcceleration,
                 ScrollMotion.maxAcceleration,
               );
-      lyricResumeSeconds = (prefs.getDouble('lazer_lyric_resume_seconds') ?? 2)
+      lyricResumeSeconds = (prefs.getDouble('edlazer_lyric_resume_seconds') ?? 2)
           .clamp(1, 10);
       _restorePlayUploads(prefs);
     } catch (_) {}
@@ -2490,7 +2523,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
   /// Restores plays that qualified while the app was offline or closing, so a
   /// crash or a normal exit never loses listening time the account earned.
   void _restorePlayUploads(SharedPreferences prefs) {
-    final String? raw = prefs.getString('lazer_play_uploads');
+    final String? raw = prefs.getString('edlazer_play_uploads');
     if (raw == null || raw.isEmpty) return;
     try {
       final dynamic decoded = jsonDecode(raw);
@@ -2515,7 +2548,7 @@ class AppState extends ChangeNotifier with BuildSafeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-        'lazer_play_uploads',
+        'edlazer_play_uploads',
         jsonEncode(<Map<String, int>>[
           for (final report in _playUploads)
             <String, int>{'songId': report.songId, 'seconds': report.seconds},

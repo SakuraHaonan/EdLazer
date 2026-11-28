@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/mascot.png" width="220" alt="The Lazer mascot">
+  <img src="docs/images/mascot.png" width="220" alt="The EdLazer mascot">
 </p>
 
-<h1 align="center">Lazer · nextgen</h1>
+<h1 align="center">EdLazer · nextgen</h1>
 
 <h3 align="center">
   交流群：<a href="https://qm.qq.com/q/JJJfE0QV00">神秘交流群 · 1063238023</a>
@@ -95,20 +95,20 @@ flutter run
 
 向 `nextgen` 推送代码后，[GitHub Actions](https://github.com/SakuraHaonan/EdLazer/actions/workflows/build.yml)
 会先检查代码，再构建下面的产物。推送 `v*` 版本标签会在所有构建成功后自动创建 GitHub Release；
-带 `-beta.1` 等后缀的版本会标为预发布。文件名统一为 `Lazer-<系统>-<架构>`。
+带 `-beta.1` 等后缀的版本会标为预发布。文件名统一为 `EdLazer-<系统>-<架构>`。
 应用不会自己检查更新，也不会把安装引导到其他仓库。
 
 | 产物 | 说明 |
 | --- | --- |
-| `Lazer-Windows-x86_64.zip` | EXE、依赖库、资源与 Visual C++ 运行库 |
-| `Lazer-macOS-universal.zip` | Intel / Apple Silicon 通用 App |
-| `Lazer-macOS-aarch64.zip` | Apple Silicon App，使用原生 ARM runner 构建 |
-| `Lazer-macOS-x86_64.zip` | Intel App，使用原生 Intel runner 构建 |
-| `Lazer-Linux-x86_64.AppImage` | Linux x86_64，包含 GTK 与 libmpv |
-| `Lazer-Linux-aarch64.AppImage` | Linux ARM64，使用原生 ARM runner 构建 |
-| `Lazer-Android-universal.apk` | 通用 APK，使用当前开发签名 |
-| `Lazer-Android-arm64-v8a.apk` | 仅 arm64-v8a 的 APK，使用当前开发签名 |
-| `Lazer-iOS-aarch64.ipa` | 未签名的 iOS 真机 IPA |
+| `EdLazer-Windows-x86_64.zip` | EXE、依赖库、资源与 Visual C++ 运行库 |
+| `EdLazer-macOS-universal.zip` | Intel / Apple Silicon 通用 App |
+| `EdLazer-macOS-aarch64.zip` | Apple Silicon App，使用原生 ARM runner 构建 |
+| `EdLazer-macOS-x86_64.zip` | Intel App，使用原生 Intel runner 构建 |
+| `EdLazer-Linux-x86_64.AppImage` | Linux x86_64，包含 GTK 与 libmpv |
+| `EdLazer-Linux-aarch64.AppImage` | Linux ARM64，使用原生 ARM runner 构建 |
+| `EdLazer-Android-universal.apk` | 通用 APK，使用当前开发签名 |
+| `EdLazer-Android-arm64-v8a.apk` | 仅 arm64-v8a 的 APK，使用当前开发签名 |
+| `EdLazer-iOS-aarch64.ipa` | 未签名的 iOS 真机 IPA |
 
 构建完成后，在对应运行页面的 **Artifacts** 中下载，需登录 GitHub，保留 30 天。
 Windows 请完整解压后运行；AppImage 下载后先 `chmod +x`；
@@ -125,7 +125,7 @@ macOS 包使用 ad-hoc 签名。IPA 未签名，安装前需要自行签名。
 - 还有屏幕前的你：愿意把它下载下来，认真听完一首歌，就已经很好了。
 
 <p align="center">
-  <img src="docs/images/mark.png" width="44" alt="Lazer">
+  <img src="docs/images/mark.png" width="44" alt="EdLazer">
   <br>
   <sub>MIT License · 用 Flutter 和一点点耐心做成</sub>
 </p>

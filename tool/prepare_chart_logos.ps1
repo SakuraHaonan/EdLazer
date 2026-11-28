@@ -6,7 +6,7 @@ if ([string]::IsNullOrWhiteSpace($CairoSvg)) {
 }
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $assetRoot = Join-Path $repoRoot 'assets\chart_logos'
-$sourceRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'lazer_chart_logo_sources'
+$sourceRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'edlazer_chart_logo_sources'
 New-Item -ItemType Directory -Force -Path $assetRoot, $sourceRoot | Out-Null
 
 $logos = @(

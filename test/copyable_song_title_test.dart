@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:lazer_nextgen/widgets/copyable_song_title.dart';
+import 'package:edlazer_nextgen/widgets/copyable_song_title.dart';
 
 void main() {
   testWidgets('long-pressing a song title asks before copying it', (

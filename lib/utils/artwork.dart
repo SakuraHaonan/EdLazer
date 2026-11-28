@@ -105,7 +105,7 @@ String? artworkUrlForSize(
 /// Cover requests carry the app identity and music-site Referer. CDN nodes
 /// can still reject an individual request; callers use bounded alternatives.
 const Map<String, String> artworkHeaders = <String, String>{
-  'User-Agent': 'LazerDesktop/1.0',
+  'User-Agent': 'EdLazerDesktop/1.0',
   'Referer': 'https://music.163.com/',
 };
 

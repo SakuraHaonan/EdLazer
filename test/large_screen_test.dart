@@ -4,19 +4,19 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/catalog_details.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_player_bar.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
-import 'package:lazer_nextgen/state/ui_preferences.dart';
-import 'package:lazer_nextgen/tv/large_screen_chrome.dart';
-import 'package:lazer_nextgen/tv/large_screen_pages.dart';
-import 'package:lazer_nextgen/tv/tv_mode.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/catalog_details.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_player_bar.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/state/ui_preferences.dart';
+import 'package:edlazer_nextgen/tv/large_screen_chrome.dart';
+import 'package:edlazer_nextgen/tv/large_screen_pages.dart';
+import 'package:edlazer_nextgen/tv/tv_mode.dart';
 
 const Track _track = Track(
   id: 'large-screen-track',
@@ -166,7 +166,7 @@ void main() {
 
     test('an explicit surface choice survives television detection', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
-        'lazer_surface': 'standard',
+        'edlazer_surface': 'standard',
       });
       final AppState state = AppState(
         catalog: _Catalog(),
@@ -196,7 +196,7 @@ void main() {
       expect(find.text('精选推荐'), findsOneWidget);
       expect(find.text('新发行'), findsOneWidget);
       // The desktop source list is not part of this composition.
-      expect(find.text('Lazer'), findsNothing);
+      expect(find.text('EdLazer'), findsNothing);
       expect(find.text('测试歌单'), findsWidgets);
       // The dock has no seek rail: transport controls sit on the centre line,
       // with the playing metadata on the left and the actions on the right.

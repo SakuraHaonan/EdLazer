@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""i18n coverage checker for lazer_nextgen.
+"""i18n coverage checker for edlazer_nextgen.
 
 Two things are enforced:
 

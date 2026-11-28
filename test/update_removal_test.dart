@@ -2,14 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/data/audio_quality.dart';
-import 'package:lazer_nextgen/data/catalog.dart';
-import 'package:lazer_nextgen/data/models.dart';
-import 'package:lazer_nextgen/diagnostics/build_info.dart';
-import 'package:lazer_nextgen/gateway/gateway.dart';
-import 'package:lazer_nextgen/legacy/legacy_shell.dart';
-import 'package:lazer_nextgen/legacy/legacy_theme.dart';
-import 'package:lazer_nextgen/state/app_state.dart';
+import 'package:edlazer_nextgen/data/audio_quality.dart';
+import 'package:edlazer_nextgen/data/catalog.dart';
+import 'package:edlazer_nextgen/data/models.dart';
+import 'package:edlazer_nextgen/diagnostics/build_info.dart';
+import 'package:edlazer_nextgen/gateway/gateway.dart';
+import 'package:edlazer_nextgen/legacy/legacy_shell.dart';
+import 'package:edlazer_nextgen/legacy/legacy_theme.dart';
+import 'package:edlazer_nextgen/state/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const Track _track = Track(
@@ -122,7 +122,9 @@ void main() {
         .where(
           (String line) =>
               line.contains('lazer_skipped_update') ||
-              line.contains('lazer_update_checked_at'),
+              line.contains('lazer_update_checked_at') ||
+              line.contains('edlazer_skipped_update') ||
+              line.contains('edlazer_update_checked_at'),
         )
         .toList();
     expect(leftover, isNotEmpty);
@@ -149,7 +151,10 @@ void main() {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('lazer_skipped_update'), isNull);
       expect(prefs.getInt('lazer_update_checked_at'), isNull);
-      expect(prefs.getDouble('lazer_volume'), 0.4);
+      expect(prefs.getString('edlazer_skipped_update'), isNull);
+      expect(prefs.getInt('edlazer_update_checked_at'), isNull);
+      expect(prefs.getDouble('lazer_volume'), isNull);
+      expect(prefs.getDouble('edlazer_volume'), 0.4);
       expect(state.volume, closeTo(0.4, 0.001));
     },
   );

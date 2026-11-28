@@ -57,7 +57,7 @@ Future<void> main() async {
       await LiquidGlass.precache();
       LicenseRegistry.addLicense(() async* {
         yield LicenseEntryWithLineBreaks([
-          'Lazer',
+          'EdLazer',
         ], await rootBundle.loadString('LICENSE'));
         yield LicenseEntryWithLineBreaks(
           ['Lyric animation'],
@@ -96,12 +96,12 @@ Future<void> main() async {
         enableExternalCharts: true,
         deviceIsTelevision: television,
         independentPlayback:
-            prefs.getBool('lazer_independent_playback') ?? false,
+            prefs.getBool('edlazer_independent_playback') ?? false,
       );
       final session = PlaybackSession(state, audio);
       final media = SystemMediaController(state);
       runApp(
-        LazerApp(state: state, audio: audio, media: media, session: session),
+        EdLazerApp(state: state, audio: audio, media: media, session: session),
       );
     },
     zoneSpecification: ZoneSpecification(
@@ -114,8 +114,8 @@ Future<void> main() async {
 }
 
 /// Music player backed by the ported NetEase gateway.
-class LazerApp extends StatefulWidget {
-  const LazerApp({
+class EdLazerApp extends StatefulWidget {
+  const EdLazerApp({
     super.key,
     required this.state,
     required this.audio,
@@ -128,10 +128,10 @@ class LazerApp extends StatefulWidget {
   final PlaybackSession? session;
 
   @override
-  State<LazerApp> createState() => _LazerAppState();
+  State<EdLazerApp> createState() => _EdLazerAppState();
 }
 
-class _LazerAppState extends State<LazerApp> {
+class _EdLazerAppState extends State<EdLazerApp> {
   AppState get _state => widget.state;
   bool _rootRebuildScheduled = false;
 

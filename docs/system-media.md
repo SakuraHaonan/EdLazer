@@ -1,6 +1,6 @@
 # System media integration
 
-The app has one queue and one audio engine. `LazerMediaHandler` adapts the existing
+The app has one queue and one audio engine. `EdLazerMediaHandler` adapts the existing
 `AppState` to system controls, rather than creating another player.
 
 | Platform | Integration |

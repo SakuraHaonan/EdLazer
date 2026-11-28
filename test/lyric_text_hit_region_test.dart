@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/widgets/lyric_text_hit_region.dart';
+import 'package:edlazer_nextgen/widgets/lyric_text_hit_region.dart';
 
 void main() {
   testWidgets(

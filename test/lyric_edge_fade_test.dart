@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lazer_nextgen/widgets/lyric_edge_fade.dart';
+import 'package:edlazer_nextgen/widgets/lyric_edge_fade.dart';
 
 void main() {
   testWidgets('lyric edge fade dissolves all four raster edges', (

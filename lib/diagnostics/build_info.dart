@@ -1,14 +1,14 @@
 /// The source commit and release version the running binary was built from.
 ///
 /// Automated builds stamp both through `--dart-define` (see
-/// `.github/workflows/build.yml`): `LAZER_COMMIT=<sha>` and
-/// `LAZER_VERSION=<tag>`. Local builds without the defines fall back to the
+/// `.github/workflows/build.yml`): `EDLAZER_COMMIT=<sha>` and
+/// `EDLAZER_VERSION=<tag>`. Local builds without the defines fall back to the
 /// pubspec version and the commit this beta was cut from. The values are
 /// display-only: the app does not compare them with a release feed.
 abstract final class BuildInfo {
-  static const String _stamped = String.fromEnvironment('LAZER_COMMIT');
+  static const String _stamped = String.fromEnvironment('EDLAZER_COMMIT');
   static const String _fallback = '8a2ce07';
-  static const String _stampedVersion = String.fromEnvironment('LAZER_VERSION');
+  static const String _stampedVersion = String.fromEnvironment('EDLAZER_VERSION');
   static const String _fallbackVersion = '2.0.0-beta.15';
 
   /// The full commit SHA the binary was built from.
