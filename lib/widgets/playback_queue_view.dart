@@ -156,7 +156,6 @@ class _QueueRow extends StatefulWidget {
 }
 
 class _QueueRowState extends State<_QueueRow> {
-  bool _hovering = false;
   bool _focused = false;
 
   @override
@@ -164,19 +163,12 @@ class _QueueRowState extends State<_QueueRow> {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     final bool current = widget.isCurrent;
-    final bool highlighted = _hovering || _focused;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 1),
         child: Material(
-          color: current
-              ? apple.accentSoft
-              : highlighted
-              ? apple.fill
-              : Colors.transparent,
+          color: current ? apple.accentSoft : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           clipBehavior: Clip.antiAlias,
           child: InkWell(

@@ -8,7 +8,6 @@ import '../data/models.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../state/detail_requests.dart';
-import '../theme/app_palette.dart';
 import 'interaction_feedback.dart';
 
 Future<void> openArtists(
@@ -100,8 +99,8 @@ class CatalogTextLink extends StatelessWidget {
         textStyle: style ?? DefaultTextStyle.of(context).style,
         child: InkWell(
           borderRadius: BorderRadius.zero,
-          hoverColor: context.colors.oatWarm.withValues(alpha: .4),
-          focusColor: context.colors.clay.withValues(alpha: .18),
+          hoverColor: Colors.transparent,
+          focusColor: Colors.transparent,
           onTap: feedbackAction(context, onTap),
           child: label,
         ),

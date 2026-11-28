@@ -211,9 +211,9 @@ void main() {
     await tester.pumpWidget(_legacyApp(state));
     await tester.pumpAndSettle();
 
-    // Rail chrome and the discovery page. 'Lazer' is both the rail wordmark
+    // Rail chrome and the discovery page. 'EdLazer' is both the rail wordmark
     // and the empty transport's artist line.
-    expect(find.text('Lazer'), findsWidgets);
+    expect(find.text('EdLazer'), findsWidgets);
     expect(find.text('主页'), findsOneWidget);
     expect(find.text('音乐库'), findsOneWidget);
     expect(find.text('我喜欢'), findsOneWidget);
@@ -294,7 +294,7 @@ void main() {
     expect(find.text('\u5168\u90e8\u5355\u66f2 / EP'), findsWidgets);
     expect(find.text('\u6d4b\u8bd5 EP'), findsOneWidget);
     expect(
-      find.text('Lazer'),
+      find.text('EdLazer'),
       findsWidgets,
       reason: '\u4fa7\u680f\u5e94\u7ee7\u7eed\u4fdd\u7559',
     );

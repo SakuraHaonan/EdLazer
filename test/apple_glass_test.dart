@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 import 'package:lazer_nextgen/widgets/apple_ui.dart';
 
 void main() {
-  testWidgets('every glass panel clips its own backdrop filter', (
-    tester,
-  ) async {
-    // A BackdropFilter with nothing clipping it filters the whole screen: the
-    // player bar's square glass would blur every page painted underneath it.
-    // The clip is part of the effect, not decoration, so it must survive for
-    // square panels too.
+  testWidgets('glass panels use the liquid-glass material', (tester) async {
     for (final BorderRadius radius in <BorderRadius>[
       BorderRadius.zero,
       BorderRadius.circular(18),
@@ -25,12 +20,8 @@ void main() {
           ),
         ),
       );
-      final Finder clip = find.ancestor(
-        of: find.byType(BackdropFilter),
-        matching: find.byType(ClipRRect),
-      );
-      expect(clip, findsOneWidget, reason: 'unclipped glass blurs the window');
-      expect(tester.widget<ClipRRect>(clip).borderRadius, radius);
+      expect(find.byType(LiquidGlass), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
     }
     expect(tester.takeException(), isNull);
   });

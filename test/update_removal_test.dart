@@ -184,7 +184,7 @@ void main() {
     await tester.tap(find.text('设置').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('EdLazer'), findsOneWidget);
+    expect(find.text('EdLazer'), findsWidgets);
     expect(find.text(BuildInfo.displayVersion), findsOneWidget);
     expect(find.text('提交 ${BuildInfo.shortCommit}'), findsOneWidget);
     expect(find.text('检查更新'), findsNothing);

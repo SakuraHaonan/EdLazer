@@ -200,13 +200,14 @@ void main() {
     await tester.pumpWidget(_app(state, brightness: Brightness.dark));
     await tester.pump();
     expect(find.byType(LiquidGlassNavBar), findsOneWidget);
-    expect(find.byType(LiquidGlassPanel), findsOneWidget);
+    // Toolbar plus the navigation capsule. The music capsule appears with a track.
+    expect(find.byType(LiquidGlassPanel), findsNWidgets(2));
 
     state.playQueue(const <Track>[_first, _second]);
     await tester.pump();
     await tester.pump();
 
-    expect(find.byType(LiquidGlassPanel), findsNWidgets(2));
+    expect(find.byType(LiquidGlassPanel), findsNWidgets(3));
     expect(find.byType(LegacyPlayerBar), findsOneWidget);
     final Rect music = tester.getRect(find.byType(LegacyPlayerBar));
     final Rect nav = tester.getRect(find.byType(LiquidGlassNavBar));
@@ -302,7 +303,7 @@ void main() {
       Theme.of(tester.element(find.byType(LegacyShell))).brightness,
       Brightness.light,
     );
-    expect(find.byType(LiquidGlassPanel), findsNWidgets(2));
+    expect(find.byType(LiquidGlassPanel), findsNWidgets(3));
     final Rect music = tester.getRect(find.byType(LegacyPlayerBar));
     final Rect nav = tester.getRect(find.byType(LiquidGlassNavBar));
     expect(
@@ -329,7 +330,8 @@ void main() {
     await _capture(tester, 'desktop-light');
 
     expect(find.byType(LiquidGlassNavBar), findsNothing);
-    expect(find.byType(LiquidGlassPanel), findsOneWidget);
+    // Sidebar, toolbar and the one transport capsule.
+    expect(find.byType(LiquidGlassPanel), findsNWidgets(3));
     expect(find.byType(LegacyThinSeekBar), findsOneWidget);
     expect(state.position, Duration.zero);
 

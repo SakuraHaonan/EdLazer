@@ -370,6 +370,8 @@ ThemeData buildLegacyTheme({
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(
         foregroundColor: onSurfaceVariant,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
         shape: const StadiumBorder(),
       ),
     ),
@@ -573,7 +575,8 @@ ThemeData buildLegacyTheme({
         textTheme.bodyMedium?.copyWith(color: onSurfaceVariant),
       ),
     ),
-    splashColor: scheme.primary.withValues(alpha: 0.10),
-    highlightColor: scheme.primary.withValues(alpha: 0.06),
+    splashColor: Colors.transparent,
+    hoverColor: Colors.transparent,
+    highlightColor: Colors.transparent,
   );
 }
