@@ -1,7 +1,6 @@
 # Liquid glass
 
-The floating music bar, the phone tab bar, the desktop sidebar, the
-toolbars and grouped settings cards use
+The floating music bar and the phone tab bar use
 [`liquid_glass_renderer`](https://pub.dev/packages/liquid_glass_renderer)
 **1.0.0-dev.2** (Apache-2.0).
 

@@ -9,7 +9,7 @@ abstract final class BuildInfo {
   static const String _stamped = String.fromEnvironment('EDLAZER_COMMIT');
   static const String _fallback = '5a7f108';
   static const String _stampedVersion = String.fromEnvironment('EDLAZER_VERSION');
-  static const String _fallbackVersion = '2.0.0-beta.16';
+  static const String _fallbackVersion = '2.0.0-beta.17';
 
   /// The full commit SHA the binary was built from.
   static String get commit => _stamped.isEmpty ? _fallback : _stamped;

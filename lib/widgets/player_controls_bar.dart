@@ -171,11 +171,15 @@ class TrackRow extends StatefulWidget {
 }
 
 class _TrackRowState extends State<TrackRow> {
+  bool _hovered = false;
+
   @override
   Widget build(BuildContext context) {
     final Track track = widget.track;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -186,7 +190,7 @@ class _TrackRowState extends State<TrackRow> {
               horizontal: AppSpacing.lg,
               vertical: AppSpacing.sm,
             ),
-            color: widget.isCurrent
+            color: widget.isCurrent || _hovered
                 ? context.colors.oatWarm.withValues(alpha: .42)
                 : Colors.transparent,
             child: Row(

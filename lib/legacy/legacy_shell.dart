@@ -678,9 +678,9 @@ class _LegacyShellState extends State<LegacyShell>
                         child: ColoredBox(
                           color: paintedBackdrop
                               ? apple.background.withValues(
-                                  alpha: (state.legacyUiAlpha * .62).clamp(
-                                    .34,
-                                    .58,
+                                  alpha: (state.legacyUiAlpha * .9).clamp(
+                                    .56,
+                                    .92,
                                   ),
                                 )
                               : canvas,
@@ -786,44 +786,42 @@ class _LegacyShellState extends State<LegacyShell>
       context,
       compact: compactBar,
     );
-    return LiquidGlassChrome(
-      child: Row(
-        children: <Widget>[
-          _sidebar(apple),
-          Container(width: .5, color: apple.separator),
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                Column(
-                  children: <Widget>[
-                    _desktopToolbar(apple),
-                    Container(height: .5, color: apple.separator),
-                    Expanded(
-                      child: FloatingDockInset(
-                        inset: dockInset,
-                        child: RepaintBoundary(child: _content()),
-                      ),
+    return Row(
+      children: <Widget>[
+        _sidebar(apple),
+        Container(width: .5, color: apple.separator),
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              Column(
+                children: <Widget>[
+                  _desktopToolbar(apple),
+                  Container(height: .5, color: apple.separator),
+                  Expanded(
+                    child: FloatingDockInset(
+                      inset: dockInset,
+                      child: RepaintBoundary(child: _content()),
                     ),
-                  ],
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: LegacyPlayerBar(
-                    state: state,
-                    compact: compactBar,
-                    comments: _comments,
-                    onComments: _toggleComments,
-                    onOpen: _openNowPlaying,
                   ),
+                ],
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: LegacyPlayerBar(
+                  state: state,
+                  compact: compactBar,
+                  comments: _comments,
+                  onComments: _toggleComments,
+                  onOpen: _openNowPlaying,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -843,51 +841,49 @@ class _LegacyShellState extends State<LegacyShell>
         final MediaQueryData media = MediaQuery.of(context);
         return MediaQuery(
           data: media.copyWith(size: constraints.biggest),
-          child: LiquidGlassChrome(
-            child: Column(
-              children: <Widget>[
-                LargeScreenNavBar(
-                  selected: _largeScreenTab,
-                  searchActive:
-                      _section == _LegacySection.search && !_hasOpenDetail,
-                  canGoBack: _hasOpenDetail,
-                  onBack: _backToRoot,
-                  onTab: (LargeScreenTab tab) => _select(switch (tab) {
-                    LargeScreenTab.home => _LegacySection.home,
-                    LargeScreenTab.library => _LegacySection.library,
-                    LargeScreenTab.likes => _LegacySection.likes,
-                    LargeScreenTab.settings => _LegacySection.settings,
-                  }),
-                  onSearch: () => _select(_LegacySection.search),
-                  onNowPlaying: _openNowPlaying,
-                  account: _accountButton(apple, radius: 22),
-                  playing: state.playing,
-                ),
-                // The page owns the whole area under the capsule; the transport
-                // strip is painted over it, with no panel of its own. Pages end
-                // their scroll content with `floatingBarInset` so the last row
-                // can still be brought above the strip.
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: <Widget>[
-                      RepaintBoundary(child: _content()),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 10,
-                        child: RepaintBoundary(
-                          child: LargeScreenTransport(
-                            state: state,
-                            onOpen: _openNowPlaying,
-                          ),
+          child: Column(
+            children: <Widget>[
+              LargeScreenNavBar(
+                selected: _largeScreenTab,
+                searchActive:
+                    _section == _LegacySection.search && !_hasOpenDetail,
+                canGoBack: _hasOpenDetail,
+                onBack: _backToRoot,
+                onTab: (LargeScreenTab tab) => _select(switch (tab) {
+                  LargeScreenTab.home => _LegacySection.home,
+                  LargeScreenTab.library => _LegacySection.library,
+                  LargeScreenTab.likes => _LegacySection.likes,
+                  LargeScreenTab.settings => _LegacySection.settings,
+                }),
+                onSearch: () => _select(_LegacySection.search),
+                onNowPlaying: _openNowPlaying,
+                account: _accountButton(apple, radius: 22),
+                playing: state.playing,
+              ),
+              // The page owns the whole area under the capsule; the transport
+              // strip is painted over it, with no panel of its own. Pages end
+              // their scroll content with `floatingBarInset` so the last row
+              // can still be brought above the strip.
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    RepaintBoundary(child: _content()),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 10,
+                      child: RepaintBoundary(
+                        child: LargeScreenTransport(
+                          state: state,
+                          onOpen: _openNowPlaying,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -979,22 +975,22 @@ class _LegacyShellState extends State<LegacyShell>
         dockHeight +
         LiquidGlassMetrics.bottomGap(context) +
         LiquidGlassMetrics.contentGap;
-    return LiquidGlassChrome(
-      child: Column(
-        children: <Widget>[
-          _mobileToolbar(apple),
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                FloatingDockInset(
-                  inset: dockInset,
-                  child: RepaintBoundary(child: _content()),
-                ),
-                Positioned(
-                  left: LiquidGlassMetrics.sideMargin,
-                  right: LiquidGlassMetrics.sideMargin,
-                  bottom: LiquidGlassMetrics.bottomGap(context),
+    return Column(
+      children: <Widget>[
+        _mobileToolbar(apple),
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              FloatingDockInset(
+                inset: dockInset,
+                child: RepaintBoundary(child: _content()),
+              ),
+              Positioned(
+                left: LiquidGlassMetrics.sideMargin,
+                right: LiquidGlassMetrics.sideMargin,
+                bottom: LiquidGlassMetrics.bottomGap(context),
+                child: LiquidGlassChrome(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
@@ -1058,11 +1054,11 @@ class _LegacyShellState extends State<LegacyShell>
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1234,35 +1230,32 @@ class _LegacyShellState extends State<LegacyShell>
         _chart != null ||
         _comments ||
         _localMusic;
-    return LiquidGlassPanel(
-      borderRadius: BorderRadius.zero,
-      child: SizedBox(
-        height: 64,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Row(
-            children: <Widget>[
-              if (canGoBack) ...<Widget>[
-                _ToolbarButton(
-                  tooltip: '返回',
-                  icon: Icons.chevron_left_rounded,
-                  onPressed: _backToRoot,
-                ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Text(
-                  context.tr(_pageTitle),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: apple.label,
-                    fontWeight: FontWeight.w400,
-                  ),
+    return SizedBox(
+      height: 64,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Row(
+          children: <Widget>[
+            if (canGoBack) ...<Widget>[
+              _ToolbarButton(
+                tooltip: '返回',
+                icon: Icons.chevron_left_rounded,
+                onPressed: _backToRoot,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                context.tr(_pageTitle),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: apple.label,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1275,53 +1268,50 @@ class _LegacyShellState extends State<LegacyShell>
         _chart != null ||
         _comments ||
         _localMusic;
-    return LiquidGlassPanel(
-      borderRadius: BorderRadius.zero,
-      child: SizedBox(
-        height: 50,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: <Widget>[
-              if (canGoBack) ...<Widget>[
-                _ToolbarButton(
-                  tooltip: '返回',
-                  icon: Icons.chevron_left_rounded,
-                  onPressed: _backToRoot,
-                ),
-                const SizedBox(width: 10),
-              ] else
-                const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  context.tr(_pageTitle),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: apple.label,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ),
+    return SizedBox(
+      height: 50,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          children: <Widget>[
+            if (canGoBack) ...<Widget>[
               _ToolbarButton(
-                tooltip: Theme.of(context).brightness == Brightness.dark
-                    ? '浅色外观'
-                    : '深色外观',
-                icon: Theme.of(context).brightness == Brightness.dark
-                    ? Icons.light_mode_rounded
-                    : Icons.dark_mode_rounded,
-                onPressed: () => unawaited(
-                  state.setThemeMode(
-                    Theme.of(context).brightness == Brightness.dark
-                        ? ThemeMode.light
-                        : ThemeMode.dark,
-                  ),
+                tooltip: '返回',
+                icon: Icons.chevron_left_rounded,
+                onPressed: _backToRoot,
+              ),
+              const SizedBox(width: 10),
+            ] else
+              const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                context.tr(_pageTitle),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: apple.label,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
-              const SizedBox(width: 2),
-              _accountButton(apple, radius: 15),
-            ],
-          ),
+            ),
+            _ToolbarButton(
+              tooltip: Theme.of(context).brightness == Brightness.dark
+                  ? '浅色外观'
+                  : '深色外观',
+              icon: Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode_rounded
+                  : Icons.dark_mode_rounded,
+              onPressed: () => unawaited(
+                state.setThemeMode(
+                  Theme.of(context).brightness == Brightness.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark,
+                ),
+              ),
+            ),
+            const SizedBox(width: 2),
+            _accountButton(apple, radius: 15),
+          ],
         ),
       ),
     );
@@ -1660,11 +1650,15 @@ class _ToolbarButton extends StatefulWidget {
 }
 
 class _ToolbarButtonState extends State<_ToolbarButton> {
+  bool _hovering = false;
+
   @override
   Widget build(BuildContext context) {
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
       child: Tooltip(
         message: context.tr(widget.tooltip),
         child: TvTapTarget(
@@ -1674,9 +1668,14 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: feedbackAction(context, widget.onPressed),
-            child: SizedBox(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
               width: 34,
               height: 34,
+              decoration: BoxDecoration(
+                color: _hovering ? apple.tertiaryFill : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
               child: Icon(widget.icon, size: 20, color: apple.secondaryLabel),
             ),
           ),
@@ -1835,12 +1834,15 @@ class _RailPlaylist extends StatefulWidget {
 }
 
 class _RailPlaylistState extends State<_RailPlaylist> {
+  bool _hovering = false;
   bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
     return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
       child: TvTapTarget(
         onTap: feedbackAction(context, widget.onTap),
@@ -1856,7 +1858,11 @@ class _RailPlaylistState extends State<_RailPlaylist> {
             margin: const EdgeInsets.only(bottom: 1),
             padding: const EdgeInsets.symmetric(horizontal: 7),
             decoration: BoxDecoration(
-              color: widget.selected ? apple.fill : Colors.transparent,
+              color: widget.selected
+                  ? apple.fill
+                  : _hovering || _focused
+                  ? apple.tertiaryFill
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(7),
             ),
             child: Row(

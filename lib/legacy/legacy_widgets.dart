@@ -75,9 +75,11 @@ class LegacyCover extends StatelessWidget {
             image: ArtworkImage(resolved),
             fit: BoxFit.cover,
             gaplessPlayback: true,
-            errorBuilder:
-                (BuildContext context, Object? error, StackTrace? _) =>
-                    fallback,
+            errorBuilder: (
+              BuildContext context,
+              Object? error,
+              StackTrace? _,
+            ) => fallback,
           );
     final Widget clipped = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
@@ -292,7 +294,11 @@ class _LegacyTrackRowState extends State<LegacyTrackRow> {
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
             decoration: BoxDecoration(
-              color: widget.current ? apple.accentSoft : Colors.transparent,
+              color: widget.current
+                  ? apple.accentSoft
+                  : highlighted
+                  ? apple.fill
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -481,17 +487,20 @@ class LegacyRailItem extends StatefulWidget {
 }
 
 class _LegacyRailItemState extends State<LegacyRailItem> {
+  bool _hovering = false;
   bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppleSemanticColors apple = AppleSemanticColors.of(context);
-    final bool highlighted = _focused;
+    final bool highlighted = _hovering || _focused;
     final Color labelColor = widget.selected || highlighted
         ? apple.label
         : apple.secondaryLabel;
     return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
       cursor: SystemMouseCursors.click,
       child: TvTapTarget(
         onTap: feedbackAction(context, widget.onTap),
@@ -506,7 +515,11 @@ class _LegacyRailItemState extends State<LegacyRailItem> {
             height: 30,
             padding: const EdgeInsets.symmetric(horizontal: 9),
             decoration: BoxDecoration(
-              color: widget.selected ? apple.fill : Colors.transparent,
+              color: widget.selected
+                  ? apple.fill
+                  : highlighted
+                  ? apple.tertiaryFill
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(7),
             ),
             child: Row(

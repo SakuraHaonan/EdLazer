@@ -383,10 +383,7 @@ ThemeData buildAppleTheme({
     dividerColor: apple.separator,
     shadowColor: Colors.black,
     splashFactory: NoSplash.splashFactory,
-    // Hover and press no longer paint a fill behind controls. Selection and
-    // the liquid-glass loupe carry that state instead.
-    hoverColor: Colors.transparent,
-    highlightColor: Colors.transparent,
+    highlightColor: apple.fill,
     visualDensity: VisualDensity.standard,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     extensions: <ThemeExtension<dynamic>>[apple],
@@ -476,8 +473,8 @@ ThemeData buildAppleTheme({
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(
         foregroundColor: apple.secondaryLabel,
-        highlightColor: Colors.transparent,
-        hoverColor: Colors.transparent,
+        highlightColor: apple.fill,
+        hoverColor: apple.fill,
         shape: const CircleBorder(),
       ),
     ),

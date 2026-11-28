@@ -261,17 +261,24 @@ class _NowPlayingTile extends StatefulWidget {
 }
 
 class _NowPlayingTileState extends State<_NowPlayingTile> {
+  bool _hovering = false;
+  bool _focused = false;
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme scheme = theme.colorScheme;
     final Track? track = widget.track;
+    final bool highlighted = _hovering || _focused;
     return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
       cursor: widget.onTap == null
           ? SystemMouseCursors.basic
           : SystemMouseCursors.click,
       child: TvTapTarget(
         onTap: widget.onTap,
+        onFocusChange: (bool value) => setState(() => _focused = value),
         borderRadius: BorderRadius.circular(14),
         focusScale: 1.004,
         child: GestureDetector(
@@ -279,58 +286,64 @@ class _NowPlayingTileState extends State<_NowPlayingTile> {
           behavior: HitTestBehavior.opaque,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              child: Row(
-                children: [
-                  LegacyCover(
-                    url: track?.coverUrl,
-                    size: widget.artworkSize,
-                    radius: 12,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        track == null
-                            ? Text(
-                                context.tr('未选择曲目'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.titleSmall,
-                              )
-                            : CopyableSongTitle(
-                                title: track.title,
-                                child: Text(
-                                  track.title,
+            child: ColoredBox(
+              color: highlighted
+                  ? scheme.surfaceContainerHighest.withValues(alpha: 0.55)
+                  : Colors.transparent,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(
+                  children: [
+                    LegacyCover(
+                      url: track?.coverUrl,
+                      size: widget.artworkSize,
+                      radius: 12,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          track == null
+                              ? Text(
+                                  context.tr('未选择曲目'),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.titleSmall,
+                                )
+                              : CopyableSongTitle(
+                                  title: track.title,
+                                  child: Text(
+                                    track.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleSmall,
+                                  ),
                                 ),
+                          if (track?.translatedTitle?.trim().isNotEmpty ??
+                              false)
+                            Text(
+                              track!.translatedTitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
                               ),
-                        if (track?.translatedTitle?.trim().isNotEmpty ?? false)
+                            ),
                           Text(
-                            track!.translatedTitle!,
+                            track?.artist ?? 'EdLazer',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
                           ),
-                        Text(
-                          track?.artist ?? 'EdLazer',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

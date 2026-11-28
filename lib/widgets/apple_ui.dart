@@ -1,33 +1,58 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../theme/apple_design.dart';
 import '../tv/tv_mode.dart';
-import 'liquid_glass.dart';
 
-/// Navigation chrome and transient panels, drawn with the same liquid-glass
-/// material as the floating player and tab bar.
+/// A translucent Apple material: blur plus a semantic glass tint and hairline.
 ///
-/// [color], [blurSigma] and [border] are kept so existing call sites compile.
-/// The renderer supplies the tint, frost and rim; an opaque fill would hide
-/// the refraction.
+/// Used for navigation chrome and transient panels only. Content surfaces stay
+/// opaque so text contrast never depends on the artwork behind the window.
 class AppleGlass extends StatelessWidget {
   const AppleGlass({
     super.key,
     required this.child,
-    // Kept for existing call sites. The renderer chooses tint, frost and rim.
-    Color? color,
+    this.color,
     this.borderRadius = BorderRadius.zero,
-    double blurSigma = 16,
-    Border? border,
+    this.blurSigma = 16,
+    this.border,
   });
 
   final Widget child;
+  final Color? color;
   final BorderRadius borderRadius;
+  final double blurSigma;
+  final Border? border;
 
   @override
   Widget build(BuildContext context) {
-    return LiquidGlassPanel(borderRadius: borderRadius, child: child);
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    final Color tint = color ?? apple.glass;
+    final Widget decorated = DecoratedBox(
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: borderRadius,
+        border: border,
+      ),
+      child: child,
+    );
+    // A 95%-opaque tint hides almost all of the blurred backdrop, but the
+    // full-screen Gaussian still runs every time the flowing background
+    // repaints. Skip the layer when it cannot be seen.
+    if (tint.a >= .9) {
+      return ClipRRect(borderRadius: borderRadius, child: decorated);
+    }
+    final Widget material = BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+      child: decorated,
+    );
+    // The clip is not decoration: a BackdropFilter applies to the whole
+    // screen when nothing clips it, so dropping it for a square panel blurs
+    // every widget painted before the panel. A zero radius still clips as a
+    // plain rect, so square panels cost no rounded-corner geometry.
+    return ClipRRect(borderRadius: borderRadius, child: material);
   }
 }
 
@@ -175,23 +200,27 @@ class AppleGroupedCard extends StatelessWidget {
     required this.child,
     this.margin = const EdgeInsets.symmetric(horizontal: 24),
     this.padding = EdgeInsets.zero,
-    Color? color,
+    this.color,
     this.radius = 14,
   });
 
   final Widget child;
   final EdgeInsetsGeometry margin;
   final EdgeInsetsGeometry padding;
+  final Color? color;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: margin,
-      child: LiquidGlassPanel(
+    final AppleSemanticColors apple = AppleSemanticColors.of(context);
+    return Container(
+      margin: margin,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: color ?? apple.secondaryGroupedBackground,
         borderRadius: BorderRadius.circular(radius),
-        child: Padding(padding: padding, child: child),
       ),
+      child: Padding(padding: padding, child: child),
     );
   }
 }
@@ -293,8 +322,7 @@ class _AppleListTileState extends State<AppleListTile> {
         onTap: widget.onTap,
         onLongPress: widget.onLongPress,
         onFocusChange: (bool value) => setState(() => _focused = value),
-        highlightColor: Colors.transparent,
-        hoverColor: Colors.transparent,
+        highlightColor: apple.fill,
         splashFactory: NoSplash.splashFactory,
         child: Stack(
           children: <Widget>[

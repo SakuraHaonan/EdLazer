@@ -132,7 +132,6 @@ class LiquidGlassChrome extends StatelessWidget {
     return LiquidGlassLayer(
       settings: liquidGlassSettings(context),
       defaultAppearance: liquidGlassAppearance(context),
-      useBackdropGroup: true,
       child: child,
     );
   }
@@ -167,7 +166,6 @@ class LiquidGlassPanel extends StatelessWidget {
       appearance: liquidGlassAppearance(context),
       shape: LiquidRoundedSuperellipse(borderRadius: radius),
       shadows: _glassShadows,
-      useBackdropGroup: true,
       child: child,
     );
   }
@@ -304,8 +302,8 @@ class _NavItem extends StatelessWidget {
         customBorder: const StadiumBorder(),
         splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        focusColor: Colors.transparent,
+        hoverColor: color.withValues(alpha: .06),
+        focusColor: selectedColor.withValues(alpha: .14),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[

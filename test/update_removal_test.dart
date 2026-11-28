@@ -67,9 +67,9 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
   test('stamped versions stay display-only', () {
-    expect(BuildInfo.version, '2.0.0-beta.16');
-    expect(BuildInfo.displayVersion, 'v2.0.0-beta.16');
-    expect(BuildInfo.versionFromStamp('v2.0.0-beta.16+16'), '2.0.0-beta.16');
+    expect(BuildInfo.version, '2.0.0-beta.17');
+    expect(BuildInfo.displayVersion, 'v2.0.0-beta.17');
+    expect(BuildInfo.versionFromStamp('v2.0.0-beta.17+17'), '2.0.0-beta.17');
     expect(BuildInfo.versionFromStamp('2.0.0-beta.2+5'), '2.0.0-beta.2');
     expect(BuildInfo.versionFromStamp('1.5'), '1.5.0');
     expect(BuildInfo.versionFromStamp('nextgen'), isNull);
