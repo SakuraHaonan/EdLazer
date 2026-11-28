@@ -40,8 +40,8 @@ defines falls back to the checked-in values in `lib/diagnostics/build_info.dart`
 ## Publishing a build
 
 1. Set `version:` in `pubspec.yaml` to the tag without its `v` prefix and bump
-   the build number (for example `2.0.0-beta.15+15`).
-2. Commit, then push an annotated tag with the same version (`v2.0.0-beta.15`).
+   the build number (for example `2.0.0-beta.16+16`).
+2. Commit, then push an annotated tag with the same version (`v2.0.0-beta.16`).
 3. The build workflow runs every platform job. Only when all of them pass does
    the release job attach the artifacts; a tag containing `-` becomes a
    pre-release.
